@@ -1,0 +1,114 @@
+{
+  "generator": "Boxhead Monster Sprite Studio - Horror Edition",
+  "selected_model": "warrior",
+  "model_name": "Chiến Binh (Armored Knight)",
+  "frame_size": {
+    "width": 32,
+    "height": 32
+  },
+  "columns_per_row": 16,
+  "rows": 8,
+  "fps": 8,
+  "horror_settings": {
+    "goreLevel": 3,
+    "exposedSkull": true,
+    "glowingEyes": true,
+    "jaggedJaw": true,
+    "weaponClaws": true
+  },
+  "palette": {
+    "isHero": true,
+    "name": "Chiến Binh (Armored Knight)",
+    "skin": "#9CA3AF",
+    "skinDark": "#6B7280",
+    "shirt": "#4B5563",
+    "pants": "#374151",
+    "blood": "#EF4444",
+    "outline": "#111827",
+    "eyeGlow": "#FBBF24",
+    "bone": "#E5E7EB",
+    "secondary": "#B91C1C",
+    "bodyWidthMod": 2,
+    "headWidthMod": 0
+  },
+  "hitbox_recommendation": {
+    "type": "rectangle",
+    "offset_x": 11,
+    "offset_y": 15,
+    "width": 10,
+    "height": 13,
+    "note": "Body-only collision box (excludes oversized Boxhead head for 2.5D top-down depth)"
+  },
+  "directions_rows": [
+    {
+      "row_index": 0,
+      "id": "down",
+      "label": "Xuống (Down)",
+      "flipped_from": null
+    },
+    {
+      "row_index": 1,
+      "id": "down_right",
+      "label": "Xuống-Phải (D-R)",
+      "flipped_from": null
+    },
+    {
+      "row_index": 2,
+      "id": "right",
+      "label": "Phải (Right)",
+      "flipped_from": null
+    },
+    {
+      "row_index": 3,
+      "id": "up_right",
+      "label": "Lên-Phải (U-R)",
+      "flipped_from": null
+    },
+    {
+      "row_index": 4,
+      "id": "up",
+      "label": "Lên (Up - Gáy/Lưng)",
+      "flipped_from": null
+    },
+    {
+      "row_index": 5,
+      "id": "down_left",
+      "label": "Xuống-Trái (Flip)",
+      "flipped_from": "down_right"
+    },
+    {
+      "row_index": 6,
+      "id": "left",
+      "label": "Trái (Flip)",
+      "flipped_from": "right"
+    },
+    {
+      "row_index": 7,
+      "id": "up_left",
+      "label": "Lên-Trái (Flip)",
+      "flipped_from": "up_right"
+    }
+  ],
+  "animations": {
+    "walk": {
+      "start_col": 0,
+      "frame_count": 6,
+      "loop": true
+    },
+    "attack": {
+      "start_col": 6,
+      "frame_count": 3,
+      "loop": false
+    },
+    "hit": {
+      "start_col": 9,
+      "frame_count": 2,
+      "loop": false
+    },
+    "death": {
+      "start_col": 11,
+      "frame_count": 5,
+      "loop": false
+    }
+  }
+}

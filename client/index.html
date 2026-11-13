@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Boxhead Multiplayer LAN (1-4 Players)</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- SCREEN 1: MAIN LOBBY -->
+  <div id="screen-lobby" class="screen">
+    <div class="lobby-panel">
+      <h1 class="game-title">BOXHEAD: 2PLAY LAN</h1>
+      <p class="game-subtitle">Co-op Zombie Survival Đỉnh Cao (1 - 4 Người Chơi)</p>
+
+      <!-- LAN IP Banner -->
+      <div class="lan-banner">
+        <span>🌐 LINK MẠNG LAN CHO BẠN BÈ:</span>
+        <span id="lan-ip-display" class="ip-link">Đang quét IP...</span>
+      </div>
+
+      <!-- Player Nickname -->
+      <div class="input-row">
+        <label for="nickname-input" style="font-weight: bold;">Tên của bạn:</label>
+        <input type="text" id="nickname-input" class="input-box" placeholder="Nhập tên của bạn..." maxlength="15" value="Hero_1">
+        <button id="btn-sound-toggle" class="btn btn-secondary">🔊 Âm thanh: BẬT</button>
+      </div>
+
+      <!-- Map Selection Section for Room Creator -->
+      <div class="map-selection-section">
+        <div class="map-section-header">
+          <span style="font-weight: bold; color: var(--text);">🗺️ CHỌN BẢN ĐỒ CHIẾN ĐẤU:</span>
+          <span id="selected-map-name-label" style="color: var(--accent); font-weight: bold; font-size: 0.95rem;">The Rooms (Kinh Điển)</span>
+        </div>
+        <div class="map-grid" id="map-selection-grid">
+          <!-- Dynamically populated from MAPS_CONFIG -->
+        </div>
+      </div>
+
+      <!-- Create Room Row -->
+      <div class="input-row">
+        <input type="text" id="room-name-input" class="input-box" placeholder="Tên phòng (ví dụ: Phòng Chiến Đấu)..." maxlength="24">
+        <button id="btn-create-room" class="btn">➕ Tạo Phòng Với Map Đã Chọn</button>
+      </div>
+
+      <!-- Rooms List -->
+      <div style="font-weight: bold; margin-top: 10px;">Danh sách phòng đang chờ:</div>
+      <div class="rooms-container">
+        <table class="rooms-table">
+          <thead>
+            <tr>
+              <th>Tên Phòng</th>
+              <th>Bản Đồ</th>
+              <th>Số Người</th>
+              <th>Trạng Thái</th>
+              <th>Hành Động</th>
+            </tr>
+          </thead>
+          <tbody id="rooms-list-body">
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted);">Chưa có phòng nào. Hãy tạo phòng mới!</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: ROOM WAITING LOBBY -->
+  <div id="screen-room" class="screen hidden">
+    <div class="room-panel">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h2 id="room-title" style="color: var(--primary); font-family: Impact; font-size: 2rem;">PHÒNG CHIẾN</h2>
+          <div id="room-subtitle" style="color: var(--text-muted); font-size: 0.9rem;">Tối đa 4 người</div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button id="btn-copy-room" class="btn btn-secondary">📋 Copy Link Phòng</button>
+          <button id="btn-leave-room" class="btn btn-secondary">🚪 Rời Phòng</button>
+        </div>
+      </div>
+
+      <!-- Room Map Banner -->
+      <div class="room-map-banner" id="room-map-banner">
+        <div class="room-map-thumb">
+          <canvas id="room-map-thumb-canvas" width="100" height="75"></canvas>
+        </div>
+        <div class="room-map-info">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <span id="room-map-badge" class="map-badge">🏢 KINH ĐIỂN</span>
+            <span id="room-map-name" style="font-weight: bold; font-size: 1.15rem; color: #fff;">The Rooms</span>
+            <span id="room-map-subtitle" style="color: var(--text-muted); font-size: 0.85rem;">(Classic Boxhead)</span>
+          </div>
+          <div id="room-map-desc" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; line-height: 1.3;">
+            Đấu trường công nghiệp kinh điển với 4 cột đá đối xứng và hành lang chẹt quái vật.
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button id="btn-preview-current-map" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">🔍 Xem Chi Tiết</button>
+          <button id="btn-change-map" class="btn btn-secondary" style="display: none; padding: 6px 12px; font-size: 0.8rem; background: var(--primary); color: #fff; border-color: var(--primary);">🗺️ Đổi Bản Đồ</button>
+        </div>
+      </div>
+
+      <!-- 4 Player Slots -->
+      <div class="room-slots" id="player-slots-container">
+        <!-- Dynamically rendered slots -->
+      </div>
+
+      <!-- Character Picker Row -->
+      <div style="text-align: center; margin-top: 5px;">
+        <div style="font-weight: bold; margin-bottom: 8px;">Chọn hệ nhân vật (Phân biệt bằng vòng sáng người chơi):</div>
+        <div class="char-pick-row">
+          <button class="char-btn char-HUMAN" data-char="HUMAN">
+            <span class="char-btn-title">🧍 HUMAN</span>
+            <span class="char-passive">Cân bằng &bull; Nạp đạn nhanh</span>
+            <span class="char-ult-desc">⚡ Ult: Drone &amp; Đạn Vô Hạn (8s)</span>
+          </button>
+          <button class="char-btn char-WARRIOR" data-char="WARRIOR">
+            <span class="char-btn-title">🛡️ WARRIOR</span>
+            <span class="char-passive">150 HP &bull; Giáp trâu</span>
+            <span class="char-ult-desc">⚡ Ult: Seismic Slam (Choáng 360&deg;)</span>
+          </button>
+          <button class="char-btn char-MAGE" data-char="MAGE">
+            <span class="char-btn-title">⚡ MAGE</span>
+            <span class="char-passive">Tốc chạy cao &bull; Giữ combo</span>
+            <span class="char-ult-desc">⚡ Ult: Blink &amp; Frost Nova (Đóng băng)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 15px; justify-content: center; margin-top: 15px;">
+        <button id="btn-ready" class="btn btn-secondary" style="flex: 1;">⚡ Sẵn Sàng</button>
+        <button id="btn-start-game" class="btn btn-success" style="flex: 2; display: none;">🔥 BẮT ĐẦU TRẬN ĐẤU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-GAME HUD -->
+  <div id="hud" class="hidden">
+    <!-- Top-Left Team Roster -->
+    <div class="hud-team" id="hud-team-list">
+      <!-- Injected by UI controller -->
+    </div>
+
+    <!-- Top-Center Wave Info -->
+    <div class="hud-wave">
+      <div id="hud-wave-title" class="hud-wave-title">WAVE 1</div>
+      <div id="hud-wave-sub" class="hud-wave-subtitle">ZOMBIES CÒN LẠI: 12</div>
+    </div>
+
+    <!-- Top-Right Combo Meter -->
+    <div class="hud-combo">
+      <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">COMBO STREAK</div>
+      <div id="hud-combo-text" class="combo-text">x1</div>
+      <div class="combo-gauge">
+        <div id="hud-combo-fill" class="combo-gauge-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Center Ultimate Meter & Weapon Arsenal -->
+    <div id="hud-ult-container" class="hud-ultimate">
+      <div class="hud-ult-header">
+        <span id="hud-ult-name" class="hud-ult-name">CHIÊU CUỐI</span>
+        <span id="hud-ult-status" class="hud-ult-status">0%</span>
+      </div>
+      <div class="hud-ult-gauge">
+        <div id="hud-ult-fill" class="hud-ult-fill" style="width: 0%;"></div>
+      </div>
+      <div id="hud-ult-hint" class="hud-ult-hint">[F] hoặc [Chuột Phải] (Cần 100%)</div>
+    </div>
+
+    <!-- Bottom Center Weapon Arsenal -->
+    <div class="hud-weapons" id="hud-weapons-bar">
+      <!-- 8 weapon slots injected by UI -->
+    </div>
+  </div>
+
+  <!-- MODAL: GAME OVER -->
+  <div id="modal-gameover" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h2 class="modal-title">GAME OVER</h2>
+      <p style="color: var(--text-muted); margin: 10px 0;">Cả đội đã bị zombie áp đảo!</p>
+
+      <div style="background: var(--bg-card); padding: 15px; border-radius: 6px; margin: 20px 0; text-align: left;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span>Đợt sóng sinh tồn (Wave):</span>
+          <strong id="go-wave-reached" style="color: var(--accent);">Wave 1</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span>Điểm số toàn đội:</span>
+          <strong id="go-total-score" style="color: var(--success);">0</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>Kỷ lục Combo cao nhất:</span>
+          <strong id="go-best-combo" style="color: var(--primary);">x1</strong>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 15px;">
+        <button id="btn-restart-game" class="btn btn-success" style="flex: 1;">🔄 Chơi Lại</button>
+        <button id="btn-back-lobby" class="btn btn-secondary" style="flex: 1;">🏠 Về Sảnh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ESC PAUSE MENU -->
+  <div id="modal-pause" class="modal-overlay hidden">
+    <div class="modal-content" style="border-color: var(--primary); max-width: 440px;">
+      <h2 class="modal-title" style="color: var(--primary); font-size: 2.2rem; margin-bottom: 5px;">MENU TẠM DỪNG</h2>
+      <p style="color: var(--text-muted); margin-bottom: 20px;">Bấm phím <b>ESC</b> để tiếp tục chiến đấu</p>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button id="btn-resume-game" class="btn btn-success" style="font-size: 1.1rem; padding: 12px;">▶ Tiếp Tục Trận Đấu</button>
+        <button id="btn-pause-copy" class="btn btn-secondary" style="font-size: 1rem; padding: 12px;">📋 Copy Link Phòng</button>
+        <button id="btn-pause-sound" class="btn btn-secondary" style="font-size: 1rem; padding: 12px;">🔊 Âm Thanh: BẬT</button>
+        <button id="btn-pause-leave" class="btn btn-danger" style="font-size: 1rem; padding: 12px;">🚪 Rời Trận & Về Sảnh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MAP PREVIEW / SELECTOR MODAL -->
+  <div id="modal-map-preview" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 660px; border-color: var(--primary); padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="text-align: left;">
+          <span id="preview-modal-badge" class="map-badge" style="font-size: 0.75rem;">🏢 KINH ĐIỂN</span>
+          <h2 id="preview-modal-title" style="color: var(--primary); font-family: Impact; font-size: 1.8rem; margin-top: 4px;">The Rooms</h2>
+          <div id="preview-modal-subtitle" style="color: var(--text-muted); font-size: 0.85rem;"></div>
+        </div>
+        <button id="btn-close-map-preview" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.9rem;">✖ Đóng</button>
+      </div>
+
+      <!-- Preview Canvas -->
+      <div style="background: #0f1115; border-radius: 6px; padding: 6px; border: 1px solid var(--border); margin-bottom: 12px;">
+        <canvas id="preview-modal-canvas" width="600" height="450" style="width: 100%; height: auto; display: block; border-radius: 4px;"></canvas>
+      </div>
+
+      <p id="preview-modal-desc" style="color: var(--text); font-size: 0.9rem; text-align: left; line-height: 1.45; margin-bottom: 12px;"></p>
+
+      <div id="preview-modal-legend" style="display: flex; gap: 15px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; justify-content: center; flex-wrap: wrap;">
+        <span>🟢 Vị trí hồi sinh Người chơi (4 vị trí)</span>
+        <span>🔴 Cửa ra Zombies</span>
+        <span>⬛ Trụ chướng ngại vật / Tường</span>
+      </div>
+
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button id="btn-select-this-map" class="btn btn-success" style="padding: 10px 24px;">✔ Chọn Bản Đồ Này</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="copy-toast" class="copy-toast hidden">✔ Đã sao chép link phòng!</div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/mapsConfig.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/interpolation.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

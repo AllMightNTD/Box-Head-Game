@@ -35,8 +35,39 @@ Terminal sẽ hiển thị ngay địa chỉ IP mạng LAN của bạn, ví dụ
 | **`W - A - S - D`** (hoặc Mũi tên) | Di chuyển nhân vật 8 hướng |
 | **`Chuột`** | Xoay 360 độ ngắm bắn theo con trỏ chuột |
 | **`Chuột Trái`** (hoặc `Space`) | Bắn súng / Đặt tường chắn hoặc thùng nổ |
+| **`Chuột Phải`** (hoặc **`F`**) | **Kích hoạt Chiêu thức Chủ động (Ultimate Ability)** khi nộ đạt 100% |
 | **`Phím 1 - 8`** (hoặc Cuộn chuột) | Đổi nhanh vũ khí |
 | **`E`** (giữ 2 giây gần đồng đội) | Cứu sống đồng đội đang bị gục ngã (Revive) |
+
+---
+
+## ⚡ HỆ THỐNG LỚP NHÂN VẬT & CHIÊU THỨC CHỦ ĐỘNG (ACTIVE ULTIMATES)
+
+Mỗi người chơi có thể lựa chọn 1 trong 3 Lớp Nhân Vật với chỉ số bị động và **Chiêu Thức Chủ Động (Ultimate)** riêng biệt giúp lật kèo trong gang tấc:
+
+### 1. 🧍 HUMAN (Đặc Nhiệm)
+- **Chỉ số bị động:** Cân bằng toàn diện, tốc độ nạp đạn nhanh hơn 15%.
+- **Chiêu thức:** `Tactical Drone & Infinite Ammo Aura`
+  - Thả một drone chiến đấu mini tự động bay lượn và bắn tỉa zombie gần nhất trong 8 giây.
+  - Tỏa ra **Hào quang đạn vô hạn (200px)**: Mọi người chơi đứng trong vòng hào quang được bắn xả đạn tẹt ga mà không tốn bất kỳ viên đạn súng nào (Uzi, Shotgun, Rocket, Railgun...).
+
+### 2. 🛡️ WARRIOR (Chiến Binh)
+- **Chỉ số bị động:** 150 HP, chống sốc sát thương từ đòn đánh lén phía sau (-25% dmg).
+- **Chiêu thức:** `Seismic Slam (Đập Đất 360°)`
+  - Đập đất rung chuyển toàn bộ bán kính 220px, gây 120 sát thương và đẩy lùi zombie cực mạnh (520px).
+  - **Làm choáng (Stun)** toàn bộ quái trong 2.5s (Boss 1.5s), dập tắt mọi cầu lửa bay của Devil, an toàn tuyệt đối không làm vỡ tường chắn hay thùng nổ đồng đội đã đặt. Cực kỳ đắc lực để mở đường máu lao vào hồi sinh đồng đội.
+
+### 3. ⚡ MAGE (Pháp Sư)
+- **Chỉ số bị động:** Tốc độ di chuyển nhanh (+12%), thời gian duy trì chuỗi combo lâu hơn 25%.
+- **Chiêu thức:** `Blink & Frost Nova (Tốc Biến Băng Giá)`
+  - Tức thời tốc biến 240px theo hướng con trỏ chuột, xuyên qua tường chắn và hàng rào an toàn không lo kẹt góc.
+  - Kích hoạt song song **Frost Nova** kép tại cả điểm xuất phát và điểm đáp: gây 75 sát thương, **Đóng băng (Freeze) cứng đờ** toàn bộ zombie trong 3.0s (Boss 1.5s) và làm chậm 50% trong 1.5s kế tiếp.
+
+### 🔋 Cơ chế Tích Lũy Năng Lượng (Ultimate Charge)
+- **Bắn trúng quái:** +0.8% mỗi viên đạn trúng đích (+0.2% mỗi mảnh đạn shotgun).
+- **Hạ gục quái:** +4.0% cơ bản x Hệ số nhân Combo (Combo x1 = 1.0x, x6 = 1.25x, x11 = 1.5x, x16 = 1.75x, x21+ = 2.0x tức +8.0%/kill).
+- **Cứu đồng đội:** +15.0% nộ ngay khi hoàn tất cứu sống một người đồng đội.
+- Sát thương từ chiêu cuối hoặc đạn của drone **không** sinh thêm nộ để tránh vòng lặp vô tận. Nộ được giữ nguyên qua từng wave.
 
 ---
 
@@ -75,9 +106,9 @@ Khi vào phòng, mỗi người chơi chọn 1 nhân vật riêng biệt:
 ---
 
 ## 🛠️ CHẠY BỘ KIỂM THỬ TỰ ĐỘNG
-Để chạy toàn bộ 15 bài kiểm thử vật lý, AI, combo và mô phỏng 4 người chơi cùng lúc:
+Để chạy toàn bộ 45 bài kiểm thử vật lý, AI, combo, chiêu thức chủ động (Ultimates) và mô phỏng 4 người chơi cùng lúc:
 ```bash
 node --test tests/*.test.js
 ```
-Tất cả 15 bài test đều vượt qua (100% PASS).
+Tất cả 45 bài test đều vượt qua (100% PASS).
 # Box-Head-Game

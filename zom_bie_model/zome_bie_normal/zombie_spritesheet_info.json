@@ -1,0 +1,42 @@
+{
+  "cell_size": {
+    "normal": 32,
+    "fast": 32,
+    "big": 48
+  },
+  "columns": 6,
+  "directions_in_row_order": [
+    "S",
+    "SE",
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW"
+  ],
+  "animations_in_block_order": [
+    {
+      "name": "idle",
+      "frames": 1
+    },
+    {
+      "name": "walk",
+      "frames": 6
+    },
+    {
+      "name": "attack",
+      "frames": 3
+    },
+    {
+      "name": "hit",
+      "frames": 2
+    },
+    {
+      "name": "die",
+      "frames": 5
+    }
+  ],
+  "row_formula": "row = animation_index * 8 + direction_index",
+  "note": "Dir NW/W/SW = lật ngang của NE/E/SE. Die: 5 frame, frame cuối nằm im."
+}
