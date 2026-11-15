@@ -299,6 +299,16 @@ function setupMockEnvironment() {
       this.createdNodes.push(f);
       return f;
     }
+    createDynamicsCompressor() {
+      const c = new MockAudioNode();
+      this.createdNodes.push(c);
+      return c;
+    }
+    createConvolver() {
+      const c = new MockAudioNode();
+      this.createdNodes.push(c);
+      return c;
+    }
     createBuffer(channels, size, rate) {
       return {
         getChannelData: () => new Float32Array(size)

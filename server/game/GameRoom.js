@@ -363,7 +363,14 @@ class GameRoom {
             const killer = this.players.get(ownerId);
             if (killer) killer.recordKill(z.score);
           }
-          this.eventsBuffer.push({ type: 'ZOMBIE_DIE', x: z.x, y: z.y, zType: z.type, angle: z.angle });
+          this.eventsBuffer.push({
+            type: 'ZOMBIE_DIE',
+            x: z.x,
+            y: z.y,
+            zType: z.type,
+            angle: z.angle,
+            killAngle: Number(knockAngle.toFixed(2))
+          });
         }
       }
     }
@@ -539,7 +546,14 @@ class GameRoom {
             const effectiveDamage = Math.round(b.damage * warCryMultiplier);
             z.takeDamage(effectiveDamage, 'BULLET');
             z.applyKnockback(b.angle, b.knockback);
-            this.eventsBuffer.push({ type: 'HIT', x: Math.round(z.x), y: Math.round(z.y) });
+            this.eventsBuffer.push({
+              type: 'HIT',
+              x: Math.round(z.x),
+              y: Math.round(z.y),
+              angle: Number((b.angle || 0).toFixed(2)),
+              weapon: b.type || 'bullet',
+              zType: z.type
+            });
 
             if (shooter && !b.fromUlt) {
               const hitCharge = b.type === 'shotgun'
@@ -557,7 +571,14 @@ class GameRoom {
                   }
                 }
               }
-              this.eventsBuffer.push({ type: 'ZOMBIE_DIE', x: z.x, y: z.y, zType: z.type, angle: z.angle });
+              this.eventsBuffer.push({
+                type: 'ZOMBIE_DIE',
+                x: z.x,
+                y: z.y,
+                zType: z.type,
+                angle: z.angle,
+                killAngle: Number((b.angle || 0).toFixed(2))
+              });
 
               // 15% chance to drop ammo or medkit
               if (Math.random() < 0.15) {

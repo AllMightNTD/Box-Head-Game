@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { SpriteSheetManager, SPRITE_CONFIG } = require('../client/js/sprites.js');
+const { Renderer } = require('../client/js/renderer.js');
 
 test('SpriteSheetManager - Ánh xạ chuẩn 8 góc Octant sang đúng Row của Boxhead Studio', () => {
     const manager = new SpriteSheetManager();
@@ -50,4 +51,122 @@ test('SpriteSheetManager - preloadAll resolves cleanly in Node environment', asy
     await manager.preloadAll();
     assert.equal(manager.isReady, true);
     assert.equal(manager.loadedCount, 9);
+});
+
+test('Renderer.drawBoxyPlayer - Happy Path: Không vẽ khối súng đen 360° khi đã có Sprite Sheet và thu gọn bóng chân khớp vòng sáng', () => {
+    // Arrange
+    const ellipses = [];
+    const mockCtx = {
+        save: () => {},
+        restore: () => {},
+        translate: () => {},
+        rotate: () => {},
+        scale: () => {},
+        beginPath: () => {},
+        ellipse: (x, y, rx, ry) => ellipses.push({ x, y, rx, ry }),
+        stroke: () => {},
+        fill: () => {},
+        fillRect: () => {},
+        fillText: () => {},
+        drawImage: () => {}
+    };
+    const mockCanvas = { getContext: () => mockCtx, width: 800, height: 600 };
+    const renderer = new Renderer(mockCanvas);
+
+    let weapon360Called = false;
+    renderer.drawWeapon360 = () => { weapon360Called = true; };
+
+    const prevWindow = global.window;
+    global.window = {
+        spriteManager: {
+            angleToDirectionRow: () => 4,
+            getSprite: () => ({
+                image: { complete: true, naturalWidth: 512 }
+            }),
+            getFrameSource: () => ({ sx: 0, sy: 128, sWidth: 32, sHeight: 32 })
+        }
+    };
+
+    const player = {
+        id: 'p1',
+        name: 'Hero_1',
+        character: 'HUMAN',
+        x: 500,
+        y: 400,
+        angle: -Math.PI / 2,
+        hp: 100,
+        maxHp: 100,
+        isMoving: false,
+        isDowned: false
+    };
+
+    try {
+        // Act
+        renderer.drawBoxyPlayer(mockCtx, player, true);
+
+        // Assert
+        assert.equal(weapon360Called, false, 'Không được gọi drawWeapon360 đè lên sprite nhân vật');
+        const footShadow = ellipses.find(e => e.rx === 14 && e.ry === 6);
+        assert.ok(footShadow, 'Bóng chân phải được thu gọn về bán kính 14x6 nằm trong vòng sáng 18x9');
+        assert.equal(footShadow.y, 424, 'Tâm Y của bóng chân phải trùng với tâm vòng sáng (player.y + 24)');
+    } finally {
+        global.window = prevWindow;
+    }
+});
+
+test('Renderer.drawBoxyPlayer - Unhappy Path: Vẫn gọi fallback và drawWeapon360 khi Sprite chưa tải được', () => {
+    // Arrange
+    const mockCtx = {
+        save: () => {},
+        restore: () => {},
+        translate: () => {},
+        rotate: () => {},
+        scale: () => {},
+        beginPath: () => {},
+        ellipse: () => {},
+        stroke: () => {},
+        fill: () => {},
+        fillRect: () => {},
+        fillText: () => {},
+        drawImage: () => {}
+    };
+    const mockCanvas = { getContext: () => mockCtx, width: 800, height: 600 };
+    const renderer = new Renderer(mockCanvas);
+
+    let fallbackCalled = false;
+    let weapon360Called = false;
+    renderer.drawBoxyPlayerFallback = () => { fallbackCalled = true; };
+    renderer.drawWeapon360 = () => { weapon360Called = true; };
+
+    const prevWindow = global.window;
+    global.window = {
+        spriteManager: {
+            angleToDirectionRow: () => 0,
+            getSprite: () => ({ image: null })
+        }
+    };
+
+    const player = {
+        id: 'p1',
+        name: 'Hero_1',
+        character: 'HUMAN',
+        x: 500,
+        y: 400,
+        angle: 0,
+        hp: 100,
+        maxHp: 100,
+        isMoving: false,
+        isDowned: false
+    };
+
+    try {
+        // Act
+        renderer.drawBoxyPlayer(mockCtx, player, true);
+
+        // Assert
+        assert.equal(fallbackCalled, true, 'Phải gọi drawBoxyPlayerFallback khi thiếu sprite');
+        assert.equal(weapon360Called, true, 'Phải gọi drawWeapon360 trong chế độ fallback');
+    } finally {
+        global.window = prevWindow;
+    }
 });

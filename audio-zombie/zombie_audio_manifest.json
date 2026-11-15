@@ -1,0 +1,174 @@
+{
+  "sample_rate": 44100,
+  "format": "wav mono 16-bit",
+  "volume": {
+    "idle": 0.55,
+    "aggro": 1.0,
+    "attack": 0.9,
+    "hit": 0.8,
+    "die": 1.0,
+    "step": 0.45
+  },
+  "pitch_jitter": [
+    0.94,
+    1.06
+  ],
+  "sounds": {
+    "rotten": {
+      "idle": [
+        "audio/rotten/idle_1.wav",
+        "audio/rotten/idle_2.wav",
+        "audio/rotten/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/rotten/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/rotten/attack_1.wav",
+        "audio/rotten/attack_2.wav"
+      ],
+      "hit": [
+        "audio/rotten/hit_1.wav",
+        "audio/rotten/hit_2.wav"
+      ],
+      "die": [
+        "audio/rotten/die_1.wav"
+      ],
+      "step": [
+        "audio/rotten/step_1.wav",
+        "audio/rotten/step_2.wav",
+        "audio/rotten/step_3.wav"
+      ]
+    },
+    "ghoul": {
+      "idle": [
+        "audio/ghoul/idle_1.wav",
+        "audio/ghoul/idle_2.wav",
+        "audio/ghoul/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/ghoul/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/ghoul/attack_1.wav",
+        "audio/ghoul/attack_2.wav"
+      ],
+      "hit": [
+        "audio/ghoul/hit_1.wav",
+        "audio/ghoul/hit_2.wav"
+      ],
+      "die": [
+        "audio/ghoul/die_1.wav"
+      ],
+      "step": [
+        "audio/ghoul/step_1.wav",
+        "audio/ghoul/step_2.wav",
+        "audio/ghoul/step_3.wav"
+      ]
+    },
+    "butcher": {
+      "idle": [
+        "audio/butcher/idle_1.wav",
+        "audio/butcher/idle_2.wav",
+        "audio/butcher/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/butcher/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/butcher/attack_1.wav",
+        "audio/butcher/attack_2.wav"
+      ],
+      "hit": [
+        "audio/butcher/hit_1.wav",
+        "audio/butcher/hit_2.wav"
+      ],
+      "die": [
+        "audio/butcher/die_1.wav"
+      ],
+      "step": [
+        "audio/butcher/step_1.wav",
+        "audio/butcher/step_2.wav",
+        "audio/butcher/step_3.wav"
+      ]
+    },
+    "boomer": {
+      "idle": [
+        "audio/boomer/idle_1.wav",
+        "audio/boomer/idle_2.wav",
+        "audio/boomer/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/boomer/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/boomer/attack_1.wav",
+        "audio/boomer/attack_2.wav"
+      ],
+      "hit": [
+        "audio/boomer/hit_1.wav",
+        "audio/boomer/hit_2.wav"
+      ],
+      "die": [
+        "audio/boomer/die_1.wav"
+      ],
+      "step": [
+        "audio/boomer/step_1.wav",
+        "audio/boomer/step_2.wav",
+        "audio/boomer/step_3.wav"
+      ]
+    },
+    "burned": {
+      "idle": [
+        "audio/burned/idle_1.wav",
+        "audio/burned/idle_2.wav",
+        "audio/burned/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/burned/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/burned/attack_1.wav",
+        "audio/burned/attack_2.wav"
+      ],
+      "hit": [
+        "audio/burned/hit_1.wav",
+        "audio/burned/hit_2.wav"
+      ],
+      "die": [
+        "audio/burned/die_1.wav"
+      ],
+      "step": [
+        "audio/burned/step_1.wav",
+        "audio/burned/step_2.wav",
+        "audio/burned/step_3.wav"
+      ]
+    },
+    "mutant": {
+      "idle": [
+        "audio/mutant/idle_1.wav",
+        "audio/mutant/idle_2.wav",
+        "audio/mutant/idle_3.wav"
+      ],
+      "aggro": [
+        "audio/mutant/aggro_1.wav"
+      ],
+      "attack": [
+        "audio/mutant/attack_1.wav",
+        "audio/mutant/attack_2.wav"
+      ],
+      "hit": [
+        "audio/mutant/hit_1.wav",
+        "audio/mutant/hit_2.wav"
+      ],
+      "die": [
+        "audio/mutant/die_1.wav"
+      ],
+      "step": [
+        "audio/mutant/step_1.wav",
+        "audio/mutant/step_2.wav",
+        "audio/mutant/step_3.wav"
+      ]
+    }
+  }
+}
