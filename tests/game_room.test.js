@@ -100,3 +100,81 @@ test('GameRoom cleanly resets previous session when starting a new game', (t) =>
   assert.strictEqual(player.weapons.RAILGUN.unlocked, false, 'Railgun must be locked on session reset');
 });
 
+test('GameRoom emits enriched HIT and ZOMBIE_DIE events with angle, weapon, and zType', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('room-hit-meta', 'Hit Meta', mockIo);
+  t.after(() => room.stop());
+
+  const p = room.addPlayer('p1', 'Alice', 'HUMAN');
+  room.startGame();
+  room.eventsBuffer = [];
+
+  // Place a zombie directly in front of player p1
+  p.x = 500;
+  p.y = 500;
+  p.angle = 0.5;
+  const { Zombie } = require('../server/game/Zombie.js');
+  const z = new Zombie('z_test', 'RUNNER', 530, 515);
+  z.hp = 10; // Dies in 1 pistol shot (25 dmg)
+  room.zombies.push(z);
+
+  room.handleShoot('p1');
+  // Advance tick until bullet hits zombie
+  for (let i = 0; i < 5; i++) {
+    room.tick(0.02);
+  }
+
+  // Capture emitted events by intercepting emit on a fresh shot
+  const emittedSnapshots = [];
+  room.io = {
+    to: () => ({
+      emit: (evName, data) => {
+        if (evName === 'game:snapshot') emittedSnapshots.push(data);
+      }
+    })
+  };
+
+  const z2 = new Zombie('z_test_2', 'TANK', 525, 500);
+  z2.hp = 20;
+  p.angle = 0.25;
+  p.fireCooldown = 0;
+  room.zombies.push(z2);
+  room.handleShoot('p1');
+  room.tick(0.02);
+
+  const allEvents = emittedSnapshots.flatMap(s => s.events);
+  const hitEv = allEvents.find(e => e.type === 'HIT');
+  const dieEv = allEvents.find(e => e.type === 'ZOMBIE_DIE');
+
+  assert.ok(hitEv, 'Expected HIT event to be emitted');
+  assert.strictEqual(typeof hitEv.angle, 'number');
+  assert.strictEqual(hitEv.weapon, 'bullet');
+  assert.strictEqual(hitEv.zType, 'TANK');
+
+  assert.ok(dieEv, 'Expected ZOMBIE_DIE event to be emitted');
+  assert.strictEqual(dieEv.zType, 'TANK');
+  assert.strictEqual(typeof dieEv.killAngle, 'number');
+});
+
+test('GameRoom triggerExplosion emits ZOMBIE_DIE with killAngle', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('room-exp-meta', 'Exp Meta', mockIo);
+  t.after(() => room.stop());
+  room.startGame();
+
+  const { Zombie } = require('../server/game/Zombie.js');
+  const z = new Zombie('z_exp', 'RUNNER', 100, 100);
+  z.hp = 10;
+  room.zombies.push(z);
+
+  room.eventsBuffer = [];
+  room.triggerExplosion(90, 100, 50, 100, null);
+
+  const dieEv = room.eventsBuffer.find(e => e.type === 'ZOMBIE_DIE');
+  assert.ok(dieEv, 'Expected ZOMBIE_DIE on explosion death');
+  assert.strictEqual(dieEv.zType, 'RUNNER');
+  assert.strictEqual(typeof dieEv.killAngle, 'number');
+});
+
+
+
