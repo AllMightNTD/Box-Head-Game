@@ -1,3 +1,14 @@
+const WARRIOR_SKILL_DEFINITIONS = [
+  { id: 'BERSERKER_STANCE', key: 1, name: 'Berserker', unlockCombo: 1, icon: '⚔️', badge: 'x1' },
+  { id: 'JUGGERNAUT_STANCE', key: 2, name: 'Juggernaut', unlockCombo: 5, icon: '🛡️', badge: 'x5' },
+  { id: 'BLADE_WHIRLWIND', key: 3, name: 'Whirlwind', unlockCombo: 10, icon: '🌪️', badge: 'x10' },
+  { id: 'SHADOW_DASH_SLASH', key: 4, name: 'Shadow Dash', unlockCombo: 15, icon: '⚡', badge: 'x15' },
+  { id: 'SEISMIC_SLAM', key: 5, name: 'Seismic Slam', unlockCombo: 20, icon: '💥', badge: 'x20' },
+  { id: 'WAR_CRY', key: 6, name: 'War Cry', unlockCombo: 30, icon: '📢', badge: 'x30' },
+  { id: 'COUNTER_SHIELD_BASH', key: 7, name: 'Counter Shield', unlockCombo: 40, icon: '🔰', badge: 'x40' },
+  { id: 'AVATAR_OF_WAR', key: 8, name: 'Avatar of War', unlockCombo: 50, icon: '🔥', badge: 'x50' }
+];
+
 class UIController {
   constructor() {
     this.screenLobby = document.getElementById('screen-lobby');
@@ -73,9 +84,12 @@ class UIController {
 
     this.ultimateMeta = {
       HUMAN: { name: 'DRONE & HÀO QUANG ĐẠN', color: '#00e676' },
-      WARRIOR: { name: 'SEISMIC SLAM (ĐẬP ĐẤT)', color: '#ff9800' },
+      WARRIOR: { name: 'HÓA THÂN CHIẾN THẦN (AVATAR)', color: '#ff3d00' },
       MAGE: { name: 'BLINK & FROST NOVA', color: '#00e5ff' }
     };
+
+    this.isWarriorMode = false;
+    this.warriorSkillDefinitions = WARRIOR_SKILL_DEFINITIONS;
 
     this.currentRoom = null;
     this.myPlayerId = null;
@@ -500,23 +514,53 @@ class UIController {
   }
 
   initWeaponsBar() {
+    this.setWeaponsBarMode(false);
+  }
+
+  setWeaponsBarMode(isWarrior) {
+    this.isWarriorMode = Boolean(isWarrior);
+    if (!this.hudWeaponsBar) return;
+
     this.hudWeaponsBar.innerHTML = '';
-    this.weaponDefinitions.forEach(w => {
-      const slot = document.createElement('div');
-      slot.className = 'weapon-slot' + (w.id === 'PISTOL' ? ' active' : ' locked');
-      slot.id = 'hud-weapon-' + w.id;
-      slot.innerHTML = `
-        <div class="weapon-key">[${w.key}]</div>
-        <div class="weapon-name">${w.name}</div>
-        <div class="weapon-ammo" id="hud-ammo-${w.id}">${w.id === 'PISTOL' ? '∞' : 'x' + w.unlockCombo + ' 🔒'}</div>
-      `;
-      slot.addEventListener('click', () => {
-        if (typeof this.onSelectWeapon === 'function') {
-          this.onSelectWeapon(w.key, w.id);
-        }
+
+    if (this.isWarriorMode) {
+      this.warriorSkillDefinitions.forEach(s => {
+        const slot = document.createElement('div');
+        slot.className = 'weapon-slot warrior-slot' + (s.id === 'BERSERKER_STANCE' ? ' active' : ' locked');
+        slot.id = 'hud-weapon-' + s.id;
+        slot.innerHTML = `
+          <div class="weapon-key">[${s.key}]</div>
+          <div class="weapon-name">${s.name}</div>
+          <div class="weapon-ammo" id="hud-ammo-${s.id}">${s.id === 'BERSERKER_STANCE' ? 'STANCE' : 'x' + s.unlockCombo + ' 🔒'}</div>
+          <div class="skill-cooldown-overlay hidden" id="hud-cd-${s.id}">
+            <span class="skill-cd-text" id="hud-cd-text-${s.id}"></span>
+          </div>
+        `;
+        slot.addEventListener('click', () => {
+          if (typeof this.onSelectWeapon === 'function') {
+            this.onSelectWeapon(s.key, s.id);
+          }
+        });
+        this.hudWeaponsBar.appendChild(slot);
       });
-      this.hudWeaponsBar.appendChild(slot);
-    });
+    } else {
+      this.weaponDefinitions.forEach(w => {
+        const slot = document.createElement('div');
+        slot.className = 'weapon-slot' + (w.id === 'PISTOL' ? ' active' : ' locked');
+        slot.id = 'hud-weapon-' + w.id;
+        slot.innerHTML = `
+          <div class="weapon-key">[${w.key}]</div>
+          <div class="weapon-name">${w.name}</div>
+          <div class="weapon-ammo" id="hud-ammo-${w.id}">${w.id === 'PISTOL' ? '∞' : 'x' + w.unlockCombo + ' 🔒'}</div>
+        `;
+        slot.addEventListener('click', () => {
+          if (typeof this.onSelectWeapon === 'function') {
+            this.onSelectWeapon(w.key, w.id);
+          }
+        });
+        this.hudWeaponsBar.appendChild(slot);
+      });
+    }
   }
 
   showScreen(screenName) {
@@ -685,17 +729,32 @@ class UIController {
         const ultPct = Math.floor(Math.min(100, p.ultCharge || 0));
         const ultReady = ultPct >= 100;
         const ultBadge = `<span class="teammate-ult-badge ${ultReady ? 'ready' : ''}">${ultReady ? '⚡ READY' : ultPct + '%'}</span>`;
+        const maxArmor = p.maxArmor || 0;
+        const armor = Math.max(0, p.armor || 0);
+        const armorPercent = maxArmor > 0 ? Math.max(0, Math.min(100, (armor / maxArmor) * 100)) : 0;
+        const armorBarHtml = maxArmor > 0 ? `
+          <div class="teammate-armor-bar" title="Giáp: ${armor}/${maxArmor}">
+            <div class="teammate-armor-fill" style="width: ${armorPercent}%;"></div>
+          </div>
+        ` : '';
+
+        const statText = p.isDowned
+          ? '🚨 GỤC'
+          : (maxArmor > 0 ? `${p.hp} HP • ${armor} AP` : `${p.hp} HP`);
 
         row.innerHTML = `
           <div style="display: flex; flex-direction: column; gap: 2px;">
             <span style="font-weight: bold; font-size: 0.85rem;">${escapeHtml(p.name)} ${isMe ? '(Bạn)' : ''}</span>
-            <span style="font-size: 0.7rem; color: var(--text-muted);">${p.character || 'HUMAN'}</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(p.character || 'HUMAN')}</span>
           </div>
-          <div class="teammate-hp-bar">
-            <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex: 1;">
+            <div class="teammate-hp-bar">
+              <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
+            </div>
+            ${armorBarHtml}
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-family: monospace; font-size: 0.8rem;">${p.isDowned ? '🚨 GỤC' : p.hp + ' HP'}</span>
+            <span style="font-family: monospace; font-size: 0.8rem;">${statText}</span>
             ${ultBadge}
           </div>
         `;
@@ -720,42 +779,145 @@ class UIController {
       const comboRatio = localPlayer.comboMaxTime > 0 ? (localPlayer.comboTimer / localPlayer.comboMaxTime) * 100 : 0;
       this.hudComboFill.style.width = `${Math.max(0, Math.min(100, comboRatio))}%`;
 
-      // 4. Weapons Ammo & Active Slot
+      // 4. Weapons Ammo & Active Slot / Warrior Skills Bar
       const playerMaxCombo = Math.max(localPlayer.maxCombo || 1, localPlayer.combo || 1);
 
-      this.weaponDefinitions.forEach(w => {
-        const slotEl = document.getElementById('hud-weapon-' + w.id);
-        const ammoEl = document.getElementById('hud-ammo-' + w.id);
-        const pw = localPlayer.weapons ? localPlayer.weapons[w.id] : null;
+      if (localPlayer.character === 'WARRIOR') {
+        if (!this.isWarriorMode) {
+          this.setWeaponsBarMode(true);
+        }
 
-        const isUnlocked = Boolean(
-          (pw && pw.unlocked) ||
-          (playerMaxCombo >= w.unlockCombo) ||
-          (w.id === 'PISTOL')
-        );
+        const ws = localPlayer.warriorState;
+        const activeStance = ws ? ws.activeStance : 'BERSERKER_STANCE';
+        const furyStacks = ws ? (ws.furyStacks || 0) : 0;
 
-        if (slotEl && ammoEl) {
-          if (localPlayer.selectedWeapon === w.id) {
-            slotEl.classList.add('active');
+        this.warriorSkillDefinitions.forEach(s => {
+          const slotEl = document.getElementById('hud-weapon-' + s.id);
+          const ammoEl = document.getElementById('hud-ammo-' + s.id);
+          const cdEl = document.getElementById('hud-cd-' + s.id);
+          const cdText = document.getElementById('hud-cd-text-' + s.id);
+          const sk = ws && ws.skills ? ws.skills[s.id] : null;
+
+          const isUnlocked = Boolean(
+            (sk && sk.unlocked) ||
+            (playerMaxCombo >= s.unlockCombo) ||
+            (s.id === 'BERSERKER_STANCE')
+          );
+
+          if (!slotEl) return;
+
+          // Highlight active stance for slots 1 and 2
+          if (s.key === 1 || s.key === 2) {
+            if (activeStance === s.id) {
+              slotEl.classList.add('active');
+            } else {
+              slotEl.classList.remove('active');
+            }
           } else {
             slotEl.classList.remove('active');
           }
 
           if (isUnlocked) {
             slotEl.classList.remove('locked');
-            if (localPlayer.hasInfiniteAmmo && w.id !== 'BARRICADE' && w.id !== 'BARREL') {
-              ammoEl.textContent = '∞';
-            } else if (pw && pw.ammo !== undefined) {
-              ammoEl.textContent = pw.ammo === Infinity ? '∞' : pw.ammo;
-            } else {
-              ammoEl.textContent = w.id === 'PISTOL' ? '∞' : '0';
+
+            if (s.key === 1) {
+              if (ammoEl) {
+                ammoEl.textContent = furyStacks > 0 ? `⚡x${furyStacks}` : 'STANCE';
+                ammoEl.style.color = furyStacks > 0 ? '#ff3d00' : 'var(--accent)';
+              }
+            } else if (s.key === 2) {
+              if (ammoEl) {
+                ammoEl.textContent = 'STANCE';
+                ammoEl.style.color = 'var(--accent)';
+              }
+            } else if (s.key >= 3 && s.key <= 7) {
+              const cd = sk && sk.cooldown > 0 ? sk.cooldown : 0;
+              if (cd > 0) {
+                const cdStr = `${cd.toFixed(1)}s`;
+                if (cdEl) {
+                  cdEl.classList.remove('hidden');
+                  cdEl.textContent = cdStr;
+                }
+                if (cdText) cdText.textContent = cdStr;
+                if (ammoEl) ammoEl.textContent = cdStr;
+              } else {
+                if (cdEl) {
+                  cdEl.classList.add('hidden');
+                  cdEl.textContent = '';
+                }
+                if (cdText) cdText.textContent = '';
+                if (ammoEl) ammoEl.textContent = 'READY';
+              }
+            } else if (s.key === 8) {
+              // Avatar of War
+              if (ws && ws.avatarActive) {
+                const rem = ws.avatarTimer !== undefined ? ws.avatarTimer : 0;
+                const remStr = `${rem.toFixed(1)}s`;
+                if (cdEl) {
+                  cdEl.classList.remove('hidden');
+                  cdEl.textContent = remStr;
+                }
+                if (cdText) cdText.textContent = remStr;
+                if (ammoEl) ammoEl.textContent = 'ACTIVE';
+              } else {
+                if (cdEl) {
+                  cdEl.classList.add('hidden');
+                  cdEl.textContent = '';
+                }
+                if (cdText) cdText.textContent = '';
+                const pct = Math.floor(Math.min(100, ((localPlayer.ultCharge || 0) / (localPlayer.ultMaxCharge || 100)) * 100));
+                if (ammoEl) ammoEl.textContent = pct >= 100 ? 'READY' : `${pct}%`;
+              }
             }
           } else {
             slotEl.classList.add('locked');
-            ammoEl.textContent = `x${w.unlockCombo} 🔒`;
+            if (ammoEl) ammoEl.textContent = `x${s.unlockCombo} 🔒`;
+            if (cdEl) {
+              cdEl.classList.add('hidden');
+              cdEl.textContent = '';
+            }
           }
+        });
+
+      } else {
+        if (this.isWarriorMode) {
+          this.setWeaponsBarMode(false);
         }
-      });
+
+        this.weaponDefinitions.forEach(w => {
+          const slotEl = document.getElementById('hud-weapon-' + w.id);
+          const ammoEl = document.getElementById('hud-ammo-' + w.id);
+          const pw = localPlayer.weapons ? localPlayer.weapons[w.id] : null;
+
+          const isUnlocked = Boolean(
+            (pw && pw.unlocked) ||
+            (playerMaxCombo >= w.unlockCombo) ||
+            (w.id === 'PISTOL')
+          );
+
+          if (slotEl && ammoEl) {
+            if (localPlayer.selectedWeapon === w.id) {
+              slotEl.classList.add('active');
+            } else {
+              slotEl.classList.remove('active');
+            }
+
+            if (isUnlocked) {
+              slotEl.classList.remove('locked');
+              if (localPlayer.hasInfiniteAmmo && w.id !== 'BARRICADE' && w.id !== 'BARREL') {
+                ammoEl.textContent = '∞';
+              } else if (pw && pw.ammo !== undefined) {
+                ammoEl.textContent = pw.ammo === Infinity ? '∞' : pw.ammo;
+              } else {
+                ammoEl.textContent = w.id === 'PISTOL' ? '∞' : '0';
+              }
+            } else {
+              slotEl.classList.add('locked');
+              ammoEl.textContent = `x${w.unlockCombo} 🔒`;
+            }
+          }
+        });
+      }
 
       // 4.5 Ultimate Meter HUD
       if (this.hudUltContainer && this.hudUltFill && this.hudUltStatus) {
@@ -767,8 +929,15 @@ class UIController {
         const pct = Math.floor(Math.min(100, ((localPlayer.ultCharge || 0) / maxC) * 100));
         this.hudUltFill.style.width = pct + '%';
 
-        if (localPlayer.hasInfiniteAmmo) {
+        if (localPlayer.character === 'WARRIOR' && localPlayer.warriorState && localPlayer.warriorState.avatarActive) {
           this.hudUltContainer.classList.add('buffed');
+          this.hudUltContainer.classList.remove('ready');
+          const rem = localPlayer.warriorState.avatarTimer !== undefined ? localPlayer.warriorState.avatarTimer : 0;
+          this.hudUltStatus.textContent = `🔥 CHIẾN THẦN: ${rem.toFixed(1)}s`;
+          if (this.hudUltHint) this.hudUltHint.textContent = 'CHIẾN THẦN ĐANG HOẠT ĐỘNG (TĂNG SÁT THƯƠNG & TỐC ĐỘ)';
+        } else if (localPlayer.hasInfiniteAmmo) {
+          this.hudUltContainer.classList.add('buffed');
+          this.hudUltContainer.classList.remove('ready');
           this.hudUltStatus.textContent = '⚡ ĐẠN VÔ HẠN!';
           if (this.hudUltHint) this.hudUltHint.textContent = 'HÀO QUANG ĐẠN VÔ HẠN ĐANG HOẠT ĐỘNG';
         } else {
@@ -776,7 +945,13 @@ class UIController {
           if (pct >= 100) {
             this.hudUltContainer.classList.add('ready');
             this.hudUltStatus.textContent = 'SẴN SÀNG!';
-            if (this.hudUltHint) this.hudUltHint.textContent = 'NHẤN [F] HOẶC [CHUỘT PHẢI] KÍCH HOẠT!';
+            if (this.hudUltHint) {
+              if (localPlayer.character === 'WARRIOR') {
+                this.hudUltHint.textContent = 'NHẤN [F], [CHUỘT PHẢI] HOẶC PHÍM [8] KÍCH HOẠT!';
+              } else {
+                this.hudUltHint.textContent = 'NHẤN [F] HOẶC [CHUỘT PHẢI] KÍCH HOẠT!';
+              }
+            }
           } else {
             this.hudUltContainer.classList.remove('ready');
             this.hudUltStatus.textContent = pct + '%';
@@ -809,4 +984,10 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-window.UIController = UIController;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { UIController, WARRIOR_SKILL_DEFINITIONS };
+}
+if (typeof window !== 'undefined') {
+  window.UIController = UIController;
+  window.WARRIOR_SKILL_DEFINITIONS = WARRIOR_SKILL_DEFINITIONS;
+}

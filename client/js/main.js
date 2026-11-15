@@ -33,12 +33,52 @@
 
   // Weapon slot mapping
   const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
+  const WARRIOR_STANCES = ['BERSERKER_STANCE', 'JUGGERNAUT_STANCE'];
 
   // Pending local weapon switch (guards against stale server snapshots reverting the choice)
   let pendingWeapon = null; // { id, at }
   const PENDING_WEAPON_TIMEOUT_MS = 600;
 
   function trySwitchWeapon(slotIndex, weaponId) {
+    if (input.isWarriorMode) {
+      if (slotIndex >= 3 && slotIndex <= 8) {
+        // Direct skill cast click on HUD bar
+        const isPaused = ui.modalPause && !ui.modalPause.classList.contains('hidden');
+        const isGameOver = ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden');
+        if (isInGame && !isPaused && !isGameOver) {
+          socket.emit('player:skill', { slot: slotIndex, angle: input.mouse.angle });
+        }
+        return;
+      }
+
+      // Slots 1 and 2: Stance switch
+      const stanceId = weaponId || WARRIOR_STANCES[slotIndex - 1];
+      if (!stanceId) return;
+
+      const state = interpolator.getInterpolatedState();
+      const localPlayer = state && state.players ? (state.players.find(p => p.id === myPlayerId) || state.players[0]) : null;
+      if (localPlayer && localPlayer.warriorState) {
+        const skillState = localPlayer.warriorState.skills ? localPlayer.warriorState.skills[stanceId] : null;
+        const playerMaxCombo = Math.max(localPlayer.maxCombo || 1, localPlayer.combo || 1);
+        const def = ui.warriorSkillDefinitions ? ui.warriorSkillDefinitions.find(s => s.id === stanceId) : null;
+        const unlockCombo = def ? def.unlockCombo : (slotIndex === 2 ? 5 : 1);
+        const isUnlocked = Boolean((skillState && skillState.unlocked) || (playerMaxCombo >= unlockCombo) || stanceId === 'BERSERKER_STANCE');
+        if (!isUnlocked) {
+          renderer.addFloatingText(`Cần Combo x${unlockCombo} để mở!`, renderer.camera.x, renderer.camera.y + 60, '#ff1744', 22);
+          return;
+        }
+      }
+
+      input.setWeaponSlot(slotIndex, true);
+      pendingWeapon = { id: stanceId, at: performance.now() };
+
+      if (isInGame) {
+        socket.emit('player:input', input.getInputPayload());
+      }
+      return;
+    }
+
+    // Standard Gun Arsenal switch
     const wid = weaponId || WEAPON_KEYS[slotIndex - 1];
     if (!wid) return;
 
@@ -69,6 +109,14 @@
 
   input.onWeaponChange = (slotIndex, weaponId) => {
     trySwitchWeapon(slotIndex, weaponId);
+  };
+
+  input.onSkillCast = (slot, angle) => {
+    const isPaused = ui.modalPause && !ui.modalPause.classList.contains('hidden');
+    const isGameOver = ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden');
+    if (isInGame && !isPaused && !isGameOver) {
+      socket.emit('player:skill', { slot, angle });
+    }
   };
 
   ui.onSelectWeapon = (slotIndex, weaponId) => {
@@ -242,18 +290,35 @@
     // Sync input handler selected weapon if server changed it (e.g. out of ammo).
     // Ignore stale snapshots while a local switch is still awaiting server confirmation.
     const localPlayer = snapshot.players && (snapshot.players.find(p => p.id === myPlayerId) || snapshot.players[0]);
-    if (localPlayer && localPlayer.selectedWeapon) {
-      const serverWeapon = localPlayer.selectedWeapon;
-      if (pendingWeapon) {
-        const expired = performance.now() - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
-        if (serverWeapon === pendingWeapon.id || expired) {
-          pendingWeapon = null; // confirmed by server (or gave up waiting)
+    if (localPlayer) {
+      const isWarrior = localPlayer.character === 'WARRIOR';
+      if (input.isWarriorMode !== isWarrior) {
+        input.isWarriorMode = isWarrior;
+        if (ui && typeof ui.setWeaponsBarMode === 'function') {
+          ui.setWeaponsBarMode(isWarrior);
         }
       }
-      if (!pendingWeapon) {
-        const idx = WEAPON_KEYS.indexOf(serverWeapon);
-        if (idx !== -1 && input.selectedWeaponSlot !== idx + 1) {
-          input.setWeaponSlot(idx + 1, true);
+
+      if (localPlayer.selectedWeapon) {
+        const serverWeapon = localPlayer.selectedWeapon;
+        if (pendingWeapon) {
+          const expired = performance.now() - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
+          if (serverWeapon === pendingWeapon.id || expired) {
+            pendingWeapon = null; // confirmed by server (or gave up waiting)
+          }
+        }
+        if (!pendingWeapon) {
+          if (isWarrior) {
+            const idx = WARRIOR_STANCES.indexOf(serverWeapon);
+            if (idx !== -1 && input.selectedWeaponSlot !== idx + 1) {
+              input.setWeaponSlot(idx + 1, true);
+            }
+          } else {
+            const idx = WEAPON_KEYS.indexOf(serverWeapon);
+            if (idx !== -1 && input.selectedWeaponSlot !== idx + 1) {
+              input.setWeaponSlot(idx + 1, true);
+            }
+          }
         }
       }
     }
@@ -274,12 +339,60 @@
       if (snd) snd.playShoot(ev.weapon);
       renderer.addMuzzleFlash(ev.x, ev.y, ev.angle);
 
+    } else if (ev.type === 'WARRIOR_SKILL') {
+      if (typeof renderer.spawnWarriorVfx === 'function') {
+        renderer.spawnWarriorVfx(ev);
+      }
+      if (snd && typeof snd.playWarriorSkill === 'function') {
+        snd.playWarriorSkill(ev);
+      }
+      if (ev.skillId === 'WAR_CRY' && typeof renderer.addFloatingText === 'function') {
+        renderer.addFloatingText('WAR CRY!', ev.x, ev.y - 30, '#ffd600', 26);
+      }
+
+    } else if (ev.type === 'WARRIOR_COUNTER') {
+      if (typeof renderer.spawnWarriorVfx === 'function') {
+        renderer.spawnWarriorVfx(ev);
+      }
+      if (snd && typeof snd.playWarriorSkill === 'function') {
+        snd.playWarriorSkill(ev);
+      }
+      if (typeof renderer.addFloatingText === 'function') {
+        renderer.addFloatingText('COUNTER!', ev.x, ev.y - 35, '#00e5ff', 28);
+      }
+
+    } else if (ev.type === 'WARRIOR_MARK_EXPLODE') {
+      if (typeof renderer.spawnWarriorVfx === 'function') {
+        renderer.spawnWarriorVfx(ev);
+      }
+      if (snd && typeof snd.playWarriorSkill === 'function') {
+        snd.playWarriorSkill(ev);
+      }
+
+    } else if (ev.type === 'WARRIOR_AVATAR_END') {
+      if (typeof renderer.spawnWarriorVfx === 'function') {
+        renderer.spawnWarriorVfx(ev);
+      }
+      if (snd && typeof snd.playWarriorSkill === 'function') {
+        snd.playWarriorSkill(ev);
+      }
+      if (typeof renderer.addFloatingText === 'function') {
+        renderer.addFloatingText('AVATAR NOVA!', ev.x, ev.y - 30, '#ff3d00', 28);
+      }
+
     } else if (ev.type === 'ULTIMATE') {
       if (snd && typeof snd.playUltimate === 'function') {
         snd.playUltimate(ev.ultId);
       }
       if (renderer) {
-        if (ev.ultId === 'SEISMIC_SLAM') {
+        if (ev.ultId === 'AVATAR_OF_WAR') {
+          if (typeof renderer.spawnWarriorVfx === 'function') {
+            renderer.spawnWarriorVfx(ev);
+          }
+          if (typeof renderer.addFloatingText === 'function') {
+            renderer.addFloatingText('AVATAR OF WAR!', ev.x, ev.y - 40, '#ff3d00', 32);
+          }
+        } else if (ev.ultId === 'SEISMIC_SLAM') {
           if (typeof renderer.addShockwave === 'function') {
             renderer.addShockwave(ev.x, ev.y, ev.radius || 220, '#ff9800');
           }

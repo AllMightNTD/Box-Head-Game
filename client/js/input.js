@@ -1,3 +1,6 @@
+const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
+const WARRIOR_STANCES = ['BERSERKER_STANCE', 'JUGGERNAUT_STANCE'];
+
 class InputHandler {
   constructor(canvas) {
     this.canvas = canvas;
@@ -11,8 +14,8 @@ class InputHandler {
     };
 
     this.mouse = {
-      screenX: window.innerWidth / 2,
-      screenY: window.innerHeight / 2,
+      screenX: typeof window !== 'undefined' ? window.innerWidth / 2 : 800,
+      screenY: typeof window !== 'undefined' ? window.innerHeight / 2 : 450,
       worldX: 800,
       worldY: 600,
       angle: 0,
@@ -21,7 +24,9 @@ class InputHandler {
 
     this.selectedWeaponSlot = 1;
     this.selectedWeaponId = 'PISTOL';
+    this.isWarriorMode = false;
     this.onWeaponChange = null;
+    this.onSkillCast = null;
     this.onTogglePause = null;
     this.onUltimate = null;
     this.setupListeners();
@@ -38,8 +43,18 @@ class InputHandler {
   }
 
   setWeaponSlot(slot, silent = false) {
+    if (this.isWarriorMode) {
+      const num = slot === 2 ? 2 : 1;
+      const wid = WARRIOR_STANCES[num - 1] || 'BERSERKER_STANCE';
+      this.selectedWeaponSlot = num;
+      this.selectedWeaponId = wid;
+      if (!silent && typeof this.onWeaponChange === 'function') {
+        this.onWeaponChange(this.selectedWeaponSlot, this.selectedWeaponId);
+      }
+      return;
+    }
+
     const num = Math.max(1, Math.min(8, slot));
-    const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
     const wid = WEAPON_KEYS[num - 1] || 'PISTOL';
     this.selectedWeaponSlot = num;
     this.selectedWeaponId = wid;
@@ -49,7 +64,7 @@ class InputHandler {
   }
 
   setupListeners() {
-    const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
+    if (typeof window === 'undefined') return;
 
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
@@ -59,7 +74,7 @@ class InputHandler {
       // Audio resume on first action
       if (window.soundManager) window.soundManager.ensureContext();
 
-      const k = e.key.toLowerCase();
+      const k = e.key ? e.key.toLowerCase() : '';
       if (k === 'w' || e.key === 'ArrowUp') this.keys.up = true;
       if (k === 's' || e.key === 'ArrowDown') this.keys.down = true;
       if (k === 'a' || e.key === 'ArrowLeft') this.keys.left = true;
@@ -81,19 +96,34 @@ class InputHandler {
         }
       }
 
-      // Weapon slots 1-8
+      // Weapon slots 1-8 / Warrior skills 1-8
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= 8) {
-        if (typeof this.onWeaponChange === 'function') {
-          this.onWeaponChange(num, WEAPON_KEYS[num - 1]);
+        if (this.isWarriorMode) {
+          if (num === 1 || num === 2) {
+            const stance = WARRIOR_STANCES[num - 1];
+            if (typeof this.onWeaponChange === 'function') {
+              this.onWeaponChange(num, stance);
+            } else {
+              this.setWeaponSlot(num);
+            }
+          } else if (num >= 3 && num <= 8) {
+            if (!e.repeat && typeof this.onSkillCast === 'function') {
+              this.onSkillCast(num, this.mouse.angle);
+            }
+          }
         } else {
-          this.setWeaponSlot(num);
+          if (typeof this.onWeaponChange === 'function') {
+            this.onWeaponChange(num, WEAPON_KEYS[num - 1]);
+          } else {
+            this.setWeaponSlot(num);
+          }
         }
       }
     });
 
     window.addEventListener('keyup', (e) => {
-      const k = e.key.toLowerCase();
+      const k = e.key ? e.key.toLowerCase() : '';
       if (k === 'w' || e.key === 'ArrowUp') this.keys.up = false;
       if (k === 's' || e.key === 'ArrowDown') this.keys.down = false;
       if (k === 'a' || e.key === 'ArrowLeft') this.keys.left = false;
@@ -130,6 +160,17 @@ class InputHandler {
     });
 
     window.addEventListener('wheel', (e) => {
+      if (this.isWarriorMode) {
+        const nextSlot = this.selectedWeaponSlot === 1 ? 2 : 1;
+        const stance = WARRIOR_STANCES[nextSlot - 1];
+        if (typeof this.onWeaponChange === 'function') {
+          this.onWeaponChange(nextSlot, stance);
+        } else {
+          this.setWeaponSlot(nextSlot);
+        }
+        return;
+      }
+
       let nextSlot = this.selectedWeaponSlot;
       if (e.deltaY > 0) {
         nextSlot = this.selectedWeaponSlot >= 8 ? 1 : this.selectedWeaponSlot + 1;
@@ -147,6 +188,7 @@ class InputHandler {
   }
 
   updateAngle() {
+    if (typeof window === 'undefined') return;
     const cx = window.innerWidth / 2;
     const cy = window.innerHeight / 2;
     this.mouse.angle = Math.atan2(this.mouse.screenY - cy, this.mouse.screenX - cx);
@@ -166,4 +208,10 @@ class InputHandler {
   }
 }
 
-window.InputHandler = InputHandler;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { InputHandler, WEAPON_KEYS, WARRIOR_STANCES };
+}
+if (typeof window !== 'undefined') {
+  window.InputHandler = InputHandler;
+  window.WARRIOR_STANCES = WARRIOR_STANCES;
+}
