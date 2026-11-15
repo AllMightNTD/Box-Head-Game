@@ -634,7 +634,9 @@ const {
   triggerWarriorCounterParry,
   updateWarriorRoomSystems,
   applyWarriorAmmoPickup,
-  isFrontalShieldBlocking
+  isFrontalShieldBlocking,
+  stepClamped,
+  normalizeAngleDiff
 } = require('../server/game/WarriorAbilities.js');
 
 function createMockRoom() {
@@ -809,6 +811,70 @@ test('Task 4: [4] Shadow Dash moves 240px over 0.18s, clamps against obstacles, 
     updateWarriorRoomSystems(0.02, room);
   }
   assert.ok(warrior.x <= bar.x - bar.half - warrior.radius + 1, 'Dash must clamp against Barricade without clipping');
+});
+
+test('Task 4: slash_mark pull fringe pulls zombie from 145px and deals explosion damage post-pull', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 300, 300);
+  room.players.set(warrior.id, warrior);
+
+  // Mark at (300, 300), radius 115, pullRadius 160, damage 75
+  // Zombie at (445, 300) -> dist = 145px.
+  // Pre-pull: dist (145) > markRadius (115) + z.radius (16) = 131.
+  // Pull pulls zombie by 90px inward -> (355, 300), post-pull dist = 55 <= 131.
+  const zFringe = new Zombie('z_fringe', 'NORMAL', 445, 300);
+  assert.strictEqual(zFringe.hp, 80);
+  room.zombies = [zFringe];
+
+  room.groundZones = [{
+    id: 'gz_test_fringe',
+    type: 'slash_mark',
+    ownerId: warrior.id,
+    x: 300,
+    y: 300,
+    radius: 115,
+    pullRadius: 160,
+    damage: 75,
+    timer: 0.02
+  }];
+
+  updateWarriorRoomSystems(0.02, room);
+
+  assert.strictEqual(room.groundZones.length, 0, 'slash_mark detonated and removed');
+  assert.strictEqual(zFringe.x, 355, 'Zombie pulled 90px inward (445 -> 355)');
+  assert.strictEqual(zFringe.hp, 80 - 75, 'Zombie pulled into mark radius must take 75 explosion damage');
+});
+
+test('Task 4: stepClamped defensively guards against invalid angle and distance without propagating NaN', () => {
+  const entity = { x: 100, y: 200, radius: 15 };
+
+  // Non-finite angle (NaN, Infinity, etc.)
+  const res1 = stepClamped(entity, Number.NaN, 50, null);
+  assert.strictEqual(res1.x, 100);
+  assert.strictEqual(res1.y, 200);
+  assert.strictEqual(entity.x, 100);
+  assert.strictEqual(entity.y, 200);
+
+  const res2 = stepClamped(entity, Infinity, 50, null);
+  assert.strictEqual(res2.x, 100);
+  assert.strictEqual(res2.y, 200);
+
+  // Non-finite or non-positive distance
+  const res3 = stepClamped(entity, 0, Number.NaN, null);
+  assert.strictEqual(res3.x, 100);
+  assert.strictEqual(res3.y, 200);
+
+  const res4 = stepClamped(entity, 0, -10, null);
+  assert.strictEqual(res4.x, 100);
+  assert.strictEqual(res4.y, 200);
+});
+
+test('normalizeAngleDiff normalizes angles into [-Math.PI, Math.PI]', () => {
+  assert.strictEqual(normalizeAngleDiff(0), 0);
+  assert.ok(Math.abs(normalizeAngleDiff(3 * Math.PI) - Math.PI) < 1e-6);
+  assert.ok(Math.abs(normalizeAngleDiff(-3 * Math.PI) - (-Math.PI)) < 1e-6);
+  assert.ok(Math.abs(normalizeAngleDiff(2.5 * Math.PI) - 0.5 * Math.PI) < 1e-6);
+  assert.ok(Math.abs(normalizeAngleDiff(-2.5 * Math.PI) - (-0.5 * Math.PI)) < 1e-6);
 });
 
 test('Task 4: [5] Seismic Slam fires 3 rings, clears fireballs, spares Barricade, and creates ticking seismic_fissure', () => {

@@ -24,7 +24,7 @@ const { ULT_CHARGE_CONFIG } = require('./UltimateConfig.js');
  * @returns {{ x: number, y: number }} Clamped final coordinates
  */
 function stepClamped(entity, angle, totalDistance, map, barricades = []) {
-  if (totalDistance <= 0 || !Number.isFinite(totalDistance)) {
+  if (totalDistance <= 0 || !Number.isFinite(totalDistance) || !Number.isFinite(angle)) {
     return { x: entity.x, y: entity.y };
   }
   const cos = Math.cos(angle);
@@ -61,6 +61,18 @@ function stepClamped(entity, angle, totalDistance, map, barricades = []) {
   entity.x = curX;
   entity.y = curY;
   return { x: curX, y: curY };
+}
+
+/**
+ * Normalizes an angle difference to the range [-Math.PI, Math.PI].
+ * @param {number} diff
+ * @returns {number}
+ */
+function normalizeAngleDiff(diff) {
+  let d = diff;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
 }
 
 /**
@@ -177,9 +189,7 @@ function executeWarriorBasicAttack(player, room) {
       if (dist > skill.range + z.radius) continue;
 
       const angleToZ = Math.atan2(z.y - player.y, z.x - player.x);
-      let diff = angleToZ - angle;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
+      const diff = normalizeAngleDiff(angleToZ - angle);
       if (Math.abs(diff) > skill.arcRad / 2) continue;
 
       hitCount++;
@@ -535,9 +545,7 @@ function triggerWarriorCounterParry(player, room) {
       if (!z || z.isDead) continue;
       const dist = Math.hypot(z.x - player.x, z.y - player.y);
       const angleToZ = Math.atan2(z.y - player.y, z.x - player.x);
-      let diff = angleToZ - bashAngle;
-      while (diff > Math.PI) diff -= 2 * Math.PI;
-      while (diff < -Math.PI) diff += 2 * Math.PI;
+      const diff = normalizeAngleDiff(angleToZ - bashAngle);
 
       if (Math.abs(diff) <= skill.bashConeRad / 2) {
         if (dist <= skill.bashRange + z.radius) {
@@ -637,7 +645,8 @@ function updateGroundZones(dt, room) {
               z.applyKnockback(pullAngle, 180);
             }
 
-            if (dist <= zone.radius + z.radius) {
+            const postPullDist = Math.hypot(z.x - zone.x, z.y - zone.y);
+            if (postPullDist <= zone.radius + z.radius) {
               damageAndCreditZombie(owner, z, zone.damage, 'EXPLOSION', room);
             }
           }
@@ -1008,5 +1017,6 @@ module.exports = {
   applyWarriorAmmoPickup,
   isFrontalShieldBlocking,
   damageAndCreditZombie,
-  stepClamped
+  stepClamped,
+  normalizeAngleDiff
 };
