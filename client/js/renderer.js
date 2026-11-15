@@ -12,13 +12,22 @@ class Renderer {
       shakeY: 0
     };
 
-    // Off-screen canvas for persistent blood splatters
+    // Off-screen canvas for persistent blood splatters and progressive darkness lighting
     if (typeof document !== 'undefined') {
       this.bloodCanvas = document.createElement('canvas');
       this.bloodCanvas.width = 1600;
       this.bloodCanvas.height = 1200;
       this.bloodCtx = this.bloodCanvas.getContext('2d');
+
+      this.darknessCanvas = document.createElement('canvas');
+      this.darknessCanvas.width = 1600;
+      this.darknessCanvas.height = 1200;
+      this.darknessCtx = this.darknessCanvas.getContext('2d');
     }
+
+    // Progressive wave darkness
+    this.currentDarknessAlpha = 0.18;
+    this.targetDarknessAlpha = 0.18;
 
     // Visual particles and floating texts
     this.particles = [];
@@ -44,7 +53,11 @@ class Renderer {
   }
 
   resetSession() {
-    this.bloodCtx.clearRect(0, 0, this.bloodCanvas.width, this.bloodCanvas.height);
+    if (this.bloodCtx && this.bloodCanvas) {
+      this.bloodCtx.clearRect(0, 0, this.bloodCanvas.width, this.bloodCanvas.height);
+    }
+    this.currentDarknessAlpha = 0.18;
+    this.targetDarknessAlpha = 0.18;
     this.corpses = [];
     this.particles = [];
     this.floatingTexts = [];
@@ -55,6 +68,13 @@ class Renderer {
     this.camera.shake = 0;
     this.camera.shakeX = 0;
     this.camera.shakeY = 0;
+  }
+
+  getTargetWaveDarkness(wave) {
+    if (typeof wave !== 'number' || !Number.isFinite(wave) || wave <= 1) return 0.18;
+    const table = { 1: 0.18, 2: 0.32, 3: 0.48, 4: 0.62, 5: 0.75 };
+    if (table[wave]) return table[wave];
+    return Math.min(0.88, Number((0.75 + (wave - 5) * 0.065).toFixed(3)));
   }
 
   resize() {
@@ -227,7 +247,12 @@ class Renderer {
     }
   }
 
-  updateVisuals(dt, map) {
+  updateVisuals(dt, map, wave) {
+    if (typeof wave === 'number' && Number.isFinite(wave)) {
+      this.targetDarknessAlpha = this.getTargetWaveDarkness(wave);
+    }
+    this.currentDarknessAlpha += (this.targetDarknessAlpha - this.currentDarknessAlpha) * Math.min(1, dt * 1.5);
+
     // Camera shake decay
     if (this.camera.shake > 0) {
       this.camera.shakeX = (Math.random() * 2 - 1) * this.camera.shake;
@@ -345,6 +370,10 @@ class Renderer {
 
     if (!gameState) return;
 
+    if (typeof gameState.wave === 'number' && Number.isFinite(gameState.wave)) {
+      this.targetDarknessAlpha = this.getTargetWaveDarkness(gameState.wave);
+    }
+
     // Follow local player
     const localPlayer = gameState.players.find(p => p.id === localPlayerId);
     if (localPlayer) {
@@ -367,7 +396,9 @@ class Renderer {
     this.drawFloor(ctx, map);
 
     // 2. Draw Persistent Blood Splatters
-    ctx.drawImage(this.bloodCanvas, 0, 0);
+    if (this.bloodCanvas) {
+      ctx.drawImage(this.bloodCanvas, 0, 0);
+    }
 
     // 2.5 Draw Zombie Corpses (Blood pools and decaying remains)
     this.drawCorpses(ctx, 0.016);
@@ -411,6 +442,10 @@ class Renderer {
 
     // 11. Draw Particles & Explosions
     this.drawParticles(ctx);
+
+    // 11.5 Draw Progressive Darkness, Tactical Lighting & Glowing Zombie Eyes
+    this.drawDarknessAndLights(ctx, gameState, localPlayerId, map);
+    this.drawZombieEyesInDark(ctx, gameState.zombies || [], gameState.players || []);
 
     // 12. Draw Floating Texts
     this.drawFloatingTexts(ctx);
@@ -567,10 +602,11 @@ class Renderer {
 
   drawDownedPlayer(ctx, player) {
     let drawn = false;
-    if (window.spriteManager) {
-      const spriteInfo = window.spriteManager.getSprite('characters', player.character || 'HUMAN');
+    const spriteManager = typeof window !== 'undefined' ? window.spriteManager : null;
+    if (spriteManager) {
+      const spriteInfo = spriteManager.getSprite('characters', player.character || 'HUMAN');
       if (spriteInfo && spriteInfo.image && spriteInfo.image.complete && spriteInfo.image.naturalWidth > 0) {
-        const dirRow = window.spriteManager.angleToDirectionRow(player.angle);
+        const dirRow = spriteManager.angleToDirectionRow(player.angle);
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
@@ -655,18 +691,19 @@ class Renderer {
     ctx.fill();
     ctx.restore();
 
-    const dirRow = (window.spriteManager && window.spriteManager.angleToDirectionRow(player.angle)) || 0;
+    const spriteManager = typeof window !== 'undefined' ? window.spriteManager : null;
+    const dirRow = (spriteManager && spriteManager.angleToDirectionRow(player.angle)) || 0;
 
     // 4. Draw Player Sprite (or fallback)
     let drawnWithSprite = false;
-    if (window.spriteManager) {
-      const spriteInfo = window.spriteManager.getSprite('characters', player.character || 'HUMAN');
+    if (spriteManager) {
+      const spriteInfo = spriteManager.getSprite('characters', player.character || 'HUMAN');
       if (spriteInfo && spriteInfo.image && spriteInfo.image.complete && spriteInfo.image.naturalWidth > 0) {
         const action = player.isMoving ? 'walk' : 'idle';
         const animTime = Date.now() / 1000;
         const src = (action === 'idle')
           ? { sx: 0, sy: dirRow * 32, sWidth: 32, sHeight: 32 }
-          : window.spriteManager.getFrameSource('characters', player.character || 'HUMAN', 'walk', dirRow, animTime);
+          : spriteManager.getFrameSource('characters', player.character || 'HUMAN', 'walk', dirRow, animTime);
 
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -791,13 +828,14 @@ class Renderer {
 
     // 2. Sprite Sheet rendering
     let drawnWithSprite = false;
-    if (window.spriteManager) {
-      const spriteInfo = window.spriteManager.getSprite('zombies', zombie.type);
+    const spriteManager = typeof window !== 'undefined' ? window.spriteManager : null;
+    if (spriteManager) {
+      const spriteInfo = spriteManager.getSprite('zombies', zombie.type);
       if (spriteInfo && spriteInfo.image && spriteInfo.image.complete && spriteInfo.image.naturalWidth > 0) {
-        const dirRow = window.spriteManager.angleToDirectionRow(zombie.angle);
+        const dirRow = spriteManager.angleToDirectionRow(zombie.angle);
         const action = zombie.isHit ? 'hit' : (zombie.isAttacking ? 'attack' : 'walk');
         const animTime = Date.now() / 1000;
-        const src = window.spriteManager.getFrameSource('zombies', zombie.type, action, dirRow, animTime);
+        const src = spriteManager.getFrameSource('zombies', zombie.type, action, dirRow, animTime);
 
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -1480,6 +1518,202 @@ class Renderer {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  drawDarknessAndLights(ctx, gameState, localPlayerId, map) {
+    if (!this.darknessCanvas || !this.darknessCtx) {
+      this.drawFlashlightWarmSheen(ctx, (gameState && gameState.players) || []);
+      return;
+    }
+
+    const ambient = (map && map.theme && map.theme.ambient) || 'normal';
+    const baseColor = ambient === 'snow' ? '#040914' :
+      ambient === 'embers' ? '#120604' :
+      ambient === 'sand' ? '#0e0905' : '#05070d';
+
+    const dCtx = this.darknessCtx;
+    dCtx.save();
+    dCtx.clearRect(0, 0, 1600, 1200);
+    dCtx.globalCompositeOperation = 'source-over';
+    dCtx.globalAlpha = this.currentDarknessAlpha;
+    dCtx.fillStyle = baseColor;
+    dCtx.fillRect(0, 0, 1600, 1200);
+
+    dCtx.globalCompositeOperation = 'destination-out';
+    dCtx.globalAlpha = 1.0;
+    this.cutoutLightingSources(dCtx, gameState, localPlayerId);
+    dCtx.restore();
+
+    ctx.drawImage(this.darknessCanvas, 0, 0);
+    this.drawFlashlightWarmSheen(ctx, (gameState && gameState.players) || []);
+  }
+
+  cutoutLightingSources(dCtx, gameState, localPlayerId) {
+    if (!gameState) return;
+
+    // Players: personal aura & tactical flashlight cone
+    const players = gameState.players || [];
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (p.isDead) continue;
+      const isDowned = !!p.isDowned;
+      const outerR = isDowned ? 75 : (p.id === localPlayerId ? 140 : 115);
+      this.cutoutRadialLight(dCtx, p.x, p.y, 25, outerR, isDowned ? 0.6 : 1.0);
+      if (!isDowned) this.cutoutFlashlightCone(dCtx, p);
+    }
+
+    // Muzzle flashes
+    const flashes = this.muzzleFlashes || [];
+    for (let i = 0; i < flashes.length; i++) {
+      const mf = flashes[i];
+      const maxL = mf.maxLife || 0.06;
+      this.cutoutRadialLight(dCtx, mf.x, mf.y, 10, mf.lightRadius || 180, Math.min(1, (mf.life / maxL) * 0.95));
+    }
+
+    this.cutoutEntityLights(dCtx, gameState);
+  }
+
+  cutoutEntityLights(dCtx, gameState) {
+    const bullets = gameState.bullets || [];
+    for (let i = 0; i < bullets.length; i++) {
+      const b = bullets[i];
+      if (b.isFireball) this.cutoutRadialLight(dCtx, b.x, b.y, 15, 135, 0.85);
+      else if (b.type === 'rocket') this.cutoutRadialLight(dCtx, b.x, b.y, 15, 120, 0.85);
+      else this.cutoutRadialLight(dCtx, b.x, b.y, 5, 45, 0.45);
+    }
+
+    const barricades = gameState.barricades || [];
+    for (let i = 0; i < barricades.length; i++) {
+      if (barricades[i].type === 'barrel') {
+        this.cutoutRadialLight(dCtx, barricades[i].x, barricades[i].y, 10, 65, 0.45);
+      }
+    }
+
+    const drones = gameState.drones || [];
+    for (let i = 0; i < drones.length; i++) {
+      this.cutoutRadialLight(dCtx, drones[i].x, drones[i].y, 20, drones[i].auraRadius || 200, 0.75);
+    }
+
+    const shockwaves = this.shockwaves || [];
+    for (let i = 0; i < shockwaves.length; i++) {
+      const s = shockwaves[i];
+      this.cutoutRadialLight(dCtx, s.x, s.y, 0, s.radius * 1.35, typeof s.alpha === 'number' ? s.alpha : 0.5);
+    }
+  }
+
+  cutoutRadialLight(ctx, x, y, innerR = 0, outerR = 100, alpha = 1.0) {
+    if (outerR <= 0 || alpha <= 0) return;
+    ctx.save();
+    const grad = ctx.createRadialGradient(x, y, Math.max(0, innerR), x, y, outerR);
+    grad.addColorStop(0, `rgba(0, 0, 0, ${alpha})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, outerR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  cutoutFlashlightCone(ctx, p) {
+    const mx = p.x + Math.cos(p.angle) * 18;
+    const my = p.y + Math.sin(p.angle) * 18;
+    const dist = 420;
+
+    ctx.save();
+    // Soft outer penumbra cone
+    const penumbraGrad = ctx.createRadialGradient(mx, my, 20, mx, my, dist);
+    penumbraGrad.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
+    penumbraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = penumbraGrad;
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
+    ctx.arc(mx, my, dist, p.angle - 0.58, p.angle + 0.58);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright core cone
+    const coreGrad = ctx.createRadialGradient(mx, my, 15, mx, my, dist);
+    coreGrad.addColorStop(0, 'rgba(0, 0, 0, 0.95)');
+    coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
+    ctx.arc(mx, my, dist, p.angle - 0.42, p.angle + 0.42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawFlashlightWarmSheen(ctx, players) {
+    if (!players || !players.length) return;
+    ctx.save();
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (p.isDead || p.isDowned) continue;
+      const mx = p.x + Math.cos(p.angle) * 18;
+      const my = p.y + Math.sin(p.angle) * 18;
+      const dist = 420;
+      const grad = ctx.createRadialGradient(mx, my, 20, mx, my, dist);
+      grad.addColorStop(0, 'rgba(255, 248, 220, 0.07)');
+      grad.addColorStop(1, 'rgba(255, 248, 220, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.arc(mx, my, dist, p.angle - 0.42, p.angle + 0.42);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawZombieEyesInDark(ctx, zombies, players) {
+    if (this.currentDarknessAlpha < 0.30 || !zombies || !players || !zombies.length || !players.length) return;
+
+    const alivePlayers = players.filter(p => !p.isDead);
+    if (!alivePlayers.length) return;
+
+    const eyeColors = {
+      DEVIL: '#ff6d00',
+      VAMPIRE: '#ff1744',
+      MUMMY: '#c6ff00',
+      RUNNER: '#ff5252',
+      TANK: '#ffab00',
+      NORMAL: '#ff1744'
+    };
+
+    ctx.save();
+    for (let i = 0; i < zombies.length; i++) {
+      const z = zombies[i];
+      if (z.isDead || z.hp <= 0) continue;
+
+      let minDistSq = Infinity;
+      for (let j = 0; j < alivePlayers.length; j++) {
+        const dx = z.x - alivePlayers[j].x;
+        const dy = z.y - alivePlayers[j].y;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < minDistSq) minDistSq = dSq;
+      }
+
+      if (minDistSq <= 400 * 400) {
+        const minDist = Math.sqrt(minDistSq);
+        const eyeColor = eyeColors[z.type] || '#ff1744';
+        const alpha = Math.max(0.2, (1 - minDist / 400)) * Math.min(1, this.currentDarknessAlpha / 0.7);
+        const hx = z.x + Math.cos(z.angle) * 8;
+        const hy = z.y + Math.sin(z.angle) * 8;
+        const px = -Math.sin(z.angle) * 4;
+        const py = Math.cos(z.angle) * 4;
+
+        ctx.shadowColor = eyeColor;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = eyeColor;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(hx + px, hy + py, 1.8, 0, Math.PI * 2);
+        ctx.arc(hx - px, hy - py, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 }
 
