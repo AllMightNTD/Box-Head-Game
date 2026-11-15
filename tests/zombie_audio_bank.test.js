@@ -250,3 +250,31 @@ test('ZombieAudioBank binds default fetch to window/globalThis, preventing illeg
     global.window = originalWindow;
   }
 });
+
+test('ZombieAudioBank allows events immediately on first trigger with small nowFn (e.g. 10ms) without offset', () => {
+  const bank = new ZombieAudioBank({ nowFn: () => 10 });
+  assert.strictEqual(bank.canPlayEvent('hit'), true, 'First trigger must not be throttled even when now is small');
+  assert.strictEqual(bank.canPlayEvent('attack'), true);
+});
+
+test('ZombieAudioBank.playSample validates src.start before incrementing activeVoices', () => {
+  const mockCtx = {
+    currentTime: 0,
+    createBufferSource: () => ({
+      buffer: null,
+      playbackRate: { value: 1 },
+      connect: () => {},
+      // start is undefined
+    }),
+    createGain: () => ({
+      gain: { value: 1, setValueAtTime: () => {} },
+      connect: () => {}
+    })
+  };
+  const bank = new ZombieAudioBank();
+  bank.buffers.set('rotten/hit', [{ duration: 0.2 }]);
+  const result = bank.playSample(mockCtx, {}, 'NORMAL', 'hit', { x: 800, y: 600, listenerX: 800, listenerY: 600 });
+  assert.strictEqual(result, false, 'playSample must return false if src.start is missing');
+  assert.strictEqual(bank.activeVoices, 0, 'activeVoices must remain 0 when src.start is missing');
+});
+

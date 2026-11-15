@@ -45,7 +45,7 @@ class SoundManager {
 
     const BankClass = options.ZombieAudioBank || ZombieAudioBank || (typeof window !== 'undefined' ? window.ZombieAudioBank : null);
     const bankOptions = {
-      nowFn: () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() + 100000 : Date.now()),
+      nowFn: () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now()),
       ...options
     };
     this.zombieBank = options.zombieBank || (BankClass ? new BankClass(bankOptions) : null);
@@ -190,13 +190,13 @@ class SoundManager {
     return Math.max(0.18, Math.min(1.0, gain));
   }
 
-  createSpatialBus(sourceX, listenerX, reverbSend = 0.2) {
+  createSpatialBus(sourceX, listenerX, reverbSend = 0.2, enableDistanceGain = true) {
     if (!this.ctx) return null;
     const t = this.ctx.currentTime || 0;
     const target = this.compressor || this.masterGain || this.ctx.destination;
 
     const input = this.ctx.createGain();
-    const distGain = this.computeDistanceGain(sourceX, listenerX);
+    const distGain = enableDistanceGain ? this.computeDistanceGain(sourceX, listenerX) : 1.0;
     input.gain.setValueAtTime(distGain, t);
 
     if (typeof this.ctx.createStereoPanner === 'function') {
@@ -418,16 +418,16 @@ class SoundManager {
     if (this.muted || !this.zombieBank || !this.zombieBank.hasBuffer(zType, event)) {
       return false;
     }
+    if (!this.zombieBank.canPlayEvent(event, extra.zombieId)) {
+      return false;
+    }
     this.ensureContext();
     if (!this.ctx) {
       return false;
     }
-    if (!this.zombieBank.canPlayEvent(event, extra.zombieId)) {
-      return false;
-    }
 
     const reverbSend = extra.reverbSend !== undefined ? extra.reverbSend : 0.2;
-    const bus = this.createSpatialBus(sourceX, listenerX, reverbSend);
+    const bus = this.createSpatialBus(sourceX, listenerX, reverbSend, false);
     if (!bus || !bus.input) {
       return false;
     }

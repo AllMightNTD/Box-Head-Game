@@ -281,7 +281,7 @@
     if (typeof window !== 'undefined' && window.soundManager) {
       window.soundManager.ensureContext();
       if (typeof window.soundManager.preloadZombieAudio === 'function') {
-        window.soundManager.preloadZombieAudio();
+        window.soundManager.preloadZombieAudio().catch(err => console.warn('[Audio] Failed to decode zombie audio on game start:', err));
       }
     }
   });

@@ -174,7 +174,7 @@ class ZombieAudioBank {
     const cooldown = EVENT_COOLDOWNS_MS[event] || 0;
     if (cooldown > 0) {
       const now = this.nowFn();
-      const lastTime = this.lastEventTimes.get(event) || 0;
+      const lastTime = this.lastEventTimes.has(event) ? this.lastEventTimes.get(event) : -Infinity;
       if (now - lastTime < cooldown) {
         return false;
       }
@@ -345,6 +345,9 @@ class ZombieAudioBank {
     }
 
     const src = ctx.createBufferSource();
+    if (!src || typeof src.start !== 'function') {
+      return false;
+    }
     src.buffer = audioBuffer;
     if (src.playbackRate) {
       src.playbackRate.value = pitch;
@@ -374,9 +377,7 @@ class ZombieAudioBank {
     this.lastEventTimes.set(event, this.nowFn());
 
     try {
-      if (typeof src.start === 'function') {
-        src.start(0);
-      }
+      src.start(0);
     } catch (err) {
       if (!ended) {
         ended = true;

@@ -644,6 +644,85 @@ test('Integration: handleGameEvent routes ZOMBIE_ATTACK and passes 2D coordinate
   assert.strictEqual(calls.die[0].ly, 300);
 });
 
+test('SoundManager.createSpatialBus with enableDistanceGain=false eliminates compound double distance attenuation for zombie WAV audio', () => {
+  const baseCtx = createMockAudioContext();
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const createdGains = [];
+  const origCreateGain = baseCtx.createGain.bind(baseCtx);
+  baseCtx.createGain = () => {
+    const g = origCreateGain();
+    createdGains.push(g);
+    return g;
+  };
+
+  const createdPanners = [];
+  const origCreatePanner = baseCtx.createStereoPanner.bind(baseCtx);
+  baseCtx.createStereoPanner = () => {
+    const p = origCreatePanner();
+    createdPanners.push(p);
+    return p;
+  };
+
+  sm.zombieBank.buffers.set('mutant/hit', [{ duration: 0.5 }]);
+
+  // Test 1: Horizontal zombie at (1000, 500), listener at (500, 500), maxDist = 1000
+  createdGains.length = 0;
+  createdPanners.length = 0;
+  const resH = sm.playZombieSample('TANK', 'hit', 1000, 500, 500, 500, { zombieId: 'z_h', reverbSend: 0 });
+  assert.strictEqual(resH, true);
+
+  const busInputGainH = createdGains[0].gain.value;
+  const wavGainH = createdGains[1].gain.value;
+  const panH = createdPanners[0].pan.value;
+
+  // Test 2: Vertical zombie at (500, 1000), listener at (500, 500), maxDist = 1000
+  sm.zombieBank.lastEventTimes.delete('hit');
+  createdGains.length = 0;
+  createdPanners.length = 0;
+  const resV = sm.playZombieSample('TANK', 'hit', 500, 1000, 500, 500, { zombieId: 'z_v', reverbSend: 0 });
+  assert.strictEqual(resV, true);
+
+  const busInputGainV = createdGains[0].gain.value;
+  const wavGainV = createdGains[1].gain.value;
+  const panV = createdPanners[0].pan.value;
+
+  // Assertions:
+  // 1. Equal Euclidean distance yields identical gain on WAV buffer gainNode (0.5 * baseVolume = 0.4)
+  assert.strictEqual(wavGainH, 0.4, 'Horizontal zombie WAV gainNode should be 0.4');
+  assert.strictEqual(wavGainV, 0.4, 'Vertical zombie WAV gainNode should be 0.4');
+  assert.strictEqual(wavGainH, wavGainV, 'WAV gainNode gains must be identical at equal Euclidean distance');
+
+  // 2. Spatial bus input gain must remain 1.0 (no 1D horizontal compounding)
+  assert.strictEqual(busInputGainH, 1.0, 'bus.input.gain for horizontal zombie must be 1.0');
+  assert.strictEqual(busInputGainV, 1.0, 'bus.input.gain for vertical zombie must be 1.0');
+
+  // 3. Stereo panning: horizontal zombie pans right (> 0), vertical zombie is centered (0)
+  assert.ok(panH > 0, `Horizontal zombie should pan right (> 0), got ${panH}`);
+  assert.strictEqual(panV, 0, 'Vertical zombie pan should be 0');
+
+  // 4. Backward compatibility: createSpatialBus defaults enableDistanceGain = true
+  const defaultBus = sm.createSpatialBus(1000, 500);
+  assert.ok(defaultBus.input.gain.value < 1.0, 'Default createSpatialBus must apply 1D distance attenuation');
+  assert.strictEqual(defaultBus.input.gain.value, sm.computeDistanceGain(1000, 500));
+});
+
+test('SoundManager.playZombieSample checks canPlayEvent before ensureContext', () => {
+  const sm = new SoundManager();
+  let ensureContextCalled = 0;
+  sm.ensureContext = () => { ensureContextCalled++; };
+  sm.zombieBank.buffers.set('mutant/hit', [{ duration: 0.5 }]);
+
+  sm.zombieBank.canPlayEvent = () => false;
+  const res = sm.playZombieSample('TANK', 'hit', 1000, 500, 500, 500);
+  assert.strictEqual(res, false);
+  assert.strictEqual(ensureContextCalled, 0, 'ensureContext must not be called when canPlayEvent returns false');
+});
+
+
 
 
 
