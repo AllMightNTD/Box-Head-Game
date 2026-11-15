@@ -6,6 +6,14 @@
     window.spriteManager.preloadAll().catch(err => console.warn('Sprite preload error:', err));
   }
 
+  // Kick off background raw WAV prefetch for zombie audio
+  if (isBrowser && window.soundManager && typeof window.soundManager.preloadZombieAudio === 'function') {
+    const preloadPromise = window.soundManager.preloadZombieAudio();
+    if (preloadPromise && typeof preloadPromise.catch === 'function') {
+      preloadPromise.catch(err => console.warn('Zombie audio preload error:', err));
+    }
+  }
+
   const socket = isBrowser && typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
   const canvas = isBrowser ? document.getElementById('gameCanvas') : null;
   const renderer = isBrowser && typeof Renderer === 'function' && canvas ? new Renderer(canvas) : null;
@@ -272,6 +280,9 @@
     pendingWeapon = null;
     if (typeof window !== 'undefined' && window.soundManager) {
       window.soundManager.ensureContext();
+      if (typeof window.soundManager.preloadZombieAudio === 'function') {
+        window.soundManager.preloadZombieAudio();
+      }
     }
   });
 
@@ -364,27 +375,38 @@
     if (ui && ui.modalPause) ui.modalPause.classList.add('hidden');
   }
 
+  function handleZombieAudioAndVfx(ev, rnd, snd, listenerX, listenerY) {
+    if (ev.type === 'HIT') {
+      if (snd) snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX, ev.y, listenerY, ev.zombieId);
+      if (rnd) rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
+    } else if (ev.type === 'ZOMBIE_DIE') {
+      if (snd) snd.playZombieDie(ev.zType, ev.x, listenerX, ev.y, listenerY, ev.zombieId);
+      const bloodColor = ev.zType === 'DEVIL' ? '#c62828' : '#7f0000';
+      if (rnd) {
+        rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.killAngle === 'number' ? ev.killAngle : (ev.angle || 0), 'kill', true, bloodColor);
+        rnd.addZombieCorpse(ev);
+      }
+    } else if (ev.type === 'ZOMBIE_ATTACK') {
+      if (snd && typeof snd.playZombieAttack === 'function') {
+        snd.playZombieAttack(ev.zType, ev.x, listenerX, ev.y, listenerY, ev.zombieId, ev.attackKind);
+      }
+    }
+  }
+
   function handleGameEvent(ev, snapshot, context = {}) {
     const snd = context.soundManager !== undefined ? context.soundManager : (typeof window !== 'undefined' ? window.soundManager : null);
     const rnd = context.renderer !== undefined ? context.renderer : renderer;
     const myId = context.myPlayerId !== undefined ? context.myPlayerId : myPlayerId;
     const localPlayer = snapshot && snapshot.players ? (snapshot.players.find(p => p.id === myId) || snapshot.players[0]) : null;
     const listenerX = localPlayer ? localPlayer.x : (rnd && rnd.camera ? rnd.camera.x : 0);
+    const listenerY = localPlayer ? localPlayer.y : (rnd && rnd.camera ? rnd.camera.y : 0);
 
     if (ev.type === 'SHOOT') {
       handleShootEvent(ev, rnd, snd, myId, listenerX);
     } else if (ev.type === 'ULTIMATE') {
       handleUltimateEvent(ev, rnd, snd);
-    } else if (ev.type === 'HIT') {
-      if (snd) snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
-      if (rnd) rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
-    } else if (ev.type === 'ZOMBIE_DIE') {
-      if (snd) snd.playZombieDie(ev.zType, ev.x, listenerX);
-      const bloodColor = ev.zType === 'DEVIL' ? '#c62828' : '#7f0000';
-      if (rnd) {
-        rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.killAngle === 'number' ? ev.killAngle : (ev.angle || 0), 'kill', true, bloodColor);
-        rnd.addZombieCorpse(ev);
-      }
+    } else if (ev.type === 'HIT' || ev.type === 'ZOMBIE_DIE' || ev.type === 'ZOMBIE_ATTACK') {
+      handleZombieAudioAndVfx(ev, rnd, snd, listenerX, listenerY);
     } else if (ev.type === 'EXPLOSION') {
       if (snd) snd.playExplosion(ev.radius > 120 ? 1.4 : 1.0, ev.x, listenerX);
       if (rnd) rnd.addExplosionParticles(ev.x, ev.y, ev.radius);

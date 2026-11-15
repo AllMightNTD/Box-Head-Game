@@ -608,6 +608,43 @@ test('SoundManager routes zombie WAV buffers through spatial bus and falls back 
   assert.strictEqual(sm.zombieBank.zombieStates.size, 0);
 });
 
+test('Integration: handleGameEvent routes ZOMBIE_ATTACK and passes 2D coordinates to SoundManager', () => {
+  const calls = { attack: [], hit: [], die: [] };
+  const mockSoundManager = {
+    playZombieAttack: (zType, x, lx, y, ly, zombieId, attackKind) =>
+      calls.attack.push({ zType, x, lx, y, ly, zombieId, attackKind }),
+    playZombieHit: (zType, weapon, x, lx, y, ly, zombieId) =>
+      calls.hit.push({ zType, weapon, x, lx, y, ly, zombieId }),
+    playZombieDie: (zType, x, lx, y, ly, zombieId) =>
+      calls.die.push({ zType, x, lx, y, ly, zombieId })
+  };
+  const mockRenderer = {
+    camera: { x: 800, y: 600 },
+    addDirectionalBlood: () => {},
+    addZombieCorpse: () => {}
+  };
+  const snapshot = {
+    wave: 2,
+    players: [{ id: 'p1', x: 400, y: 300 }],
+    zombies: []
+  };
+  const ctx = { soundManager: mockSoundManager, renderer: mockRenderer, myPlayerId: 'p1' };
+
+  handleGameEvent({ type: 'ZOMBIE_ATTACK', zombieId: 'z9', zType: 'DEVIL', x: 700, y: 350, attackKind: 'ranged' }, snapshot, ctx);
+  handleGameEvent({ type: 'HIT', zombieId: 'z9', zType: 'DEVIL', weapon: 'bullet', x: 700, y: 350, angle: 0 }, snapshot, ctx);
+  handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'DEVIL', x: 700, y: 350, killAngle: 0 }, snapshot, ctx);
+
+  assert.deepStrictEqual(calls.attack[0], {
+    zType: 'DEVIL', x: 700, lx: 400, y: 350, ly: 300, zombieId: 'z9', attackKind: 'ranged'
+  });
+  assert.strictEqual(calls.hit[0].y, 350);
+  assert.strictEqual(calls.hit[0].ly, 300);
+  assert.strictEqual(calls.hit[0].zombieId, 'z9');
+  assert.strictEqual(calls.die[0].y, 350);
+  assert.strictEqual(calls.die[0].ly, 300);
+});
+
+
 
 
 
