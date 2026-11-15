@@ -349,6 +349,7 @@ test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages
     sm.playShoot('ROCKET', 750, 800);
     sm.playShoot('RAILGUN', 1000, 800);
     sm.playZombieHit('TANK', 'SHOTGUN', 850, 800);
+    sm.playZombieHit('TANK', 'shotgun', 850, 800);
     sm.playZombieDie('DEVIL', 900, 800);
     sm.playWaveStart(5);
   });
@@ -359,7 +360,7 @@ test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages
   assert.strictEqual(firstGrowl, true);
   assert.strictEqual(immediateSecondGrowl, false, 'Second growl within cooldown must be throttled');
 
-  // Ambience start & stop cleanup
+  // Ambience start & stop cleanup and wave scaling
   sm.updateHorrorAmbience(0.5, {
     isInGame: true,
     wave: 6,
@@ -367,9 +368,19 @@ test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages
     zombies: [{ id: 'z1', type: 'RUNNER', x: 850, y: 610, isDead: false }]
   });
   assert.strictEqual(sm.droneActive, true);
+  assert.ok(sm.droneLfoGain, 'droneLfoGain should be active');
+  assert.strictEqual(sm.droneGain.gain.value, 0.14, 'Wave 6 drone gain should scale to 0.14');
+
+  sm.updateHorrorAmbience(0.1, {
+    isInGame: true,
+    wave: 1,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100, isDowned: false }
+  });
+  assert.strictEqual(sm.droneGain.gain.value, 0.04, 'Wave 1 drone gain should be 0.04');
 
   sm.stopHorrorAmbience();
   assert.strictEqual(sm.droneActive, false);
+  assert.strictEqual(sm.droneLfoGain, null, 'droneLfoGain should be null after stopHorrorAmbience');
 });
 
 const { handleGameEvent, gameLoop } = require('../client/js/main.js');
@@ -453,6 +464,10 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   // SHOOT: local player with PISTOL -> shake 1.5
   handleGameEvent({ type: 'SHOOT', weapon: 'PISTOL', x: 800, y: 600, angle: 0, playerId: 'player_me' }, snapshot, context);
   assert.strictEqual(calls.triggerScreenShake[2], 1.5);
+
+  // SHOOT: local player with DRONE -> NO screen shake
+  handleGameEvent({ type: 'SHOOT', weapon: 'DRONE', x: 800, y: 600, angle: 0, playerId: 'player_me' }, snapshot, context);
+  assert.strictEqual(calls.triggerScreenShake.length, 3, 'Drone firing must not trigger screen shake');
 
   // SHOOT: peer player -> NO screen shake
   handleGameEvent({ type: 'SHOOT', weapon: 'RAILGUN', x: 1200, y: 600, angle: 0, playerId: 'player_peer' }, snapshot, context);

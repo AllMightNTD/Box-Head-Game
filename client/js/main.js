@@ -314,7 +314,7 @@
   function handleShootEvent(ev, rnd, snd, myId, listenerX) {
     if (snd) snd.playShoot(ev.weapon, ev.x, listenerX);
     if (rnd) rnd.addMuzzleFlash(ev.x, ev.y, ev.angle, ev.weapon);
-    if (ev.playerId === myId && rnd && typeof rnd.triggerScreenShake === 'function') {
+    if (ev.playerId === myId && ev.weapon !== 'DRONE' && rnd && typeof rnd.triggerScreenShake === 'function') {
       const shakeAmount = ev.weapon === 'SHOTGUN' ? 5 : ((ev.weapon === 'ROCKET' || ev.weapon === 'RAILGUN') ? 8 : 1.5);
       rnd.triggerScreenShake(shakeAmount);
     }

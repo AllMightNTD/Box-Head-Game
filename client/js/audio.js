@@ -17,6 +17,7 @@ class SoundManager {
     this.droneFilter = null;
     this.droneGain = null;
     this.droneLfo = null;
+    this.droneLfoGain = null;
     this.heartbeatTimer = 0;
     this.growlTimer = 0;
   }
@@ -385,8 +386,9 @@ class SoundManager {
       filter.frequency.setValueAtTime(650, t);
       filter.frequency.exponentialRampToValueAtTime(180, t + 0.08);
       if (filter.Q) filter.Q.setValueAtTime(2.5, t);
+      const isShotgun = Boolean(weapon && String(weapon).toUpperCase() === 'SHOTGUN');
       const nGain = this.ctx.createGain();
-      nGain.gain.setValueAtTime(weapon === 'SHOTGUN' ? 0.45 : 0.3, t);
+      nGain.gain.setValueAtTime(isShotgun ? 0.45 : 0.3, t);
       nGain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
       noise.connect(filter);
       filter.connect(nGain);
@@ -633,11 +635,13 @@ class SoundManager {
     osc2.stop(t + 0.24);
   }
 
-  startHorrorDrone() {
+  startHorrorDrone(wave = 1) {
     if (!this.ctx || this.droneActive) return;
     try {
       const t = this.ctx.currentTime || 0;
       const target = this.compressor || this.masterGain || this.ctx.destination;
+      const safeWave = Math.max(1, (wave && Number.isFinite(wave)) ? wave : 1);
+      const initialGain = Math.min(0.14, 0.04 + (safeWave - 1) * 0.02);
 
       this.droneOsc1 = this.ctx.createOscillator();
       this.droneOsc1.type = 'sine';
@@ -652,16 +656,16 @@ class SoundManager {
       this.droneFilter.frequency.setValueAtTime(140, t);
 
       this.droneGain = this.ctx.createGain();
-      this.droneGain.gain.setValueAtTime(0.18, t);
+      this.droneGain.gain.setValueAtTime(initialGain, t);
 
       this.droneLfo = this.ctx.createOscillator();
       this.droneLfo.type = 'sine';
       this.droneLfo.frequency.setValueAtTime(0.2, t);
 
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.setValueAtTime(35, t);
-      this.droneLfo.connect(lfoGain);
-      lfoGain.connect(this.droneFilter.frequency);
+      this.droneLfoGain = this.ctx.createGain();
+      this.droneLfoGain.gain.setValueAtTime(35, t);
+      this.droneLfo.connect(this.droneLfoGain);
+      this.droneLfoGain.connect(this.droneFilter.frequency);
 
       this.droneOsc1.connect(this.droneFilter);
       this.droneOsc2.connect(this.droneFilter);
@@ -700,12 +704,14 @@ class SoundManager {
     this.safeStopAndDisconnect(this.droneOsc1);
     this.safeStopAndDisconnect(this.droneOsc2);
     this.safeStopAndDisconnect(this.droneLfo);
+    this.safeStopAndDisconnect(this.droneLfoGain);
     this.safeStopAndDisconnect(this.droneFilter);
     this.safeStopAndDisconnect(this.droneGain);
 
     this.droneOsc1 = null;
     this.droneOsc2 = null;
     this.droneLfo = null;
+    this.droneLfoGain = null;
     this.droneFilter = null;
     this.droneGain = null;
     this.droneActive = false;
@@ -726,8 +732,14 @@ class SoundManager {
       if (this.droneActive) this.stopHorrorAmbience();
       return;
     }
+    const wave = Math.max(1, (state && state.wave) || 1);
     if (!this.droneActive) {
-      this.startHorrorDrone();
+      this.startHorrorDrone(wave);
+    }
+    if (this.droneGain && this.droneGain.gain) {
+      const targetGain = Math.min(0.14, 0.04 + (wave - 1) * 0.02);
+      const t = (this.ctx && this.ctx.currentTime) || 0;
+      this.droneGain.gain.setValueAtTime(targetGain, t);
     }
 
     this.updateAmbienceHeartbeat(dt, state);
