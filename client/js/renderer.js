@@ -36,6 +36,9 @@ class Renderer {
     this.ambientParticles = [];
     this.shockwaves = [];
     this.blinkTrails = [];
+    this.shellCasings = [];
+    this.gunSmoke = [];
+    this.railgunBeams = [];
 
     // Zombie corpses array (blood pools & held death frames, capped at 60)
     this.corpses = [];
@@ -65,6 +68,9 @@ class Renderer {
     this.ambientParticles = [];
     this.shockwaves = [];
     this.blinkTrails = [];
+    this.shellCasings = [];
+    this.gunSmoke = [];
+    this.railgunBeams = [];
     this.camera.shake = 0;
     this.camera.shakeX = 0;
     this.camera.shakeY = 0;
@@ -130,7 +136,77 @@ class Renderer {
         maxLife: 0.8
       });
     }
+    while (this.particles.length > 180) {
+      this.particles.shift();
+    }
     this.triggerScreenShake(radius > 120 ? 18 : 10);
+  }
+
+  addDirectionalBlood(x, y, impactAngle = 0, weapon = 'bullet', isKill = false, color = '#8a0303') {
+    if (this.bloodCtx) {
+      this.paintDirectionalBloodSplatter(x, y, impactAngle, weapon, isKill, color);
+    }
+    this.spawnDirectionalGoreParticles(x, y, impactAngle, weapon, isKill, color);
+  }
+
+  paintDirectionalBloodSplatter(x, y, impactAngle, weapon, isKill, color) {
+    this.bloodCtx.save();
+    const isHeavy = weapon === 'SHOTGUN' || weapon === 'shotgun' || weapon === 'RAILGUN' || isKill;
+    const count = isKill ? 12 : (isHeavy ? 9 : 5);
+    const baseDist = isHeavy ? 55 : 30;
+
+    for (let i = 0; i < count; i++) {
+      const spread = (Math.random() - 0.5) * 0.9;
+      const angle = impactAngle + spread;
+      const dist = Math.random() * baseDist + 10;
+      const bx = x + Math.cos(angle) * dist;
+      const by = y + Math.sin(angle) * dist;
+      const r = Math.random() * (isKill ? 4.5 : 3.0) + 1.5;
+
+      this.bloodCtx.fillStyle = color;
+      this.bloodCtx.globalAlpha = Math.random() * 0.4 + 0.5;
+      this.bloodCtx.beginPath();
+      this.bloodCtx.arc(bx, by, r, 0, Math.PI * 2);
+      this.bloodCtx.fill();
+
+      if (Math.random() < 0.4) {
+        this.bloodCtx.beginPath();
+        this.bloodCtx.moveTo(bx, by);
+        this.bloodCtx.lineTo(bx + Math.cos(angle) * (r * 3.5), by + Math.sin(angle) * (r * 3.5));
+        this.bloodCtx.strokeStyle = color;
+        this.bloodCtx.lineWidth = Math.random() * 2 + 1;
+        this.bloodCtx.stroke();
+      }
+    }
+    this.bloodCtx.restore();
+  }
+
+  spawnDirectionalGoreParticles(x, y, impactAngle, weapon, isKill, color) {
+    const isHeavy = weapon === 'SHOTGUN' || weapon === 'shotgun' || weapon === 'RAILGUN' || isKill;
+    const count = isKill ? 10 : (isHeavy ? 7 : 4);
+    const baseSpeed = isKill ? 260 : (isHeavy ? 200 : 140);
+
+    for (let i = 0; i < count; i++) {
+      const spread = (Math.random() - 0.5) * 1.0;
+      const angle = impactAngle + spread;
+      const speed = Math.random() * baseSpeed + 50;
+      const isChunk = isKill && Math.random() < 0.4;
+
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: isChunk ? Math.random() * 3 + 3 : Math.random() * 2 + 1.2,
+        color: isChunk ? '#4a0000' : color,
+        life: Math.random() * 0.25 + 0.15,
+        maxLife: 0.4,
+        drag: 0.88
+      });
+    }
+    while (this.particles.length > 180) {
+      this.particles.shift();
+    }
   }
 
   addFloatingText(text, x, y, color = '#ffeb3b', size = 22) {
@@ -145,13 +221,84 @@ class Renderer {
     });
   }
 
-  addMuzzleFlash(x, y, angle) {
+  addMuzzleFlash(x, y, angle, weapon = 'PISTOL') {
+    const configs = {
+      PISTOL:  { life: 0.06,  lightRadius: 170, smoke: 1, eject: 'brass' },
+      UZI:     { life: 0.045, lightRadius: 160, smoke: 1, eject: 'brass' },
+      SHOTGUN: { life: 0.09,  lightRadius: 250, smoke: 3, eject: 'shotgun' },
+      ROCKET:  { life: 0.11,  lightRadius: 260, smoke: 3, eject: null },
+      RAILGUN: { life: 0.14,  lightRadius: 300, smoke: 2, eject: null }
+    };
+    const key = (weapon || 'PISTOL').toUpperCase();
+    const cfg = configs[key] || configs.PISTOL;
+
     this.muzzleFlashes.push({
       x,
       y,
       angle,
-      life: 0.05
+      weapon: key,
+      life: cfg.life,
+      maxLife: cfg.life,
+      lightRadius: cfg.lightRadius
     });
+
+    if (cfg.eject) {
+      this.spawnShellCasing(x, y, angle, cfg.eject);
+    }
+    if (cfg.smoke > 0) {
+      this.spawnGunSmoke(x, y, angle, cfg.smoke);
+    }
+    if (key === 'RAILGUN') {
+      this.railgunBeams.push({
+        x,
+        y,
+        angle,
+        life: 0.25,
+        maxLife: 0.25
+      });
+    }
+  }
+
+  spawnShellCasing(x, y, angle, type) {
+    if (this.shellCasings.length >= 80) {
+      this.shellCasings.shift();
+    }
+    const ejectAngle = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.4;
+    const speed = 60 + Math.random() * 70;
+    this.shellCasings.push({
+      x,
+      y,
+      z: 12,
+      vx: Math.cos(ejectAngle) * speed,
+      vy: Math.sin(ejectAngle) * speed,
+      vz: 80 + Math.random() * 50,
+      vRot: (Math.random() - 0.5) * 16,
+      rotation: Math.random() * Math.PI * 2,
+      type,
+      life: 3.0,
+      maxLife: 3.0
+    });
+  }
+
+  spawnGunSmoke(x, y, angle, count) {
+    for (let i = 0; i < count; i++) {
+      while (this.gunSmoke.length >= 50) {
+        this.gunSmoke.shift();
+      }
+      const spread = (Math.random() - 0.5) * 0.5;
+      const speed = 25 + Math.random() * 35;
+      this.gunSmoke.push({
+        x: x + Math.cos(angle) * (12 + Math.random() * 8),
+        y: y + Math.sin(angle) * (12 + Math.random() * 8),
+        vx: Math.cos(angle + spread) * speed,
+        vy: Math.sin(angle + spread) * speed - 10,
+        radius: 4 + Math.random() * 3,
+        maxRadius: 14 + Math.random() * 6,
+        currentRadius: 4,
+        life: 0.35 + Math.random() * 0.25,
+        maxLife: 0.6
+      });
+    }
   }
 
   addShockwave(x, y, maxRadius = 200, color = '#ff9800') {
@@ -322,11 +469,17 @@ class Renderer {
       const p = this.particles[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vx *= 0.94;
-      p.vy *= 0.94;
+      const drag = typeof p.drag === 'number' ? p.drag : 0.94;
+      p.vx *= drag;
+      p.vy *= drag;
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
+
+    // Shell casings, gun smoke and railgun plasma beams
+    this.updateShellCasings(dt);
+    this.updateGunSmoke(dt);
+    this.updateRailgunBeams(dt);
 
     // Floating texts
     for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
@@ -360,6 +513,62 @@ class Renderer {
       bt.alpha = Math.max(0, 1 - (bt.elapsed / bt.duration));
       if (bt.elapsed >= bt.duration || bt.alpha <= 0) {
         this.blinkTrails.splice(i, 1);
+      }
+    }
+  }
+
+  updateShellCasings(dt) {
+    if (!this.shellCasings) return;
+    for (let i = this.shellCasings.length - 1; i >= 0; i--) {
+      const sc = this.shellCasings[i];
+      sc.life -= dt;
+      if (sc.life <= 0) {
+        this.shellCasings.splice(i, 1);
+        continue;
+      }
+      if (sc.z > 0 || sc.vz > 0) {
+        sc.x += sc.vx * dt;
+        sc.y += sc.vy * dt;
+        sc.z += sc.vz * dt;
+        sc.vz -= 420 * dt;
+        sc.rotation += sc.vRot * dt;
+        if (sc.z <= 0) {
+          sc.z = 0;
+          sc.vz = -sc.vz * 0.45;
+          sc.vx *= 0.6;
+          sc.vy *= 0.6;
+          sc.vRot *= 0.5;
+          if (Math.abs(sc.vz) < 20) sc.vz = 0;
+        }
+      }
+    }
+  }
+
+  updateGunSmoke(dt) {
+    if (!this.gunSmoke) return;
+    for (let i = this.gunSmoke.length - 1; i >= 0; i--) {
+      const gs = this.gunSmoke[i];
+      gs.life -= dt;
+      if (gs.life <= 0) {
+        this.gunSmoke.splice(i, 1);
+        continue;
+      }
+      gs.x += gs.vx * dt;
+      gs.y += gs.vy * dt;
+      gs.vx *= 0.92;
+      gs.vy *= 0.92;
+      const progress = 1 - (gs.life / gs.maxLife);
+      gs.currentRadius = gs.radius + (gs.maxRadius - gs.radius) * progress;
+    }
+  }
+
+  updateRailgunBeams(dt) {
+    if (!this.railgunBeams) return;
+    for (let i = this.railgunBeams.length - 1; i >= 0; i--) {
+      const rb = this.railgunBeams[i];
+      rb.life -= dt;
+      if (rb.life <= 0) {
+        this.railgunBeams.splice(i, 1);
       }
     }
   }
@@ -403,6 +612,9 @@ class Renderer {
     // 2.5 Draw Zombie Corpses (Blood pools and decaying remains)
     this.drawCorpses(ctx, 0.016);
 
+    // 2.6 Draw Ejected Shell Casings on Floor
+    this.drawShellCasings(ctx);
+
     // 3. Draw Ambient Weather Particles (Behind actors for depth)
     this.drawAmbientParticles(ctx);
 
@@ -430,8 +642,14 @@ class Renderer {
     // 8. Draw Bullets & Projectiles
     this.drawBullets(ctx, gameState.bullets || []);
 
+    // 8.5 Draw Railgun Beams
+    this.drawRailgunBeams(ctx);
+
     // 9. Draw Muzzle Flashes
     this.drawMuzzleFlashes(ctx);
+
+    // 9.5 Draw Gun Smoke
+    this.drawGunSmoke(ctx);
 
     // 10. Draw Map Walls & Pillars (Over entities for 2.5D depth)
     this.drawMapStructures(ctx, map);
@@ -1277,47 +1495,110 @@ class Renderer {
       ctx.translate(b.x, b.y);
 
       if (b.isFireball) {
-        // Swirling Devil Fireball
-        ctx.rotate(Date.now() / 80);
-        ctx.fillStyle = '#ff9800';
-        ctx.beginPath();
-        ctx.arc(0, 0, 12, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#ffeb3b';
-        ctx.beginPath();
-        ctx.arc(0, 0, 7, 0, Math.PI * 2);
-        ctx.fill();
-
+        this.drawFireballBullet(ctx);
       } else if (b.type === 'rocket') {
-        ctx.rotate(b.angle);
-        ctx.fillStyle = '#424242';
-        ctx.fillRect(-10, -4, 18, 8);
-        ctx.fillStyle = '#d32f2f';
-        ctx.beginPath();
-        ctx.moveTo(8, -4);
-        ctx.lineTo(14, 0);
-        ctx.lineTo(8, 4);
-        ctx.fill();
-
+        this.drawRocketBullet(ctx, b.angle || 0);
       } else if (b.type === 'railgun') {
-        ctx.rotate(b.angle);
-        ctx.strokeStyle = '#00e5ff';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.moveTo(-40, 0);
-        ctx.lineTo(40, 0);
-        ctx.stroke();
-
+        this.drawRailgunBullet(ctx, b.angle || 0);
+      } else if (b.type === 'shotgun') {
+        this.drawShotgunBullet(ctx, b.angle || 0);
       } else {
-        // Standard tracer bullet
-        ctx.rotate(b.angle);
-        ctx.fillStyle = '#ffeb3b';
-        ctx.fillRect(-6, -2, 12, 4);
+        this.drawTracerBullet(ctx, b.angle || 0);
       }
 
       ctx.restore();
     }
+  }
+
+  drawFireballBullet(ctx) {
+    ctx.rotate(Date.now() / 80);
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath();
+    ctx.arc(0, 0, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawRocketBullet(ctx, angle) {
+    ctx.rotate(angle);
+    ctx.fillStyle = '#424242';
+    ctx.fillRect(-10, -4, 18, 8);
+    ctx.fillStyle = '#d32f2f';
+    ctx.beginPath();
+    ctx.moveTo(8, -4);
+    ctx.lineTo(14, 0);
+    ctx.lineTo(8, 4);
+    ctx.fill();
+
+    const flameLen = 8 + Math.random() * 8;
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath();
+    ctx.moveTo(-10, -3);
+    ctx.lineTo(-10 - flameLen, 0);
+    ctx.lineTo(-10, 3);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath();
+    ctx.moveTo(-10, -1.5);
+    ctx.lineTo(-10 - flameLen * 0.6, 0);
+    ctx.lineTo(-10, 1.5);
+    ctx.fill();
+  }
+
+  drawRailgunBullet(ctx, angle) {
+    ctx.rotate(angle);
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-45, 0);
+    ctx.lineTo(45, 0);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-40, 0);
+    ctx.lineTo(40, 0);
+    ctx.stroke();
+  }
+
+  drawShotgunBullet(ctx, angle) {
+    ctx.rotate(angle);
+    const grad = ctx.createLinearGradient(-22, 0, 0, 0);
+    grad.addColorStop(0, 'rgba(255, 152, 0, 0)');
+    grad.addColorStop(1, '#ff9800');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-22, 0);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawTracerBullet(ctx, angle) {
+    ctx.rotate(angle);
+    const grad = ctx.createLinearGradient(-34, 0, 0, 0);
+    grad.addColorStop(0, 'rgba(255, 235, 59, 0)');
+    grad.addColorStop(1, '#fffde7');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-34, 0);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = '#fffde7';
+    ctx.fillRect(-4, -1.5, 8, 3);
   }
 
   drawPickups(ctx, pickups) {
@@ -1359,21 +1640,163 @@ class Renderer {
     }
   }
 
+  drawShellCasings(ctx) {
+    if (!this.shellCasings || !this.shellCasings.length) return;
+    for (let i = 0; i < this.shellCasings.length; i++) {
+      const sc = this.shellCasings[i];
+      ctx.save();
+      ctx.translate(sc.x, sc.y - (sc.z || 0));
+      ctx.rotate(sc.rotation || 0);
+      const alpha = Math.min(1, sc.life / 0.5);
+      ctx.globalAlpha = Math.max(0, alpha);
+
+      if (sc.type === 'shotgun') {
+        ctx.fillStyle = '#d32f2f';
+        ctx.fillRect(-3, -2, 6, 4);
+        ctx.fillStyle = '#ffd54f';
+        ctx.fillRect(-3, -2, 2, 4);
+      } else {
+        ctx.fillStyle = '#ffd54f';
+        ctx.fillRect(-3, -1.5, 6, 3);
+        ctx.fillStyle = '#ffb300';
+        ctx.fillRect(-3, -1.5, 1.5, 3);
+      }
+      ctx.restore();
+    }
+  }
+
+  drawGunSmoke(ctx) {
+    if (!this.gunSmoke || !this.gunSmoke.length) return;
+    for (let i = 0; i < this.gunSmoke.length; i++) {
+      const gs = this.gunSmoke[i];
+      const alpha = (gs.life / gs.maxLife) * 0.35;
+      if (alpha <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#b0bec5';
+      ctx.beginPath();
+      ctx.arc(gs.x, gs.y, gs.currentRadius || gs.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  drawRailgunBeams(ctx) {
+    if (!this.railgunBeams || !this.railgunBeams.length) return;
+    for (let i = 0; i < this.railgunBeams.length; i++) {
+      const rb = this.railgunBeams[i];
+      const alpha = Math.max(0, rb.life / rb.maxLife);
+      const length = 1800;
+      const x2 = rb.x + Math.cos(rb.angle) * length;
+      const y2 = rb.y + Math.sin(rb.angle) * length;
+
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.moveTo(rb.x, rb.y);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(rb.x, rb.y);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   drawMuzzleFlashes(ctx) {
     for (let i = 0; i < this.muzzleFlashes.length; i++) {
       const mf = this.muzzleFlashes[i];
       ctx.save();
       ctx.translate(mf.x, mf.y);
       ctx.rotate(mf.angle);
+      this.drawWeaponFlashShape(ctx, mf);
+      ctx.restore();
+    }
+  }
+
+  drawWeaponFlashShape(ctx, mf) {
+    const weapon = mf.weapon || 'PISTOL';
+    if (weapon === 'SHOTGUN') {
+      ctx.fillStyle = '#ff9800';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(32, -18);
+      ctx.lineTo(48, -8);
+      ctx.lineTo(40, 0);
+      ctx.lineTo(48, 8);
+      ctx.lineTo(32, 18);
+      ctx.closePath();
+      ctx.fill();
+
       ctx.fillStyle = '#fff59d';
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(16, -7);
-      ctx.lineTo(24, 0);
-      ctx.lineTo(16, 7);
+      ctx.lineTo(22, -10);
+      ctx.lineTo(32, 0);
+      ctx.lineTo(22, 10);
       ctx.closePath();
       ctx.fill();
-      ctx.restore();
+    } else if (weapon === 'UZI') {
+      ctx.fillStyle = '#ffee58';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(14, -10);
+      ctx.lineTo(26, -3);
+      ctx.lineTo(16, 0);
+      ctx.lineTo(26, 3);
+      ctx.lineTo(14, 10);
+      ctx.closePath();
+      ctx.fill();
+    } else if (weapon === 'ROCKET') {
+      ctx.fillStyle = '#f44336';
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(54, 0);
+      ctx.lineTo(0, 10);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffeb3b';
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(36, 0);
+      ctx.lineTo(0, 6);
+      ctx.closePath();
+      ctx.fill();
+    } else if (weapon === 'RAILGUN') {
+      ctx.fillStyle = '#00e5ff';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(24, -14);
+      ctx.lineTo(64, 0);
+      ctx.lineTo(24, 14);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(18, -6);
+      ctx.lineTo(44, 0);
+      ctx.lineTo(18, 6);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#fff59d';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(14, -8);
+      ctx.lineTo(28, 0);
+      ctx.lineTo(14, 8);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
@@ -1570,6 +1993,23 @@ class Renderer {
       this.cutoutRadialLight(dCtx, mf.x, mf.y, 10, mf.lightRadius || 180, Math.min(1, (mf.life / maxL) * 0.95));
     }
 
+    // Railgun beams
+    const beams = this.railgunBeams || [];
+    for (let i = 0; i < beams.length; i++) {
+      const rb = beams[i];
+      const alpha = Math.max(0, (rb.life / rb.maxLife) * 0.85);
+      if (alpha <= 0) continue;
+      dCtx.save();
+      dCtx.globalAlpha = alpha;
+      dCtx.strokeStyle = 'rgba(0, 0, 0, 1.0)';
+      dCtx.lineWidth = 70;
+      dCtx.beginPath();
+      dCtx.moveTo(rb.x, rb.y);
+      dCtx.lineTo(rb.x + Math.cos(rb.angle) * 1800, rb.y + Math.sin(rb.angle) * 1800);
+      dCtx.stroke();
+      dCtx.restore();
+    }
+
     this.cutoutEntityLights(dCtx, gameState);
   }
 
@@ -1603,8 +2043,9 @@ class Renderer {
 
   cutoutRadialLight(ctx, x, y, innerR = 0, outerR = 100, alpha = 1.0) {
     if (outerR <= 0 || alpha <= 0) return;
+    const safeInnerR = Math.max(0, Math.min(innerR, outerR - 0.001));
     ctx.save();
-    const grad = ctx.createRadialGradient(x, y, Math.max(0, innerR), x, y, outerR);
+    const grad = ctx.createRadialGradient(x, y, safeInnerR, x, y, outerR);
     grad.addColorStop(0, `rgba(0, 0, 0, ${alpha})`);
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
@@ -1685,35 +2126,37 @@ class Renderer {
     for (let i = 0; i < zombies.length; i++) {
       const z = zombies[i];
       if (z.isDead || z.hp <= 0) continue;
-
-      let minDistSq = Infinity;
-      for (let j = 0; j < alivePlayers.length; j++) {
-        const dx = z.x - alivePlayers[j].x;
-        const dy = z.y - alivePlayers[j].y;
-        const dSq = dx * dx + dy * dy;
-        if (dSq < minDistSq) minDistSq = dSq;
-      }
-
-      if (minDistSq <= 400 * 400) {
-        const minDist = Math.sqrt(minDistSq);
-        const eyeColor = eyeColors[z.type] || '#ff1744';
-        const alpha = Math.max(0.2, (1 - minDist / 400)) * Math.min(1, this.currentDarknessAlpha / 0.7);
-        const hx = z.x + Math.cos(z.angle) * 8;
-        const hy = z.y + Math.sin(z.angle) * 8;
-        const px = -Math.sin(z.angle) * 4;
-        const py = Math.cos(z.angle) * 4;
-
-        ctx.shadowColor = eyeColor;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = eyeColor;
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(hx + px, hy + py, 1.8, 0, Math.PI * 2);
-        ctx.arc(hx - px, hy - py, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      this.drawSingleZombieEyes(ctx, z, alivePlayers, eyeColors[z.type] || '#ff1744');
     }
     ctx.restore();
+  }
+
+  drawSingleZombieEyes(ctx, z, alivePlayers, eyeColor) {
+    let minDistSq = Infinity;
+    for (let j = 0; j < alivePlayers.length; j++) {
+      const dx = z.x - alivePlayers[j].x;
+      const dy = z.y - alivePlayers[j].y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq < minDistSq) minDistSq = dSq;
+    }
+
+    if (minDistSq <= 400 * 400) {
+      const minDist = Math.sqrt(minDistSq);
+      const alpha = Math.max(0.2, (1 - minDist / 400)) * Math.min(1, this.currentDarknessAlpha / 0.7);
+      const hx = z.x + Math.cos(z.angle) * 8;
+      const hy = z.y + Math.sin(z.angle) * 8;
+      const px = -Math.sin(z.angle) * 4;
+      const py = Math.cos(z.angle) * 4;
+
+      ctx.shadowColor = eyeColor;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = eyeColor;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(hx + px, hy + py, 1.8, 0, Math.PI * 2);
+      ctx.arc(hx - px, hy - py, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
