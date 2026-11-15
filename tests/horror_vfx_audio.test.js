@@ -265,4 +265,112 @@ test('Renderer handles all bullet types, shell casing physics bounces, explosion
   });
 });
 
+const { SoundManager } = require('../client/js/audio.js');
+
+function createMockAudioContext() {
+  const makeParam = (initVal = 0) => ({
+    value: initVal,
+    setValueAtTime: function (v) { this.value = v; },
+    linearRampToValueAtTime: function (v) { this.value = v; },
+    exponentialRampToValueAtTime: function (v) { this.value = v; },
+    setTargetAtTime: function (v) { this.value = v; }
+  });
+  const makeNode = () => ({
+    connect: () => makeNode(),
+    disconnect: () => {},
+    start: () => {},
+    stop: () => {},
+    frequency: makeParam(440),
+    detune: makeParam(0),
+    Q: makeParam(1),
+    gain: makeParam(1),
+    pan: makeParam(0),
+    threshold: makeParam(-12),
+    knee: makeParam(12),
+    ratio: makeParam(4),
+    attack: makeParam(0.005),
+    release: makeParam(0.15),
+    type: 'sine',
+    buffer: null,
+    curve: null
+  });
+  return {
+    currentTime: 10,
+    sampleRate: 44100,
+    state: 'running',
+    destination: makeNode(),
+    resume: () => {},
+    createGain: () => makeNode(),
+    createOscillator: () => makeNode(),
+    createBiquadFilter: () => makeNode(),
+    createBufferSource: () => makeNode(),
+    createConvolver: () => makeNode(),
+    createDynamicsCompressor: () => makeNode(),
+    createStereoPanner: () => makeNode(),
+    createWaveShaper: () => makeNode(),
+    createBuffer: (ch, len) => ({
+      getChannelData: () => new Float32Array(len)
+    })
+  };
+}
+
+test('SoundManager.computeStereoPan and computeDistanceGain clamp extreme and non-finite coordinates', () => {
+  const sm = new SoundManager();
+
+  assert.strictEqual(sm.computeStereoPan(undefined, 800), 0);
+  assert.strictEqual(sm.computeStereoPan(800, NaN), 0);
+  assert.strictEqual(sm.computeStereoPan(800, 800), 0);
+  assert.strictEqual(sm.computeStereoPan(5000, 800), 0.88);
+  assert.strictEqual(sm.computeStereoPan(-5000, 800), -0.88);
+
+  assert.strictEqual(sm.computeDistanceGain(undefined, 800), 1);
+  assert.strictEqual(sm.computeDistanceGain(800, 800), 1);
+  assert.strictEqual(sm.computeDistanceGain(5000, 800), 0.18);
+});
+
+test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages horror ambience lifecycle safely', () => {
+  const sm = new SoundManager();
+  // Headless call without AudioContext must not throw
+  assert.doesNotThrow(() => {
+    sm.playShoot('SHOTGUN', 900, 800);
+    sm.updateHorrorAmbience(0.1, { isInGame: true, wave: 4 });
+    sm.stopHorrorAmbience();
+  });
+
+  // Inject mock AudioContext
+  sm.ctx = createMockAudioContext();
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  assert.doesNotThrow(() => {
+    sm.playShoot('PISTOL', 600, 800);
+    sm.playShoot('UZI', 600, 800);
+    sm.playShoot('SHOTGUN', 900, 800);
+    sm.playShoot('ROCKET', 750, 800);
+    sm.playShoot('RAILGUN', 1000, 800);
+    sm.playZombieHit('TANK', 'SHOTGUN', 850, 800);
+    sm.playZombieDie('DEVIL', 900, 800);
+    sm.playWaveStart(5);
+  });
+
+  // Growl cooldown throttling check
+  const firstGrowl = sm.playZombieGrowl('RUNNER', 700, 800);
+  const immediateSecondGrowl = sm.playZombieGrowl('TANK', 700, 800);
+  assert.strictEqual(firstGrowl, true);
+  assert.strictEqual(immediateSecondGrowl, false, 'Second growl within cooldown must be throttled');
+
+  // Ambience start & stop cleanup
+  sm.updateHorrorAmbience(0.5, {
+    isInGame: true,
+    wave: 6,
+    localPlayer: { x: 800, y: 600, hp: 25, maxHp: 100, isDowned: false },
+    zombies: [{ id: 'z1', type: 'RUNNER', x: 850, y: 610, isDead: false }]
+  });
+  assert.strictEqual(sm.droneActive, true);
+
+  sm.stopHorrorAmbience();
+  assert.strictEqual(sm.droneActive, false);
+});
+
+
 
