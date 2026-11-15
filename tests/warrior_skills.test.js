@@ -624,3 +624,419 @@ test('Zombie melee attack passes source coordinates allowing Warrior Counter Shi
   assert.strictEqual(warrior.warriorState.pendingParry.sourceY, z.y);
 });
 
+const { Barricade } = require('../server/game/Barricade.js');
+const { Bullet } = require('../server/game/Bullet.js');
+const {
+  executeWarriorBasicAttack,
+  triggerWarriorSkill,
+  activateAvatarOfWar,
+  triggerWarriorCounterParry,
+  updateWarriorRoomSystems,
+  applyWarriorAmmoPickup,
+  isFrontalShieldBlocking
+} = require('../server/game/WarriorAbilities.js');
+
+function createMockRoom() {
+  return {
+    state: 'PLAYING',
+    map: new GameMap('THE_ROOMS'),
+    players: new Map(),
+    zombies: [],
+    bullets: [],
+    barricades: [],
+    groundZones: [],
+    pendingSlams: [],
+    eventsBuffer: [],
+    pickups: []
+  };
+}
+
+test('Task 4: [1] Berserker Stance builds fury on hit (not miss) and [2] Juggernaut pierces all zombies with slow & knockback', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.angle = 0; // facing East
+  room.players.set(warrior.id, warrior);
+
+  // Berserker stance basic attack
+  const zHit = new Zombie('z1', 'NORMAL', 450, 400); // 50px away, within 80px range
+  const zBehind = new Zombie('z2', 'NORMAL', 350, 400); // behind warrior
+  room.zombies.push(zHit, zBehind);
+
+  const didHit = executeWarriorBasicAttack(warrior, room);
+  assert.strictEqual(didHit, true);
+  assert.strictEqual(zHit.hp, 80 - 42);
+  assert.strictEqual(zBehind.hp, 80);
+  assert.strictEqual(warrior.warriorState.furyStacks, 1);
+  assert.strictEqual(warrior.warriorState.furyTimer, 4.0);
+  assert.strictEqual(warrior.fireCooldown, 0.26);
+
+  // Swing in empty air (miss) must NOT build fury
+  warrior.fireCooldown = 0;
+  zHit.x = 900; // move far away
+  executeWarriorBasicAttack(warrior, room);
+  assert.strictEqual(warrior.warriorState.furyStacks, 1, 'Miss must not build furyStacks');
+
+  // Switch to Juggernaut (requires combo milestone 5)
+  warrior.maxCombo = 5;
+  warrior.recordKill(5);
+  warrior.setWarriorStance('JUGGERNAUT_STANCE');
+  assert.strictEqual(warrior.warriorState.furyStacks, 0, 'Switching stances resets furyStacks');
+
+  // Place 3 zombies in 130° cone within 125px range
+  const zA = new Zombie('zA', 'NORMAL', 480, 400); // 80px East
+  const zB = new Zombie('zB', 'NORMAL', 470, 430); // ~76px at ~23°
+  const zC = new Zombie('zC', 'NORMAL', 460, 360); // ~72px at ~-33°
+  room.zombies = [zA, zB, zC];
+
+  warrior.fireCooldown = 0;
+  executeWarriorBasicAttack(warrior, room);
+
+  for (const z of [zA, zB, zC]) {
+    assert.strictEqual(z.hp, 80 - 58, 'All zombies in Juggernaut cone must be pierced');
+    assert.strictEqual(z.slowFactor, 0.7, 'Juggernaut hit applies 0.7 slow');
+    assert.ok(z.slowTimer > 0, 'Juggernaut hit applies slow duration');
+    const kb = Math.hypot(z.knockbackX, z.knockbackY);
+    assert.ok(Math.abs(kb - 260) < 1, 'Juggernaut hit applies 260 knockback');
+  }
+  assert.strictEqual(warrior.fireCooldown, 0.55);
+});
+
+test('Task 4: [3] Blade Whirlwind executes 6 ticks over 1.5s; Berserker fires 4 wind_blade bullets and Juggernaut slams & stuns on tick 6', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.angle = 0;
+  warrior.maxCombo = 10;
+  warrior.recordKill(10); // unlocks slot 3
+  room.players.set(warrior.id, warrior);
+
+  // Berserker whirl test
+  warrior.setWarriorStance('BERSERKER_STANCE');
+  const zNear = new Zombie('zn', 'NORMAL', 440, 400); // within 105px radius
+  room.zombies = [zNear];
+
+  const res1 = triggerWarriorSkill(warrior, 3, 0, room);
+  assert.strictEqual(res1.activated, true);
+  assert.strictEqual(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown, 4.5);
+
+  // Step 75 ticks of 0.02s (1.50s)
+  for (let t = 0; t < 75; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+
+  assert.strictEqual(warrior.warriorState.whirlwind, null, 'Whirlwind must finish after 1.5s');
+  assert.strictEqual(room.bullets.length, 4, 'Berserker whirlwind tick 6 must spawn 4 wind_blade bullets');
+  for (const b of room.bullets) {
+    assert.strictEqual(b.type, 'wind_blade');
+    assert.strictEqual(b.penetration, true);
+    assert.strictEqual(b.radius, 16);
+    assert.strictEqual(b.damage, 65);
+    assert.strictEqual(b.speed, 560);
+  }
+
+  // Juggernaut whirl test
+  warrior.setWarriorStance('JUGGERNAUT_STANCE');
+  warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown = 0;
+  room.bullets = [];
+
+  const zNorm = new Zombie('zn2', 'NORMAL', 530, 400); // 130px away (< 135+20=155px slam radius, > 105+20=125px tick radius)
+  zNorm.maxHp = 150;
+  zNorm.hp = 150;
+  const zBoss = new Zombie('zb2', 'TANK', 530, 400); // 130px away
+  room.zombies = [zNorm, zBoss];
+
+  triggerWarriorSkill(warrior, 3, 0, room);
+  for (let t = 0; t < 75; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+
+  assert.strictEqual(zNorm.hp, 150 - 90, 'Normal zombie must take 90 slam damage');
+  assert.strictEqual(zNorm.serialize().isStunned, true);
+  assert.strictEqual(zNorm.stunTimer, 1.2, 'Normal zombie stunned 1.2s');
+  assert.strictEqual(zBoss.stunTimer, 0.8, 'Boss zombie stunned 0.8s');
+  assert.strictEqual(room.bullets.length, 0, 'Juggernaut whirlwind must not spawn wind_blade bullets');
+});
+
+test('Task 4: [4] Shadow Dash moves 240px over 0.18s, clamps against obstacles, and drops 2 marks that pull zombies inward at 0.5s', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 300, 300);
+  warrior.angle = 0; // Dash East
+  warrior.maxCombo = 15;
+  warrior.recordKill(15); // unlocks slot 4
+  room.players.set(warrior.id, warrior);
+
+  const zPath = new Zombie('zp', 'NORMAL', 400, 300); // on dash path
+  const zNearStart = new Zombie('zs', 'NORMAL', 300, 380); // 80px south of origin mark (within 160px pull radius)
+  room.zombies = [zPath, zNearStart];
+
+  const res = triggerWarriorSkill(warrior, 4, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(room.groundZones.length, 1, 'Origin slash_mark zone dropped immediately');
+  assert.strictEqual(room.groundZones[0].type, 'slash_mark');
+  assert.strictEqual(room.groundZones[0].x, 300);
+  assert.strictEqual(room.groundZones[0].y, 300);
+
+  // Advance 9 ticks of 0.02s (0.18s)
+  for (let t = 0; t < 9; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+
+  assert.strictEqual(warrior.warriorState.dash, null, 'Dash finished after 0.18s');
+  assert.ok(Math.abs(warrior.x - 540) <= 2, `Warrior must travel ~240px, got x=${warrior.x}`);
+  assert.strictEqual(zPath.hp, 80 - 55, 'Zombie on path takes 55 dash damage');
+  assert.strictEqual(room.groundZones.length, 2, 'Destination slash_mark zone dropped at final position');
+  assert.strictEqual(room.groundZones[1].x, Math.round(warrior.x));
+
+  // Advance 0.5s for marks to detonate and pull zombies
+  const startYBefore = zNearStart.y;
+  for (let t = 0; t < 25; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+
+  assert.strictEqual(room.groundZones.length, 0, 'Both marks exploded and cleared');
+  assert.ok(zNearStart.y < startYBefore, 'Zombie near mark must be pulled inward toward (300, 300)');
+  assert.strictEqual(zNearStart.hp, 80 - 75, 'Zombie in mark radius takes 75 mark damage');
+
+  // Review Focus #5: Collision clamping against Barricade
+  warrior.x = 350;
+  warrior.y = 300;
+  warrior.warriorState.skills.SHADOW_DASH_SLASH.cooldown = 0;
+  const bar = new Barricade('b_test', 430, 300);
+  room.barricades = [bar];
+
+  triggerWarriorSkill(warrior, 4, 0, room);
+  for (let t = 0; t < 9; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.ok(warrior.x <= bar.x - bar.half - warrior.radius + 1, 'Dash must clamp against Barricade without clipping');
+});
+
+test('Task 4: [5] Seismic Slam fires 3 rings, clears fireballs, spares Barricade, and creates ticking seismic_fissure', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.angle = 0;
+  warrior.maxCombo = 20;
+  warrior.recordKill(20); // unlocks slot 5
+  room.players.set(warrior.id, warrior);
+
+  const bar = new Barricade('bar_friendly', 450, 400);
+  const initialBarHp = bar.hp;
+  room.barricades = [bar];
+
+  const fireball = new Bullet('fb_dev', 'd1', 460, 400, Math.PI, { type: 'fireball', isFireball: true });
+  room.bullets = [fireball];
+
+  const z1 = new Zombie('z_r1', 'NORMAL', 460, 400); // 60px (Ring 1: 0-95px)
+  const z2 = new Zombie('z_r2', 'NORMAL', 530, 400); // 130px (Ring 2: 95-165px)
+  z2.maxHp = 200;
+  z2.hp = 200;
+  const z3 = new Zombie('z_r3', 'NORMAL', 600, 400); // 200px (Ring 3: 165-230px)
+  room.zombies = [z1, z2, z3];
+
+  const res = triggerWarriorSkill(warrior, 5, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(room.bullets.length, 0, 'Devil fireball must be destroyed immediately');
+  assert.strictEqual(bar.hp, initialBarHp, 'Friendly Barricade must NOT take damage from Seismic Slam');
+
+  // Ring 1 hits at t=0
+  updateWarriorRoomSystems(0.02, room);
+  assert.strictEqual(z1.isDead, true, 'Ring 1 (165 dmg) kills 80 HP normal zombie');
+  assert.strictEqual(z2.hp, 200, 'Ring 2 has not hit yet at t=0.02');
+
+  // Ring 2 hits at t=0.12
+  for (let t = 0; t < 5; t++) updateWarriorRoomSystems(0.02, room); // reaches ~0.12s
+  assert.strictEqual(z2.hp, 200 - 105, 'Ring 2 deals 105 damage');
+  assert.strictEqual(z2.serialize().isStunned, true);
+  assert.strictEqual(z2.stunTimer, 2.0);
+
+  // Ring 3 hits at t=0.24
+  for (let t = 0; t < 6; t++) updateWarriorRoomSystems(0.02, room); // reaches ~0.24s
+  assert.strictEqual(z3.hp, 80 - 70, 'Ring 3 deals 70 damage');
+  assert.strictEqual(z3.stunTimer, 2.5);
+
+  // Seismic fissure zone checks
+  assert.strictEqual(room.groundZones.length, 1);
+  const fissure = room.groundZones[0];
+  assert.strictEqual(fissure.type, 'seismic_fissure');
+  assert.strictEqual(fissure.radius, 210);
+
+  // Zombie walking through fissure gets slowed and takes 8 'FIRE' damage every 0.5s
+  const zWalk = new Zombie('zw', 'NORMAL', 430, 400);
+  room.zombies = [zWalk];
+  for (let t = 0; t < 26; t++) { // 0.52s
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(zWalk.slowFactor, 0.4, 'Fissure slows zombies to 0.4');
+  assert.strictEqual(zWalk.hp, 80 - 8, 'Fissure ticks 8 FIRE damage after 0.5s');
+
+  // After 4.0s total, fissure expires
+  for (let t = 0; t < 180; t++) {
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(room.groundZones.length, 0, 'Fissure expires after 4.0s');
+});
+
+test('Task 4: [6] War Cry taunts within 900px, fears close non-bosses <=180px, restores +15 Armor, and grants +15% dmg aura', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.armor = 30; // damaged armor
+  warrior.maxCombo = 30;
+  warrior.recordKill(30); // unlocks slot 6
+  room.players.set(warrior.id, warrior);
+
+  const allyNear = new Player('h1', 'Ranger', 'HUMAN', 450, 400); // 50px away <= 200px aura
+  const allyFar = new Player('h2', 'Sniper', 'HUMAN', 700, 400); // 300px away > 200px aura
+  room.players.set(allyNear.id, allyNear);
+  room.players.set(allyFar.id, allyFar);
+
+  const zNearNorm = new Zombie('zn', 'NORMAL', 480, 400); // 80px away <= 180px
+  const zNearBoss = new Zombie('zb', 'TANK', 490, 400); // 90px away <= 180px
+  const zMidNorm = new Zombie('zm', 'NORMAL', 700, 400); // 300px away <= 900px, > 180px
+  const zFarNorm = new Zombie('zf', 'NORMAL', 1500, 400); // 1100px away > 900px
+  room.zombies = [zNearNorm, zNearBoss, zMidNorm, zFarNorm];
+
+  const res = triggerWarriorSkill(warrior, 6, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(warrior.armor, 45, 'Restores +15 Armor (20% of 75)');
+
+  // Taunt checks
+  assert.strictEqual(zNearNorm.tauntTargetId, 'w1');
+  assert.strictEqual(zNearBoss.tauntTargetId, 'w1');
+  assert.strictEqual(zMidNorm.tauntTargetId, 'w1');
+  assert.strictEqual(zFarNorm.tauntTargetId, null);
+
+  // Fear checks (only normal zombies within 180px)
+  assert.strictEqual(zNearNorm.fearTimer, 1.5, 'Normal zombie <=180px is Feared');
+  assert.strictEqual(zNearBoss.fearTimer, 0, 'Boss zombie ignores Fear');
+  assert.strictEqual(zMidNorm.fearTimer, 0, 'Zombie >180px is not Feared');
+
+  // Ally damage buff aura
+  updateWarriorRoomSystems(0.02, room);
+  assert.strictEqual(allyNear.hasWarCryBuff, true, 'Nearby ally gains War Cry +15% dmg buff');
+  assert.strictEqual(allyFar.hasWarCryBuff, false, 'Far ally does not gain War Cry buff');
+
+  // Advance 5.0s -> aura expires
+  for (let t = 0; t < 260; t++) {
+    warrior.update(0.02, room.map, []);
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(allyNear.hasWarCryBuff, false, 'War Cry buff clears after 5.0s expiration');
+});
+
+test('Task 4: [7] Counter Shield Parry steps forward, stuns & cleaves on pendingParry; miss sets 4.0s CD; frontal blocking guard', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.angle = 0; // facing East
+  warrior.maxCombo = 40;
+  warrior.recordKill(40); // unlocks slot 7
+  room.players.set(warrior.id, warrior);
+
+  // isFrontalShieldBlocking check before activation
+  assert.strictEqual(isFrontalShieldBlocking(warrior, 500, 400), false);
+
+  // Activate Counter Shield
+  const res = triggerWarriorSkill(warrior, 7, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(warrior.warriorState.counterShieldActive, true);
+  assert.strictEqual(isFrontalShieldBlocking(warrior, 500, 400), true, 'Frontal hit blocked within +-70 deg');
+  assert.strictEqual(isFrontalShieldBlocking(warrior, 300, 400), false, 'Rear hit bypassed');
+
+  // Parry flow: simulate frontal melee attack setting pendingParry
+  warrior.takeDamage(40, 'MELEE', { sourceX: 430, sourceY: 400 });
+  assert.ok(warrior.warriorState.pendingParry, 'pendingParry set on frontal block');
+
+  const zInCone = new Zombie('zc', 'NORMAL', 460, 400);
+  room.zombies = [zInCone];
+
+  updateWarriorRoomSystems(0.02, room);
+  assert.strictEqual(warrior.warriorState.pendingParry, null, 'pendingParry cleared after parry');
+  assert.strictEqual(warrior.warriorState.skills.COUNTER_SHIELD_BASH.cooldown, 8.0, 'Full 8.0s cooldown on parry');
+  assert.ok(warrior.x > 400, `Warrior steps forward ~75px, got x=${warrior.x}`);
+  assert.strictEqual(zInCone.isDead, true, 'Cone bash (95) + cleave (120) kills 80 HP normal zombie');
+
+  // Miss flow: activate shield and let 1.5s expire without taking hits
+  warrior.warriorState.skills.COUNTER_SHIELD_BASH.cooldown = 0;
+  triggerWarriorSkill(warrior, 7, 0, room);
+  for (let t = 0; t < 75; t++) {
+    warrior.update(0.02, room.map, []);
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(warrior.warriorState.counterShieldActive, false);
+  assert.strictEqual(warrior.warriorState.skills.COUNTER_SHIELD_BASH.cooldown, 4.0, 'Miss cooldown set to 4.0s');
+});
+
+test('Task 4: [8] Avatar of War fires fire_slash bullets, triggers Final Fire Nova on expiry, and downed warrior cancels Nova', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.angle = 0;
+  warrior.maxCombo = 50;
+  warrior.recordKill(50); // unlocks slot 8
+  warrior.ultCharge = 100;
+  room.players.set(warrior.id, warrior);
+
+  const res = triggerWarriorSkill(warrior, 8, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(warrior.ultCharge, 0);
+  assert.strictEqual(warrior.warriorState.avatarActive, true);
+  assert.strictEqual(warrior.warriorState.avatarTimer, 10.0);
+
+  // Basic attacks in Avatar spawn piercing fire_slash Bullets
+  warrior.fireCooldown = 0;
+  executeWarriorBasicAttack(warrior, room);
+  assert.strictEqual(room.bullets.length, 1);
+  const slash = room.bullets[0];
+  assert.strictEqual(slash.type, 'fire_slash');
+  assert.strictEqual(slash.penetration, true);
+  assert.strictEqual(slash.damage, 55);
+  assert.strictEqual(slash.speed, 750);
+  assert.strictEqual(slash.range, 340);
+  assert.strictEqual(slash.radius, 16);
+
+  // Advance 10.0s -> Final Fire Nova
+  const zNear = new Zombie('zn', 'NORMAL', 500, 400); // 100px away <= 210px radius
+  room.zombies = [zNear];
+  for (let t = 0; t < 501; t++) {
+    warrior.update(0.02, room.map, []);
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(warrior.warriorState.avatarActive, false);
+  assert.strictEqual(zNear.isDead, true, 'Final Fire Nova (180 dmg) kills 80 HP normal zombie');
+
+  // Edge case: Downed warrior does NOT trigger Final Fire Nova
+  warrior.ultCharge = 100;
+  activateAvatarOfWar(warrior, room);
+  assert.strictEqual(warrior.warriorState.avatarActive, true);
+
+  warrior.hp = 10;
+  warrior.armor = 0;
+  warrior.takeDamage(20, 'MELEE'); // downs warrior
+  assert.strictEqual(warrior.isDowned, true);
+  assert.strictEqual(warrior.warriorState.avatarActive, false);
+
+  const zSpare = new Zombie('zs', 'NORMAL', 450, 400);
+  room.zombies = [zSpare];
+  for (let t = 0; t < 501; t++) {
+    warrior.update(0.02, room.map, []);
+    updateWarriorRoomSystems(0.02, room);
+  }
+  assert.strictEqual(zSpare.hp, 80, 'Downed warrior must not fire Final Fire Nova');
+});
+
+test('Task 4: applyWarriorAmmoPickup(player) delegates to player.applyWarriorCooldownBonus()', () => {
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown = 4.0;
+  warrior.warriorState.skills.SHADOW_DASH_SLASH.cooldown = 5.0;
+
+  let delegateCalled = false;
+  const originalBonus = warrior.applyWarriorCooldownBonus.bind(warrior);
+  warrior.applyWarriorCooldownBonus = function () {
+    delegateCalled = true;
+    return originalBonus();
+  };
+
+  applyWarriorAmmoPickup(warrior);
+  assert.strictEqual(delegateCalled, true, 'applyWarriorAmmoPickup must delegate to player.applyWarriorCooldownBonus()');
+  assert.ok(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown < 4.0);
+  assert.strictEqual(warrior.ultCharge, 15);
+});
+
+

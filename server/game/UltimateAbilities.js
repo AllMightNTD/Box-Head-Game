@@ -1,5 +1,6 @@
 const { TacticalDrone } = require('./TacticalDrone.js');
 const { getUltimateConfigForClass } = require('./UltimateConfig.js');
+const { activateAvatarOfWar } = require('./WarriorAbilities.js');
 
 function isPositionBlocked(x, y, radius, map, barricades) {
   if (map && map.isWall(x, y, radius)) {
@@ -189,7 +190,9 @@ function triggerPlayerUltimate(player, angle, room) {
   player.ultCharge = 0;
 
   let event = null;
-  if (conf.id === 'SEISMIC_SLAM') {
+  if (conf.id === 'AVATAR_OF_WAR') {
+    event = activateAvatarOfWar(player, room);
+  } else if (conf.id === 'SEISMIC_SLAM') {
     event = executeSeismicSlam(player, conf, room);
   } else if (conf.id === 'BLINK_FROST_NOVA') {
     event = executeBlinkFrostNova(player, angle, conf, room);
@@ -197,7 +200,9 @@ function triggerPlayerUltimate(player, angle, room) {
     event = executeTacticalDrone(player, conf, room);
   }
 
-  room.eventsBuffer.push(event);
+  if (event) {
+    room.eventsBuffer.push(event);
+  }
   return { activated: true, event };
 }
 

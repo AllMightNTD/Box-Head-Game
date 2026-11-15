@@ -12,19 +12,21 @@ class Bullet {
     this.distanceTraveled = 0;
     this.isDead = false;
 
-    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball
+    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball | wind_blade | fire_slash
     this.isFireball = Boolean(options.isFireball);
     this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball;
     this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : 160);
     this.explosionDamage = options.explosionDamage || this.damage;
-    this.penetration = Boolean(options.penetration);
+    this.penetration = options.penetration !== undefined
+      ? Boolean(options.penetration)
+      : (options.type === 'wind_blade' || options.type === 'fire_slash');
     this.knockback = options.knockback || (options.type === 'shotgun' ? 180 : 50);
     this.fromUlt = Boolean(options.fromUlt);
 
     // Fuse time for grenades
     this.fuseTime = options.fuseTime || 0;
     this.life = 0;
-    this.radius = this.isFireball ? 12 : (options.type === 'rocket' ? 8 : 4);
+    this.radius = options.radius || (this.isFireball ? 12 : (options.type === 'wind_blade' || options.type === 'fire_slash' ? 16 : (options.type === 'rocket' ? 8 : 4)));
   }
 
   update(dt, map) {
