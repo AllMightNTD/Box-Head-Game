@@ -1068,4 +1068,182 @@ test('Task 4 Review Fix: triggerPlayerUltimate integrates cleanly with Avatar of
   assert.strictEqual(warrior.warriorState.avatarTimer, 10.0, 'avatarTimer must remain active');
 });
 
+const { GameRoom } = require('../server/game/GameRoom.js');
+const { socketHandler } = require('../server/socketHandler.js');
+
+test('Review Focus #3 & #5: GameRoom validates player:skill, blocks Devil fireballs via Counter Shield, and resets groundZones/Armor on startGame', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('r_wkit', 'Warrior Room', mockIo);
+  t.after(() => room.stop());
+  const warrior = room.addPlayer('w1', 'Garen', 'WARRIOR');
+  const human = room.addPlayer('h1', 'Ranger', 'HUMAN');
+  room.startGame();
+
+  // Review Focus #3: Invalid inputs ignored safely without throwing or mutating state
+  assert.strictEqual(room.handleSkill('w1', { slot: 99, angle: 0 }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: 0, angle: 0 }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: 1, angle: 0 }).activated, false); // slots 1 & 2 are stances, not activated skills
+  assert.strictEqual(room.handleSkill('w1', { slot: 2, angle: 0 }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: '5', angle: 0 }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: 5, angle: Number.NaN }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: 5, angle: Number.POSITIVE_INFINITY }).activated, false);
+  assert.strictEqual(room.handleSkill('w1', null).activated, false);
+  assert.strictEqual(room.handleSkill('w1', 'invalid').activated, false);
+  assert.strictEqual(room.handleSkill('w1', [1, 2, 3]).activated, false);
+  assert.strictEqual(room.handleSkill('w1', { slot: 5, angle: 0 }).activated, false); // locked before combo 20
+  assert.strictEqual(room.handleSkill('h1', { slot: 5, angle: 0 }).activated, false); // human cannot cast warrior skills
+  assert.strictEqual(room.handleSkill('unknown_player', { slot: 5, angle: 0 }).activated, false);
+
+  // Unlock all Warrior skills
+  warrior.maxCombo = 50;
+  warrior.recordKill(10); // unlocks through slot 8
+  warrior.x = 500;
+  warrior.y = 500;
+  warrior.angle = 0;
+
+  // Active cooldown prevents double-casting
+  assert.strictEqual(room.handleSkill('w1', { slot: 7, angle: 0 }).activated, true);
+  assert.strictEqual(room.handleSkill('w1', { slot: 7, angle: 0 }).activated, false, 'Cannot cast slot 7 while cooldown active');
+
+  // Verify Counter Shield blocks incoming Devil fireball at 0 dmg & triggers parry
+  const fireball = new Bullet('fb_test', 'devil_1', 515, 500, Math.PI, {
+    speed: 260,
+    damage: 25,
+    isFireball: true,
+    explosionRadius: 55,
+    explosionDamage: 45
+  });
+  room.bullets.push(fireball);
+
+  room.tick(0.02);
+  assert.strictEqual(warrior.armor, 75, 'Frontal fireball must be absorbed cleanly with 0 damage');
+  assert.strictEqual(warrior.hp, 150);
+  assert.strictEqual(room.bullets.length, 0, 'Parried fireball must be destroyed');
+
+  // Cast Seismic Slam -> creates groundZone, then startGame resets everything
+  warrior.warriorState.skills.SEISMIC_SLAM.cooldown = 0;
+  assert.strictEqual(room.handleSkill('w1', { slot: 5, angle: 0 }).activated, true);
+  assert.ok(room.groundZones.length > 0, 'Seismic Slam must create groundZone in room');
+
+  // Review Focus #5: startGame resets groundZones, pendingSlams, armor, furyStacks, and locks skills
+  room.startGame();
+  assert.strictEqual(room.groundZones.length, 0, 'groundZones must be cleared on startGame');
+  assert.strictEqual(room.pendingSlams.length, 0, 'pendingSlams must be cleared on startGame');
+  assert.strictEqual(warrior.armor, 75, 'Warrior armor must reset to full 75 on startGame');
+  assert.strictEqual(warrior.warriorState.furyStacks, 0, 'furyStacks must reset to 0');
+  assert.strictEqual(warrior.warriorState.skills.SEISMIC_SLAM.unlocked, false, 'Skills must be re-locked on startGame');
+});
+
+test('GameRoom: AMMO pickup reduces Warrior cooldowns, WAVE_CLEAR restores 50% maxArmor, and War Cry buffs gun teammate damage', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('r_wkit2', 'Warrior Room 2', mockIo);
+  t.after(() => room.stop());
+  const warrior = room.addPlayer('w1', 'Garen', 'WARRIOR');
+  const human = room.addPlayer('h1', 'Ranger', 'HUMAN');
+  room.startGame();
+
+  warrior.maxCombo = 50;
+  warrior.recordKill(10);
+  warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown = 4.0;
+  warrior.warriorState.skills.SEISMIC_SLAM.cooldown = 8.0;
+  warrior.ultCharge = 0;
+
+  // 1. AMMO pickup on Warrior
+  room.pickups.push({
+    id: 'pk_ammo_1',
+    type: 'AMMO',
+    x: warrior.x,
+    y: warrior.y,
+    life: 20
+  });
+  room.tick(0.02);
+  assert.ok(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown < 4.0, 'AMMO pickup reduces whirlwind CD');
+  assert.ok(warrior.warriorState.skills.SEISMIC_SLAM.cooldown < 8.0, 'AMMO pickup reduces slam CD');
+  assert.strictEqual(Math.floor(warrior.ultCharge), 15, 'AMMO pickup awards +15 ultCharge');
+  assert.strictEqual(room.pickups.length, 0, 'Pickup consumed');
+
+  // 2. WAVE_CLEAR restores 50% maxArmor (38 armor) to surviving Warrior
+  warrior.armor = 10;
+  room.zombies = [];
+  room.zombiesSpawnedInWave = room.waveTotalZombies;
+  room.tick(0.02);
+  assert.strictEqual(room.state, 'INTERMISSION', 'Wave cleared');
+  assert.strictEqual(warrior.armor, 10 + 38, 'WAVE_CLEAR restores 50% maxArmor (38) to Warrior');
+
+  // 3. War Cry aura buffs Human teammate gun damage by +15%
+  human.x = warrior.x + 50;
+  human.y = warrior.y;
+  warrior.warriorState.skills.WAR_CRY.cooldown = 0;
+  room.handleSkill('w1', { slot: 6, angle: 0 }); // activates War Cry aura
+  room.tick(0.02);
+  assert.strictEqual(human.hasWarCryBuff, true, 'Human teammate in 200px aura gets hasWarCryBuff');
+
+  // Human fires gun bullet hitting zombie
+  const zTarget = new Zombie('z_buff', 'NORMAL', human.x + 30, human.y);
+  zTarget.maxHp = 200;
+  zTarget.hp = 200;
+  room.zombies.push(zTarget);
+
+  const bHuman = new Bullet('b_h1', human.id, human.x + 10, human.y, 0, {
+    damage: 20,
+    speed: 600,
+    range: 500
+  });
+  room.bullets.push(bHuman);
+
+  room.tick(0.02);
+  // Base 20 dmg * 1.15 = 23 effective damage
+  assert.strictEqual(zTarget.hp, 200 - 23, 'Human gun bullet deals 1.15x damage (+15%) under War Cry buff');
+});
+
+test('E2E Socket: client emits player:skill through socketHandler with valid and malformed payloads', (t) => {
+  const handlers = {};
+  const mockSocket = {
+    id: 'sock_w',
+    emit: () => {},
+    join: () => {},
+    leave: () => {},
+    on: (ev, fn) => { handlers[ev] = fn; }
+  };
+  let connectionCb = null;
+  const mockIo = {
+    on: (ev, fn) => { if (ev === 'connection') connectionCb = fn; },
+    to: () => ({ emit: () => {} }),
+    emit: () => {}
+  };
+  const { rooms } = socketHandler(mockIo);
+  connectionCb(mockSocket);
+
+  let createdRoomId = null;
+  handlers['room:create']({ roomName: 'SkillRoom', playerName: 'Garen', character: 'WARRIOR' }, (res) => {
+    createdRoomId = res.room.id;
+  });
+  const createdRoom = rooms.get(createdRoomId);
+  t.after(() => createdRoom.gameRoom.stop());
+  handlers['room:start']();
+
+  const gamePlayer = createdRoom.gameRoom.players.get('sock_w');
+  assert.ok(gamePlayer);
+  assert.strictEqual(gamePlayer.character, 'WARRIOR');
+
+  // Malformed payloads must not crash server
+  assert.doesNotThrow(() => handlers['player:skill'](null));
+  assert.doesNotThrow(() => handlers['player:skill']('invalid'));
+  assert.doesNotThrow(() => handlers['player:skill']([1, 2, 3]));
+  assert.doesNotThrow(() => handlers['player:skill']({ slot: 99, angle: Number.NaN }));
+
+  // Unlock skills and cast valid skill
+  gamePlayer.maxCombo = 50;
+  gamePlayer.recordKill(10);
+  handlers['player:skill']({ slot: 5, angle: 0 }); // Seismic Slam
+  assert.ok(createdRoom.gameRoom.groundZones.length > 0, 'Seismic Slam must add groundZone');
+
+  // Snapshot contains groundZones
+  const snap = createdRoom.gameRoom.getSnapshot();
+  assert.ok(Array.isArray(snap.groundZones));
+  assert.strictEqual(snap.groundZones.length, 1);
+  assert.strictEqual(snap.groundZones[0].type, 'seismic_fissure');
+});
+
+
 
