@@ -232,47 +232,73 @@ class SoundManager {
     osc.connect(gain);
     gain.connect(destNode);
 
-    if (weaponType === 'UZI') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(420, t);
-      osc.frequency.exponentialRampToValueAtTime(70, t + 0.06);
-      gain.gain.setValueAtTime(0.4, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.06);
-      osc.start(t);
-      osc.stop(t + 0.06);
-    } else if (weaponType === 'SHOTGUN') {
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(240, t);
-      osc.frequency.exponentialRampToValueAtTime(35, t + 0.18);
-      gain.gain.setValueAtTime(0.7, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
-      osc.start(t);
-      osc.stop(t + 0.18);
-    } else if (weaponType === 'ROCKET') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(140, t);
-      osc.frequency.linearRampToValueAtTime(320, t + 0.12);
-      gain.gain.setValueAtTime(0.5, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-      osc.start(t);
-      osc.stop(t + 0.2);
-    } else if (weaponType === 'RAILGUN') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1400, t);
-      osc.frequency.exponentialRampToValueAtTime(120, t + 0.25);
-      gain.gain.setValueAtTime(0.6, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
-      osc.start(t);
-      osc.stop(t + 0.25);
-    } else {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(380, t);
-      osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
-      gain.gain.setValueAtTime(0.4, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
-      osc.start(t);
-      osc.stop(t + 0.08);
+    switch (weaponType) {
+      case 'UZI':
+        this.synthUziBody(osc, gain, t);
+        break;
+      case 'SHOTGUN':
+        this.synthShotgunBody(osc, gain, t);
+        break;
+      case 'ROCKET':
+        this.synthRocketBody(osc, gain, t);
+        break;
+      case 'RAILGUN':
+        this.synthRailgunBody(osc, gain, t);
+        break;
+      default:
+        this.synthPistolBody(osc, gain, t);
+        break;
     }
+  }
+
+  synthUziBody(osc, gain, t) {
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(420, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.06);
+    osc.start(t);
+    osc.stop(t + 0.06);
+  }
+
+  synthShotgunBody(osc, gain, t) {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(240, t);
+    osc.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+    gain.gain.setValueAtTime(0.7, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  }
+
+  synthRocketBody(osc, gain, t) {
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.linearRampToValueAtTime(320, t + 0.12);
+    gain.gain.setValueAtTime(0.5, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+    osc.start(t);
+    osc.stop(t + 0.2);
+  }
+
+  synthRailgunBody(osc, gain, t) {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1400, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.25);
+    gain.gain.setValueAtTime(0.6, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+    osc.start(t);
+    osc.stop(t + 0.25);
+  }
+
+  synthPistolBody(osc, gain, t) {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(380, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+    osc.start(t);
+    osc.stop(t + 0.08);
   }
 
   playShellCasingClink(weaponType, sourceX, listenerX) {
@@ -414,7 +440,9 @@ class SoundManager {
       modGain.connect(carrier.frequency);
       mod.start(t);
       mod.stop(t + 0.25);
-    } catch (e) {}
+    } catch (e) {
+      console.debug('Failed to connect FM modulator in playZombieDie:', e);
+    }
 
     const noise = this.ctx.createBufferSource();
     const nBuf = this.createNoiseBuffer(0.2);
@@ -448,68 +476,90 @@ class SoundManager {
     if (!bus) return true;
     const t = this.ctx.currentTime || 0;
 
-    if (zType === 'RUNNER') {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(600, t);
-      osc.frequency.linearRampToValueAtTime(850, t + 0.1);
-      osc.frequency.exponentialRampToValueAtTime(260, t + 0.3);
-      gain.gain.setValueAtTime(0.35, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
-      osc.connect(gain);
-      gain.connect(bus.input);
-      osc.start(t);
-      osc.stop(t + 0.3);
-    } else if (zType === 'TANK') {
-      const osc = this.ctx.createOscillator();
-      const filter = this.ctx.createBiquadFilter();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(180, t);
-      osc.frequency.setValueAtTime(68, t);
-      osc.frequency.exponentialRampToValueAtTime(36, t + 0.5);
-      gain.gain.setValueAtTime(0.5, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(bus.input);
-      osc.start(t);
-      osc.stop(t + 0.5);
-    } else if (zType === 'DEVIL' || zType === 'VAMPIRE') {
-      [180, 180 * 1.414].forEach((freq) => {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, t);
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.45, t + 0.35);
-        gain.gain.setValueAtTime(0.25, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
-        osc.connect(gain);
-        gain.connect(bus.input);
-        osc.start(t);
-        osc.stop(t + 0.35);
-      });
-    } else {
-      const osc = this.ctx.createOscillator();
-      const filter = this.ctx.createBiquadFilter();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(260, t);
-      if (filter.Q) filter.Q.setValueAtTime(2.0, t);
-      osc.frequency.setValueAtTime(130, t);
-      osc.frequency.exponentialRampToValueAtTime(60, t + 0.4);
-      gain.gain.setValueAtTime(0.35, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(bus.input);
-      osc.start(t);
-      osc.stop(t + 0.4);
+    switch (zType) {
+      case 'RUNNER':
+        this.synthRunnerGrowl(bus.input, t);
+        break;
+      case 'TANK':
+        this.synthTankGrowl(bus.input, t);
+        break;
+      case 'DEVIL':
+      case 'VAMPIRE':
+        this.synthDemonGrowl(bus.input, t);
+        break;
+      default:
+        this.synthNormalGrowl(bus.input, t);
+        break;
     }
     return true;
+  }
+
+  synthRunnerGrowl(destNode, t) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.linearRampToValueAtTime(850, t + 0.1);
+    osc.frequency.exponentialRampToValueAtTime(260, t + 0.3);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+    osc.connect(gain);
+    gain.connect(destNode);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  }
+
+  synthTankGrowl(destNode, t) {
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(180, t);
+    osc.frequency.setValueAtTime(68, t);
+    osc.frequency.exponentialRampToValueAtTime(36, t + 0.5);
+    gain.gain.setValueAtTime(0.5, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(destNode);
+    osc.start(t);
+    osc.stop(t + 0.5);
+  }
+
+  synthDemonGrowl(destNode, t) {
+    [180, 180 * 1.414].forEach((freq) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.45, t + 0.35);
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+      osc.connect(gain);
+      gain.connect(destNode);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    });
+  }
+
+  synthNormalGrowl(destNode, t) {
+    const osc = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(260, t);
+    if (filter.Q) filter.Q.setValueAtTime(2.0, t);
+    osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.4);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(destNode);
+    osc.start(t);
+    osc.stop(t + 0.4);
   }
 
   playWaveStart(wave = 1) {
@@ -627,13 +677,31 @@ class SoundManager {
     }
   }
 
+  safeStopAndDisconnect(node) {
+    if (!node) return;
+    try {
+      if (typeof node.stop === 'function') {
+        node.stop();
+      }
+    } catch (e) {
+      console.debug('Audio node stop error:', e);
+    }
+    try {
+      if (typeof node.disconnect === 'function') {
+        node.disconnect();
+      }
+    } catch (e) {
+      console.debug('Audio node disconnect error:', e);
+    }
+  }
+
   stopHorrorAmbience() {
     if (!this.droneActive) return;
-    try { if (this.droneOsc1) { this.droneOsc1.stop(); this.droneOsc1.disconnect(); } } catch (e) {}
-    try { if (this.droneOsc2) { this.droneOsc2.stop(); this.droneOsc2.disconnect(); } } catch (e) {}
-    try { if (this.droneLfo) { this.droneLfo.stop(); this.droneLfo.disconnect(); } } catch (e) {}
-    try { if (this.droneFilter) this.droneFilter.disconnect(); } catch (e) {}
-    try { if (this.droneGain) this.droneGain.disconnect(); } catch (e) {}
+    this.safeStopAndDisconnect(this.droneOsc1);
+    this.safeStopAndDisconnect(this.droneOsc2);
+    this.safeStopAndDisconnect(this.droneLfo);
+    this.safeStopAndDisconnect(this.droneFilter);
+    this.safeStopAndDisconnect(this.droneGain);
 
     this.droneOsc1 = null;
     this.droneOsc2 = null;
@@ -644,13 +712,18 @@ class SoundManager {
   }
 
   updateHorrorAmbience(dt = 0.1, state = {}) {
-    if (this.muted || !this.ctx) {
+    if (this.muted) {
       if (this.droneActive) this.stopHorrorAmbience();
       return;
     }
     const isInGame = Boolean(state && state.isInGame);
     if (!isInGame) {
       this.stopHorrorAmbience();
+      return;
+    }
+    this.ensureContext();
+    if (!this.ctx) {
+      if (this.droneActive) this.stopHorrorAmbience();
       return;
     }
     if (!this.droneActive) {
