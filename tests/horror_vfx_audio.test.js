@@ -372,5 +372,161 @@ test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages
   assert.strictEqual(sm.droneActive, false);
 });
 
+const { handleGameEvent, gameLoop } = require('../client/js/main.js');
+
+test('Integration: handleGameEvent and gameLoop route spatial audio, directional gore, screen shake, and horror ambience', () => {
+  const calls = {
+    playShoot: [],
+    triggerScreenShake: [],
+    addMuzzleFlash: [],
+    playZombieHit: [],
+    addDirectionalBlood: [],
+    playZombieDie: [],
+    addZombieCorpse: [],
+    playExplosion: [],
+    addExplosionParticles: [],
+    playWaveStart: [],
+    addFloatingText: [],
+    stopHorrorAmbience: 0,
+    resetSession: 0,
+    updateVisuals: [],
+    updateHorrorAmbience: [],
+    render: [],
+    updateHUD: []
+  };
+
+  const mockSoundManager = {
+    playShoot: (w, x, lx) => calls.playShoot.push({ w, x, lx }),
+    playZombieHit: (zt, w, x, lx) => calls.playZombieHit.push({ zt, w, x, lx }),
+    playZombieDie: (zt, x, lx) => calls.playZombieDie.push({ zt, x, lx }),
+    playExplosion: (scale, x, lx) => calls.playExplosion.push({ scale, x, lx }),
+    playWaveStart: (wave) => calls.playWaveStart.push(wave),
+    playGameOver: () => {},
+    stopHorrorAmbience: () => { calls.stopHorrorAmbience++; },
+    updateHorrorAmbience: (dt, state) => calls.updateHorrorAmbience.push({ dt, state })
+  };
+
+  const mockRenderer = {
+    camera: { x: 500, y: 300 },
+    addMuzzleFlash: (x, y, angle, weapon) => calls.addMuzzleFlash.push({ x, y, angle, weapon }),
+    triggerScreenShake: (mag) => calls.triggerScreenShake.push(mag),
+    addDirectionalBlood: (x, y, angle, weapon, isKill, color) => calls.addDirectionalBlood.push({ x, y, angle, weapon, isKill, color }),
+    addZombieCorpse: (z) => calls.addZombieCorpse.push(z),
+    addExplosionParticles: (x, y, r) => calls.addExplosionParticles.push({ x, y, r }),
+    addFloatingText: (text, x, y, color, size) => calls.addFloatingText.push({ text, x, y, color, size }),
+    resetSession: () => { calls.resetSession++; },
+    updateVisuals: (dt, map, wave) => calls.updateVisuals.push({ dt, map, wave }),
+    render: (state, myId, map) => calls.render.push({ state, myId, map })
+  };
+
+  const mockUI = {
+    updateHUD: (state, myId) => calls.updateHUD.push({ state, myId })
+  };
+
+  const context = {
+    soundManager: mockSoundManager,
+    renderer: mockRenderer,
+    myPlayerId: 'player_me'
+  };
+
+  const snapshot = {
+    wave: 3,
+    players: [
+      { id: 'player_me', x: 800, y: 600 },
+      { id: 'player_peer', x: 1200, y: 600 }
+    ],
+    zombies: [{ id: 'z1', type: 'NORMAL', x: 850, y: 600 }]
+  };
+
+  // 1. SHOOT: local player with SHOTGUN -> shake 5
+  handleGameEvent({ type: 'SHOOT', weapon: 'SHOTGUN', x: 800, y: 600, angle: 0.5, playerId: 'player_me' }, snapshot, context);
+  assert.strictEqual(calls.playShoot.length, 1);
+  assert.strictEqual(calls.playShoot[0].w, 'SHOTGUN');
+  assert.strictEqual(calls.playShoot[0].lx, 800);
+  assert.strictEqual(calls.addMuzzleFlash[0].weapon, 'SHOTGUN');
+  assert.strictEqual(calls.triggerScreenShake[0], 5);
+
+  // SHOOT: local player with ROCKET -> shake 8
+  handleGameEvent({ type: 'SHOOT', weapon: 'ROCKET', x: 800, y: 600, angle: 0, playerId: 'player_me' }, snapshot, context);
+  assert.strictEqual(calls.triggerScreenShake[1], 8);
+
+  // SHOOT: local player with PISTOL -> shake 1.5
+  handleGameEvent({ type: 'SHOOT', weapon: 'PISTOL', x: 800, y: 600, angle: 0, playerId: 'player_me' }, snapshot, context);
+  assert.strictEqual(calls.triggerScreenShake[2], 1.5);
+
+  // SHOOT: peer player -> NO screen shake
+  handleGameEvent({ type: 'SHOOT', weapon: 'RAILGUN', x: 1200, y: 600, angle: 0, playerId: 'player_peer' }, snapshot, context);
+  assert.strictEqual(calls.triggerScreenShake.length, 3, 'Peer shooting must not trigger local screen shake');
+
+  // 2. HIT: directional blood and zombie hit audio
+  handleGameEvent({ type: 'HIT', zType: 'TANK', weapon: 'SHOTGUN', x: 860, y: 600, angle: 0.25 }, snapshot, context);
+  assert.strictEqual(calls.playZombieHit.length, 1);
+  assert.strictEqual(calls.playZombieHit[0].zt, 'TANK');
+  assert.strictEqual(calls.addDirectionalBlood.length, 1);
+  assert.strictEqual(calls.addDirectionalBlood[0].angle, 0.25);
+  assert.strictEqual(calls.addDirectionalBlood[0].isKill, false);
+
+  // 3. ZOMBIE_DIE: Normal zombie -> visceral dark red #7f0000
+  handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'NORMAL', x: 850, y: 600, killAngle: 1.2 }, snapshot, context);
+  assert.strictEqual(calls.playZombieDie.length, 1);
+  assert.strictEqual(calls.addDirectionalBlood[1].color, '#7f0000');
+  assert.strictEqual(calls.addDirectionalBlood[1].isKill, true);
+  assert.strictEqual(calls.addZombieCorpse.length, 1);
+
+  // ZOMBIE_DIE: Devil zombie -> crimson red #c62828
+  handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'DEVIL', x: 850, y: 600, killAngle: 0.8 }, snapshot, context);
+  assert.strictEqual(calls.addDirectionalBlood[2].color, '#c62828');
+
+  // 4. EXPLOSION: large radius -> scale 1.4
+  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 150 }, snapshot, context);
+  assert.strictEqual(calls.playExplosion[0].scale, 1.4);
+  assert.strictEqual(calls.addExplosionParticles.length, 1);
+
+  // EXPLOSION: standard radius -> scale 1.0
+  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 80 }, snapshot, context);
+  assert.strictEqual(calls.playExplosion[1].scale, 1.0);
+
+  // 5. WAVE_START
+  handleGameEvent({ type: 'WAVE_START', wave: 4 }, snapshot, context);
+  assert.strictEqual(calls.playWaveStart[0], 4);
+  assert.strictEqual(calls.addFloatingText.length, 1);
+
+  // 6. GAME_OVER & SESSION_RESET stop horror ambience
+  handleGameEvent({ type: 'GAME_OVER' }, snapshot, context);
+  assert.strictEqual(calls.stopHorrorAmbience, 1);
+  handleGameEvent({ type: 'SESSION_RESET' }, snapshot, context);
+  assert.strictEqual(calls.stopHorrorAmbience, 2);
+  assert.strictEqual(calls.resetSession, 1);
+
+  // 7. gameLoop bindings
+  const loopContext = {
+    interpolator: { getInterpolatedState: () => snapshot },
+    renderer: mockRenderer,
+    soundManager: mockSoundManager,
+    ui: mockUI,
+    isInGame: true,
+    myPlayerId: 'player_me',
+    currentMap: { name: 'THE_ROOMS' }
+  };
+
+  gameLoop(2000, loopContext);
+  assert.strictEqual(calls.updateVisuals.length, 1);
+  assert.strictEqual(calls.updateVisuals[0].wave, 3, 'updateVisuals must receive current snapshot wave');
+  assert.strictEqual(calls.updateHorrorAmbience.length, 1);
+  assert.strictEqual(calls.updateHorrorAmbience[0].state.wave, 3);
+  assert.strictEqual(calls.updateHorrorAmbience[0].state.isInGame, true);
+  assert.strictEqual(calls.render.length, 1);
+  assert.strictEqual(calls.updateHUD.length, 1);
+
+  // gameLoop when not in game
+  loopContext.isInGame = false;
+  gameLoop(2050, loopContext);
+  assert.strictEqual(calls.updateVisuals.length, 2);
+  assert.strictEqual(calls.updateVisuals[1].wave, 1, 'updateVisuals when out of game defaults wave to 1');
+  assert.strictEqual(calls.render.length, 1, 'No render calls when not in game');
+  assert.strictEqual(calls.updateHorrorAmbience.length, 1, 'No ambience updates when not in game');
+});
+
+
 
 

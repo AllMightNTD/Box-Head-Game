@@ -1,23 +1,33 @@
 (function () {
+  const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+
   // Preload all Character and Zombie sprite sheets
-  if (window.spriteManager) {
+  if (isBrowser && window.spriteManager) {
     window.spriteManager.preloadAll().catch(err => console.warn('Sprite preload error:', err));
   }
 
-  const socket = io();
-  const canvas = document.getElementById('gameCanvas');
-  const renderer = new Renderer(canvas);
-  const input = new InputHandler(canvas);
-  const interpolator = new Interpolator();
-  const ui = new UIController();
+  const socket = isBrowser && typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
+  const canvas = isBrowser ? document.getElementById('gameCanvas') : null;
+  const renderer = isBrowser && typeof Renderer === 'function' && canvas ? new Renderer(canvas) : null;
+  const input = isBrowser && typeof InputHandler === 'function' && canvas ? new InputHandler(canvas) : {
+    resetKeys: () => {},
+    setWeaponSlot: () => {},
+    getInputPayload: () => ({})
+  };
+  const interpolator = isBrowser && typeof Interpolator === 'function' ? new Interpolator() : {
+    snapshots: [],
+    addSnapshot: () => {},
+    getInterpolatedState: () => null
+  };
+  const ui = isBrowser && typeof UIController === 'function' ? new UIController() : null;
 
   let myPlayerId = null;
   let isInGame = false;
-  let lastFrameTime = performance.now();
+  let lastFrameTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
   // Active Map Configuration
-  let currentMapId = window.DEFAULT_MAP_ID || 'THE_ROOMS';
-  let currentMap = (window.MAPS_CONFIG && window.MAPS_CONFIG[currentMapId]) || null;
+  let currentMapId = (typeof window !== 'undefined' && window.DEFAULT_MAP_ID) || 'THE_ROOMS';
+  let currentMap = (typeof window !== 'undefined' && window.MAPS_CONFIG && window.MAPS_CONFIG[currentMapId]) || null;
 
   function updateActiveMap(mapId) {
     if (!mapId || !window.MAPS_CONFIG) return;
@@ -28,8 +38,10 @@
   }
 
   // Window resize
-  window.addEventListener('resize', () => renderer.resize());
-  renderer.resize();
+  if (isBrowser && typeof window.addEventListener === 'function') {
+    window.addEventListener('resize', () => renderer && renderer.resize());
+    if (renderer) renderer.resize();
+  }
 
   // Weapon slot mapping
   const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
@@ -67,100 +79,127 @@
     }
   }
 
-  input.onWeaponChange = (slotIndex, weaponId) => {
-    trySwitchWeapon(slotIndex, weaponId);
-  };
+  if (input) {
+    input.onWeaponChange = (slotIndex, weaponId) => {
+      trySwitchWeapon(slotIndex, weaponId);
+    };
 
-  ui.onSelectWeapon = (slotIndex, weaponId) => {
-    trySwitchWeapon(slotIndex, weaponId);
-  };
-
-  // Host map change handler
-  ui.onSelectMap = (mapId) => {
-    socket.emit('room:selectMap', { mapId });
-  };
-
-  // ESC Menu Handling
-  input.onTogglePause = () => {
-    if (isInGame) {
-      const isOpened = ui.togglePauseMenu();
-      if (isOpened) {
-        input.resetKeys();
+    // ESC Menu Handling
+    input.onTogglePause = () => {
+      if (isInGame && ui) {
+        const isOpened = ui.togglePauseMenu();
+        if (isOpened) {
+          input.resetKeys();
+        }
       }
-    }
-  };
+    };
 
-  // Ultimate Activation (F or Right-Click)
-  input.onUltimate = (angle) => {
-    if (!isInGame) return;
-    if (ui.modalPause && !ui.modalPause.classList.contains('hidden')) return;
-    if (ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden')) return;
-    socket.emit('player:ultimate', { angle });
-  };
-
-  if (ui.btnResumeGame) {
-    ui.btnResumeGame.addEventListener('click', () => {
-      ui.togglePauseMenu();
-    });
+    // Ultimate Activation (F or Right-Click)
+    input.onUltimate = (angle) => {
+      if (!isInGame) return;
+      if (ui && ui.modalPause && !ui.modalPause.classList.contains('hidden')) return;
+      if (ui && ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden')) return;
+      socket.emit('player:ultimate', { angle });
+    };
   }
 
-  if (ui.btnPauseLeave) {
-    ui.btnPauseLeave.addEventListener('click', () => {
-      socket.emit('room:leave');
-      isInGame = false;
-      renderer.resetSession();
-      interpolator.snapshots = [];
-      ui.showScreen('lobby');
-    });
-  }
+  if (ui) {
+    ui.onSelectWeapon = (slotIndex, weaponId) => {
+      trySwitchWeapon(slotIndex, weaponId);
+    };
 
-  // --- LOBBY ACTIONS ---
-  ui.btnCreateRoom.addEventListener('click', () => {
-    const roomName = ui.roomNameInput.value.trim() || 'Phòng Chiến Đấu';
-    const playerName = ui.nicknameInput.value.trim() || 'Hero';
-    const mapId = ui.selectedMapId || currentMapId;
-    socket.emit('room:create', { roomName, playerName, character: 'HUMAN', mapId });
-  });
+    // Host map change handler
+    ui.onSelectMap = (mapId) => {
+      socket.emit('room:selectMap', { mapId });
+    };
 
-  ui.btnLeaveRoom.addEventListener('click', () => {
-    socket.emit('room:leave');
-    isInGame = false;
-    renderer.resetSession();
-    interpolator.snapshots = [];
-    ui.showScreen('lobby');
-  });
-
-  ui.btnReady.addEventListener('click', () => {
-    if (!ui.currentRoom) return;
-    const myPlayer = ui.currentRoom.players.find(p => p.id === myPlayerId);
-    if (myPlayer) {
-      socket.emit('room:ready', { ready: !myPlayer.ready });
+    if (ui.btnResumeGame) {
+      ui.btnResumeGame.addEventListener('click', () => {
+        ui.togglePauseMenu();
+      });
     }
-  });
 
-  ui.btnStartGame.addEventListener('click', () => {
-    socket.emit('room:start');
-  });
+    if (ui.btnPauseLeave) {
+      ui.btnPauseLeave.addEventListener('click', () => {
+        if (window.soundManager && typeof window.soundManager.stopHorrorAmbience === 'function') {
+          window.soundManager.stopHorrorAmbience();
+        }
+        socket.emit('room:leave');
+        isInGame = false;
+        if (renderer) renderer.resetSession();
+        if (interpolator) interpolator.snapshots = [];
+        ui.showScreen('lobby');
+      });
+    }
 
-  ui.btnRestartGame.addEventListener('click', () => {
-    socket.emit('room:restart');
-  });
+    // --- LOBBY ACTIONS ---
+    if (ui.btnCreateRoom) {
+      ui.btnCreateRoom.addEventListener('click', () => {
+        const roomName = ui.roomNameInput.value.trim() || 'Phòng Chiến Đấu';
+        const playerName = ui.nicknameInput.value.trim() || 'Hero';
+        const mapId = ui.selectedMapId || currentMapId;
+        socket.emit('room:create', { roomName, playerName, character: 'HUMAN', mapId });
+      });
+    }
 
-  ui.btnBackLobby.addEventListener('click', () => {
-    socket.emit('room:leave');
-    isInGame = false;
-    renderer.resetSession();
-    interpolator.snapshots = [];
-    ui.showScreen('lobby');
-  });
+    if (ui.btnLeaveRoom) {
+      ui.btnLeaveRoom.addEventListener('click', () => {
+        if (window.soundManager && typeof window.soundManager.stopHorrorAmbience === 'function') {
+          window.soundManager.stopHorrorAmbience();
+        }
+        socket.emit('room:leave');
+        isInGame = false;
+        if (renderer) renderer.resetSession();
+        if (interpolator) interpolator.snapshots = [];
+        ui.showScreen('lobby');
+      });
+    }
 
-  // Character selection
-  ui.charButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const char = btn.getAttribute('data-char');
-      socket.emit('room:selectChar', { character: char });
-    });
-  });
+    if (ui.btnReady) {
+      ui.btnReady.addEventListener('click', () => {
+        if (!ui.currentRoom) return;
+        const myPlayer = ui.currentRoom.players.find(p => p.id === myPlayerId);
+        if (myPlayer) {
+          socket.emit('room:ready', { ready: !myPlayer.ready });
+        }
+      });
+    }
+
+    if (ui.btnStartGame) {
+      ui.btnStartGame.addEventListener('click', () => {
+        socket.emit('room:start');
+      });
+    }
+
+    if (ui.btnRestartGame) {
+      ui.btnRestartGame.addEventListener('click', () => {
+        socket.emit('room:restart');
+      });
+    }
+
+    if (ui.btnBackLobby) {
+      ui.btnBackLobby.addEventListener('click', () => {
+        if (window.soundManager && typeof window.soundManager.stopHorrorAmbience === 'function') {
+          window.soundManager.stopHorrorAmbience();
+        }
+        socket.emit('room:leave');
+        isInGame = false;
+        if (renderer) renderer.resetSession();
+        if (interpolator) interpolator.snapshots = [];
+        ui.showScreen('lobby');
+      });
+    }
+
+    // Character selection
+    if (ui.charButtons) {
+      ui.charButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const char = btn.getAttribute('data-char');
+          socket.emit('room:selectChar', { character: char });
+        });
+      });
+    }
+  }
 
   function handleJoinRoom(roomId) {
     const playerName = ui.nicknameInput.value.trim() || 'Hero';
@@ -223,16 +262,21 @@
     if (data && data.mapId) {
       updateActiveMap(data.mapId);
     }
-    ui.showScreen('game');
-    renderer.resetSession();
-    interpolator.snapshots = [];
-    input.resetKeys();
-    input.setWeaponSlot(1, true);
+    if (ui) ui.showScreen('game');
+    if (renderer) renderer.resetSession();
+    if (interpolator) interpolator.snapshots = [];
+    if (input) {
+      input.resetKeys();
+      input.setWeaponSlot(1, true);
+    }
     pendingWeapon = null;
-    if (window.soundManager) window.soundManager.ensureContext();
+    if (typeof window !== 'undefined' && window.soundManager) {
+      window.soundManager.ensureContext();
+    }
   });
 
   socket.on('game:snapshot', (snapshot) => {
+    if (!interpolator) return;
     interpolator.addSnapshot(snapshot);
 
     if (snapshot && snapshot.mapId && snapshot.mapId !== currentMapId) {
@@ -241,11 +285,11 @@
 
     // Sync input handler selected weapon if server changed it (e.g. out of ammo).
     // Ignore stale snapshots while a local switch is still awaiting server confirmation.
-    const localPlayer = snapshot.players && (snapshot.players.find(p => p.id === myPlayerId) || snapshot.players[0]);
-    if (localPlayer && localPlayer.selectedWeapon) {
+    const localPlayer = snapshot && snapshot.players && (snapshot.players.find(p => p.id === myPlayerId) || snapshot.players[0]);
+    if (localPlayer && localPlayer.selectedWeapon && input) {
       const serverWeapon = localPlayer.selectedWeapon;
       if (pendingWeapon) {
-        const expired = performance.now() - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
+        const expired = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
         if (serverWeapon === pendingWeapon.id || expired) {
           pendingWeapon = null; // confirmed by server (or gave up waiting)
         }
@@ -259,7 +303,7 @@
     }
 
     // Process events (Sound effects, particles, floating texts)
-    if (snapshot.events && snapshot.events.length > 0) {
+    if (snapshot && snapshot.events && snapshot.events.length > 0) {
       for (let i = 0; i < snapshot.events.length; i++) {
         const ev = snapshot.events[i];
         handleGameEvent(ev, snapshot);
@@ -267,110 +311,162 @@
     }
   });
 
-  function handleGameEvent(ev, snapshot) {
-    const snd = window.soundManager;
+  function handleShootEvent(ev, rnd, snd, myId, listenerX) {
+    if (snd) snd.playShoot(ev.weapon, ev.x, listenerX);
+    if (rnd) rnd.addMuzzleFlash(ev.x, ev.y, ev.angle, ev.weapon);
+    if (ev.playerId === myId && rnd && typeof rnd.triggerScreenShake === 'function') {
+      const shakeAmount = ev.weapon === 'SHOTGUN' ? 5 : ((ev.weapon === 'ROCKET' || ev.weapon === 'RAILGUN') ? 8 : 1.5);
+      rnd.triggerScreenShake(shakeAmount);
+    }
+  }
 
-    if (ev.type === 'SHOOT') {
-      if (snd) snd.playShoot(ev.weapon);
-      renderer.addMuzzleFlash(ev.x, ev.y, ev.angle);
+  function handleUltimateEvent(ev, rnd, snd) {
+    if (snd && typeof snd.playUltimate === 'function') {
+      snd.playUltimate(ev.ultId);
+    }
+    if (!rnd) return;
 
-    } else if (ev.type === 'ULTIMATE') {
-      if (snd && typeof snd.playUltimate === 'function') {
-        snd.playUltimate(ev.ultId);
+    if (ev.ultId === 'SEISMIC_SLAM') {
+      if (typeof rnd.addShockwave === 'function') {
+        rnd.addShockwave(ev.x, ev.y, ev.radius || 220, '#ff9800');
       }
-      if (renderer) {
-        if (ev.ultId === 'SEISMIC_SLAM') {
-          if (typeof renderer.addShockwave === 'function') {
-            renderer.addShockwave(ev.x, ev.y, ev.radius || 220, '#ff9800');
-          }
-          renderer.addFloatingText('SEISMIC SLAM!', ev.x, ev.y - 30, '#ffb74d', 28);
-        } else if (ev.ultId === 'BLINK_FROST_NOVA') {
-          if (typeof renderer.addBlinkTrail === 'function') {
-            renderer.addBlinkTrail(ev.fromX, ev.fromY, ev.toX, ev.toY, '#00e5ff');
-          }
-          if (typeof renderer.addShockwave === 'function') {
-            renderer.addShockwave(ev.fromX, ev.fromY, ev.radius || 140, '#00e5ff');
-            renderer.addShockwave(ev.toX, ev.toY, ev.radius || 140, '#00e5ff');
-          }
-          renderer.addFloatingText('FROST NOVA!', ev.toX, ev.toY - 30, '#80d8ff', 26);
-        } else if (ev.ultId === 'TACTICAL_DRONE') {
-          if (typeof renderer.addShockwave === 'function') {
-            renderer.addShockwave(ev.x, ev.y, 80, '#00e676');
-          }
-          renderer.addFloatingText('TACTICAL DRONE & AURA!', ev.x, ev.y - 30, '#69f0ae', 26);
-        }
+      rnd.addFloatingText('SEISMIC SLAM!', ev.x, ev.y - 30, '#ffb74d', 28);
+    } else if (ev.ultId === 'BLINK_FROST_NOVA') {
+      if (typeof rnd.addBlinkTrail === 'function') {
+        rnd.addBlinkTrail(ev.fromX, ev.fromY, ev.toX, ev.toY, '#00e5ff');
       }
+      if (typeof rnd.addShockwave === 'function') {
+        rnd.addShockwave(ev.fromX, ev.fromY, ev.radius || 140, '#00e5ff');
+        rnd.addShockwave(ev.toX, ev.toY, ev.radius || 140, '#00e5ff');
+      }
+      rnd.addFloatingText('FROST NOVA!', ev.toX, ev.toY - 30, '#80d8ff', 26);
+    } else if (ev.ultId === 'TACTICAL_DRONE') {
+      if (typeof rnd.addShockwave === 'function') {
+        rnd.addShockwave(ev.x, ev.y, 80, '#00e676');
+      }
+      rnd.addFloatingText('TACTICAL DRONE & AURA!', ev.x, ev.y - 30, '#69f0ae', 26);
+    }
+  }
 
-    } else if (ev.type === 'HIT') {
-      if (snd) snd.playZombieHit();
-      renderer.addBlood(ev.x, ev.y, 4);
-
-    } else if (ev.type === 'ZOMBIE_DIE') {
-      if (snd) snd.playZombieDie();
-      renderer.addBlood(ev.x, ev.y, 10, ev.zType === 'DEVIL' ? '#c62828' : '#33691e');
-      renderer.addZombieCorpse(ev);
-
-    } else if (ev.type === 'EXPLOSION') {
-      if (snd) snd.playExplosion(ev.radius > 120 ? 1.4 : 1.0);
-      renderer.addExplosionParticles(ev.x, ev.y, ev.radius);
-
-    } else if (ev.type === 'UNLOCKED') {
-      if (snd) snd.playComboUpgrade();
-      const p = snapshot.players.find(x => x.id === ev.playerId);
-      const name = p ? p.name : 'Bạn';
-      renderer.addFloatingText(`${name} MỞ KHÓA: ${ev.weapon}!`, p ? p.x : 800, p ? p.y - 40 : 500, '#ffd600', 26);
-
-    } else if (ev.type === 'WAVE_START') {
-      renderer.addFloatingText(`WAVE ${ev.wave} BẮT ĐẦU!`, renderer.camera.x, renderer.camera.y - 80, '#ff3d00', 38);
-
-    } else if (ev.type === 'WAVE_CLEAR') {
-      if (snd) snd.playWaveClear();
-      renderer.addFloatingText(`WAVE ${ev.wave} HOÀN THÀNH!`, renderer.camera.x, renderer.camera.y - 80, '#00e676', 36);
-
-    } else if (ev.type === 'GAME_OVER') {
-      if (snd) snd.playGameOver();
-
-    } else if (ev.type === 'PICKUP') {
-      if (snd) snd.playPickup();
-
-    } else if (ev.type === 'REVIVE') {
-      renderer.addFloatingText('ĐÃ HỒI SINH ĐỒNG ĐỘI!', renderer.camera.x, renderer.camera.y - 40, '#00e5ff', 24);
-
-    } else if (ev.type === 'SESSION_RESET') {
-      renderer.resetSession();
-      interpolator.snapshots = [];
+  function handleSessionReset(rnd, snd) {
+    const sm = snd || (typeof window !== 'undefined' ? window.soundManager : null);
+    if (sm && typeof sm.stopHorrorAmbience === 'function') {
+      sm.stopHorrorAmbience();
+    }
+    if (rnd) rnd.resetSession();
+    if (interpolator) interpolator.snapshots = [];
+    if (input) {
       input.resetKeys();
       input.setWeaponSlot(1, true);
-      pendingWeapon = null;
-      if (ui.modalGameOver) ui.modalGameOver.classList.add('hidden');
-      if (ui.modalPause) ui.modalPause.classList.add('hidden');
+    }
+    pendingWeapon = null;
+    if (ui && ui.modalGameOver) ui.modalGameOver.classList.add('hidden');
+    if (ui && ui.modalPause) ui.modalPause.classList.add('hidden');
+  }
+
+  function handleGameEvent(ev, snapshot, context = {}) {
+    const snd = context.soundManager !== undefined ? context.soundManager : (typeof window !== 'undefined' ? window.soundManager : null);
+    const rnd = context.renderer !== undefined ? context.renderer : renderer;
+    const myId = context.myPlayerId !== undefined ? context.myPlayerId : myPlayerId;
+    const localPlayer = snapshot && snapshot.players ? (snapshot.players.find(p => p.id === myId) || snapshot.players[0]) : null;
+    const listenerX = localPlayer ? localPlayer.x : (rnd && rnd.camera ? rnd.camera.x : 0);
+
+    if (ev.type === 'SHOOT') {
+      handleShootEvent(ev, rnd, snd, myId, listenerX);
+    } else if (ev.type === 'ULTIMATE') {
+      handleUltimateEvent(ev, rnd, snd);
+    } else if (ev.type === 'HIT') {
+      if (snd) snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
+      if (rnd) rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
+    } else if (ev.type === 'ZOMBIE_DIE') {
+      if (snd) snd.playZombieDie(ev.zType, ev.x, listenerX);
+      const bloodColor = ev.zType === 'DEVIL' ? '#c62828' : '#7f0000';
+      if (rnd) {
+        rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.killAngle === 'number' ? ev.killAngle : (ev.angle || 0), 'kill', true, bloodColor);
+        rnd.addZombieCorpse(ev);
+      }
+    } else if (ev.type === 'EXPLOSION') {
+      if (snd) snd.playExplosion(ev.radius > 120 ? 1.4 : 1.0, ev.x, listenerX);
+      if (rnd) rnd.addExplosionParticles(ev.x, ev.y, ev.radius);
+    } else if (ev.type === 'UNLOCKED') {
+      if (snd) snd.playComboUpgrade();
+      const p = snapshot && snapshot.players ? snapshot.players.find(x => x.id === ev.playerId) : null;
+      const name = p ? p.name : 'Bạn';
+      if (rnd) rnd.addFloatingText(`${name} MỞ KHÓA: ${ev.weapon}!`, p ? p.x : 800, p ? p.y - 40 : 500, '#ffd600', 26);
+    } else if (ev.type === 'WAVE_START') {
+      if (snd && typeof snd.playWaveStart === 'function') snd.playWaveStart(ev.wave);
+      if (rnd) rnd.addFloatingText(`WAVE ${ev.wave} BẮT ĐẦU!`, rnd.camera.x, rnd.camera.y - 80, '#ff3d00', 38);
+    } else if (ev.type === 'WAVE_CLEAR') {
+      if (snd) snd.playWaveClear();
+      if (rnd) rnd.addFloatingText(`WAVE ${ev.wave} HOÀN THÀNH!`, rnd.camera.x, rnd.camera.y - 80, '#00e676', 36);
+    } else if (ev.type === 'GAME_OVER') {
+      if (snd) snd.playGameOver();
+      const sm = snd || (typeof window !== 'undefined' ? window.soundManager : null);
+      if (sm && typeof sm.stopHorrorAmbience === 'function') sm.stopHorrorAmbience();
+    } else if (ev.type === 'PICKUP') {
+      if (snd) snd.playPickup();
+    } else if (ev.type === 'REVIVE') {
+      if (rnd) rnd.addFloatingText('ĐÃ HỒI SINH ĐỒNG ĐỘI!', rnd.camera.x, rnd.camera.y - 40, '#00e5ff', 24);
+    } else if (ev.type === 'SESSION_RESET') {
+      handleSessionReset(rnd, snd);
     }
   }
 
   // Input sending timer (40Hz = 25ms)
-  setInterval(() => {
-    if (isInGame) {
-      socket.emit('player:input', input.getInputPayload());
-    }
-  }, 25);
+  if (isBrowser) {
+    setInterval(() => {
+      if (isInGame && input) {
+        socket.emit('player:input', input.getInputPayload());
+      }
+    }, 25);
+  }
 
   // --- RENDER GAME LOOP ---
-  function gameLoop(now) {
+  function gameLoop(now, context = {}) {
     const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
 
-    renderer.updateVisuals(dt, currentMap);
+    const interp = context.interpolator || interpolator;
+    const rnd = context.renderer || renderer;
+    const sm = context.soundManager || (typeof window !== 'undefined' ? window.soundManager : null);
+    const uic = context.ui || ui;
+    const inGame = context.isInGame !== undefined ? context.isInGame : isInGame;
+    const myId = context.myPlayerId !== undefined ? context.myPlayerId : myPlayerId;
+    const activeMap = context.currentMap !== undefined ? context.currentMap : currentMap;
 
-    if (isInGame) {
-      const state = interpolator.getInterpolatedState();
-      if (state) {
-        renderer.render(state, myPlayerId, currentMap);
-        ui.updateHUD(state, myPlayerId);
-      }
+    const state = inGame && interp ? interp.getInterpolatedState() : null;
+    if (rnd) {
+      rnd.updateVisuals(dt, activeMap, state ? state.wave : 1);
     }
 
+    if (inGame && state) {
+      const localPlayer = state.players ? (state.players.find(p => p.id === myId) || state.players[0]) : null;
+      if (sm && typeof sm.updateHorrorAmbience === 'function') {
+        sm.updateHorrorAmbience(dt, {
+          isInGame: state.state !== 'GAMEOVER',
+          wave: state.wave || 1,
+          localPlayer,
+          zombies: state.zombies || []
+        });
+      }
+      if (rnd) rnd.render(state, myId, activeMap);
+      if (uic) uic.updateHUD(state, myId);
+    }
+
+    if (isBrowser && typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(gameLoop);
+    }
+  }
+
+  if (isBrowser && typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(gameLoop);
   }
 
-  requestAnimationFrame(gameLoop);
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { handleGameEvent, gameLoop };
+  }
+  if (typeof window !== 'undefined') {
+    window.handleGameEvent = handleGameEvent;
+    window.gameLoop = gameLoop;
+  }
 })();
