@@ -542,6 +542,72 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.updateHorrorAmbience.length, 1, 'No ambience updates when not in game');
 });
 
+test('SoundManager routes zombie WAV buffers through spatial bus and falls back to synth when unloaded', () => {
+  let bufferSourcesStarted = 0;
+  let oscillatorsStarted = 0;
+
+  const baseCtx = createMockAudioContext();
+  const origCreateBufSrc = baseCtx.createBufferSource;
+  const origCreateOsc = baseCtx.createOscillator;
+  baseCtx.createBufferSource = () => {
+    const n = origCreateBufSrc();
+    n.start = () => { bufferSourcesStarted++; };
+    return n;
+  };
+  baseCtx.createOscillator = () => {
+    const n = origCreateOsc();
+    n.start = () => { oscillatorsStarted++; };
+    return n;
+  };
+
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  // 1. Unloaded WAVs -> synth fallback (no throws)
+  assert.strictEqual(sm.playZombieAttack('DEVIL', 900, 800, 600, 600, 'z_d1', 'ranged'), true);
+  assert.ok(oscillatorsStarted >= 1, 'Devil attack without WAV buffer should fall back to synth');
+
+  // 2. Load mock decoded WAV buffers for all 6 events on TANK (mutant) & NORMAL (rotten)
+  bufferSourcesStarted = 0;
+  oscillatorsStarted = 0;
+  for (const ev of ['idle', 'aggro', 'attack', 'hit', 'die', 'step']) {
+    sm.zombieBank.buffers.set(`mutant/${ev}`, [{ duration: 0.5 }]);
+    sm.zombieBank.buffers.set(`rotten/${ev}`, [{ duration: 0.5 }]);
+  }
+
+  sm.playZombieHit('TANK', 'PISTOL', 850, 800, 610, 600, 'z_t1');
+  sm.playZombieDie('TANK', 850, 800, 610, 600, 'z_t1');
+  assert.strictEqual(sm.playZombieAttack('TANK', 850, 800, 610, 600, 'z_t1', 'melee'), true);
+  assert.strictEqual(sm.playZombieAggro('TANK', 850, 800, 610, 600, 'z_t1'), true);
+  assert.strictEqual(sm.playZombieStep('TANK', 850, 800, 610, 600, 'z_t1'), true);
+  sm.lastGrowlTime = -Infinity;
+  assert.strictEqual(sm.playZombieGrowl('NORMAL', 850, 800, 610, 600, 'z_n1'), true);
+  assert.strictEqual(sm.playZombieGrowl('NORMAL', 850, 800, 610, 600, 'z_n2'), false, 'Growl throttle must still apply with WAV');
+
+  assert.strictEqual(bufferSourcesStarted, 6, 'All 6 zombie WAV events must play via AudioBufferSourceNode');
+  assert.strictEqual(oscillatorsStarted, 0, 'Synth oscillators must not trigger when WAV buffers are present');
+
+  // 3. Muted prevents WAV playback
+  bufferSourcesStarted = 0;
+  sm.muted = true;
+  assert.strictEqual(sm.playZombieAttack('TANK', 850, 800, 610, 600, 'z_t2', 'melee'), false);
+  assert.strictEqual(bufferSourcesStarted, 0);
+
+  // 4. stopHorrorAmbience clears zombieBank tracking state
+  sm.muted = false;
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 2,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_amb', type: 'NORMAL', x: 850, y: 600, isDead: false }]
+  });
+  assert.strictEqual(sm.zombieBank.zombieStates.has('z_amb'), true);
+  sm.stopHorrorAmbience();
+  assert.strictEqual(sm.zombieBank.zombieStates.size, 0);
+});
+
 
 
 

@@ -1,5 +1,27 @@
+let ZombieAudioBank = typeof window !== 'undefined' ? window.ZombieAudioBank : null;
+let ZOMBIE_EVENT_MAX_DIST = typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null;
+
+if (!ZombieAudioBank && typeof require === 'function') {
+  try {
+    const za = require('./zombieAudio.js');
+    ZombieAudioBank = za.ZombieAudioBank;
+    ZOMBIE_EVENT_MAX_DIST = za.ZOMBIE_EVENT_MAX_DIST;
+  } catch (e) {
+    // Optional fallback when running in bundled or isolated test environments
+  }
+}
+
+const DEFAULT_ZOMBIE_EVENT_MAX_DIST = Object.freeze({
+  idle: 650,
+  aggro: 680,
+  attack: 900,
+  hit: 1000,
+  die: 1050,
+  step: 460
+});
+
 class SoundManager {
-  constructor() {
+  constructor(options = {}) {
     this.ctx = null;
     this.masterGain = null;
     this.compressor = null;
@@ -20,6 +42,13 @@ class SoundManager {
     this.droneLfoGain = null;
     this.heartbeatTimer = 0;
     this.growlTimer = 0;
+
+    const BankClass = options.ZombieAudioBank || ZombieAudioBank || (typeof window !== 'undefined' ? window.ZombieAudioBank : null);
+    const bankOptions = {
+      nowFn: () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() + 100000 : Date.now()),
+      ...options
+    };
+    this.zombieBank = options.zombieBank || (BankClass ? new BankClass(bankOptions) : null);
   }
 
   init() {
@@ -36,8 +65,25 @@ class SoundManager {
       if (this.ctx.state === 'suspended') {
         this.ctx.resume();
       }
+
+      this.preloadZombieAudio().catch(e => {
+        console.warn('[SoundManager] init preload error:', e);
+      });
     } catch (e) {
       console.warn('Web Audio not supported:', e);
+    }
+  }
+
+  async preloadZombieAudio() {
+    if (!this.zombieBank) return 0;
+    try {
+      if (this.ctx) {
+        return await this.zombieBank.decodeAll(this.ctx);
+      }
+      return await this.zombieBank.preloadRaw();
+    } catch (err) {
+      console.warn('[SoundManager] preloadZombieAudio error:', err);
+      return 0;
     }
   }
 
@@ -368,8 +414,47 @@ class SoundManager {
     }
   }
 
-  playZombieHit(zType = 'NORMAL', weapon = 'bullet', sourceX, listenerX) {
+  playZombieSample(zType, event, sourceX, sourceY, listenerX, listenerY, extra = {}) {
+    if (this.muted || !this.zombieBank || !this.zombieBank.hasBuffer(zType, event)) {
+      return false;
+    }
+    this.ensureContext();
+    if (!this.ctx) {
+      return false;
+    }
+    if (!this.zombieBank.canPlayEvent(event, extra.zombieId)) {
+      return false;
+    }
+
+    const reverbSend = extra.reverbSend !== undefined ? extra.reverbSend : 0.2;
+    const bus = this.createSpatialBus(sourceX, listenerX, reverbSend);
+    if (!bus || !bus.input) {
+      return false;
+    }
+
+    const distMap = ZOMBIE_EVENT_MAX_DIST || (typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null) || DEFAULT_ZOMBIE_EVENT_MAX_DIST;
+    const maxDist = (distMap && distMap[event]) || 800;
+
+    return this.zombieBank.playSample(this.ctx, bus.input, zType, event, {
+      x: sourceX,
+      y: sourceY,
+      listenerX,
+      listenerY,
+      maxDist,
+      zombieId: extra.zombieId,
+      volume: extra.volume
+    });
+  }
+
+  playZombieHit(zType = 'NORMAL', weapon = 'bullet', sourceX, listenerX, sourceY, listenerY, zombieId) {
     if (this.muted) return;
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'hit')) {
+      this.playZombieSample(zType, 'hit', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.16,
+        zombieId
+      });
+      return;
+    }
     this.ensureContext();
     if (!this.ctx) return;
 
@@ -410,8 +495,15 @@ class SoundManager {
     crack.stop(t + 0.035);
   }
 
-  playZombieDie(zType = 'NORMAL', sourceX, listenerX) {
+  playZombieDie(zType = 'NORMAL', sourceX, listenerX, sourceY, listenerY, zombieId) {
     if (this.muted) return;
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'die')) {
+      this.playZombieSample(zType, 'die', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.28,
+        zombieId
+      });
+      return;
+    }
     this.ensureContext();
     if (!this.ctx) return;
 
@@ -465,10 +557,60 @@ class SoundManager {
     }
   }
 
-  playZombieGrowl(zType = 'NORMAL', sourceX, listenerX) {
+  playZombieAttack(zType = 'NORMAL', sourceX, listenerX, sourceY, listenerY, zombieId, attackKind) {
+    if (this.muted) return false;
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'attack')) {
+      return this.playZombieSample(zType, 'attack', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.18,
+        zombieId
+      });
+    }
+    if (zType === 'DEVIL' || attackKind === 'ranged') {
+      this.playDevilFireball();
+      return true;
+    }
+    return false;
+  }
+
+  playZombieAggro(zType = 'NORMAL', sourceX, listenerX, sourceY, listenerY, zombieId) {
+    if (this.muted) return false;
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'aggro')) {
+      return this.playZombieSample(zType, 'aggro', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.28,
+        zombieId
+      });
+    }
+    return this.playZombieGrowl(zType, sourceX, listenerX, sourceY, listenerY, zombieId);
+  }
+
+  playZombieStep(zType = 'NORMAL', sourceX, listenerX, sourceY, listenerY, zombieId) {
+    if (this.muted) return false;
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'step')) {
+      return this.playZombieSample(zType, 'step', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.08,
+        zombieId
+      });
+    }
+    return false;
+  }
+
+  playZombieGrowl(zType = 'NORMAL', sourceX, listenerX, sourceY, listenerY, zombieId) {
     if (this.muted) return false;
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (now - this.lastGrowlTime < 1800) return false;
+
+    if (this.zombieBank && this.zombieBank.hasBuffer(zType, 'idle')) {
+      const played = this.playZombieSample(zType, 'idle', sourceX, sourceY, listenerX, listenerY, {
+        reverbSend: 0.25,
+        zombieId
+      });
+      if (played) {
+        this.lastGrowlTime = now;
+        return true;
+      }
+      return false;
+    }
+
     this.lastGrowlTime = now;
 
     this.ensureContext();
@@ -700,6 +842,9 @@ class SoundManager {
   }
 
   stopHorrorAmbience() {
+    if (this.zombieBank) {
+      this.zombieBank.reset();
+    }
     if (!this.droneActive) return;
     this.safeStopAndDisconnect(this.droneOsc1);
     this.safeStopAndDisconnect(this.droneOsc2);
@@ -777,6 +922,22 @@ class SoundManager {
   }
 
   updateAmbienceGrowls(dt, state) {
+    if (this.zombieBank && this.zombieBank.hasAnyBuffers()) {
+      this.zombieBank.updateZombies(dt, state, (z, ev) => {
+        const px = state && state.localPlayer ? state.localPlayer.x : undefined;
+        const py = state && state.localPlayer ? state.localPlayer.y : undefined;
+        const zType = (z && z.type) || 'NORMAL';
+        if (ev === 'aggro') {
+          this.playZombieAggro(zType, z.x, px, z.y, py, z.id);
+        } else if (ev === 'step') {
+          this.playZombieStep(zType, z.x, px, z.y, py, z.id);
+        } else if (ev === 'idle') {
+          this.playZombieGrowl(zType, z.x, px, z.y, py, z.id);
+        }
+      });
+      return;
+    }
+
     this.growlTimer = (this.growlTimer || 0) - dt;
     if (this.growlTimer > 0) return;
     this.growlTimer = 2.6;
