@@ -183,16 +183,26 @@ function executeTacticalDrone(player, conf, room) {
 
 function triggerPlayerUltimate(player, angle, room) {
   if (!player || player.isDead || player.isDowned) return { activated: false };
-  if (room.state !== 'PLAYING' && room.state !== 'INTERMISSION') return { activated: false };
+  if (!room || (room.state !== 'PLAYING' && room.state !== 'INTERMISSION')) return { activated: false };
   if (player.ultCharge < player.ultMaxCharge) return { activated: false };
 
   const conf = getUltimateConfigForClass(player.character);
+
+  if (conf.id === 'AVATAR_OF_WAR') {
+    const event = activateAvatarOfWar(player, room);
+    if (!event) {
+      return { activated: false, reason: 'WARRIOR_ULT_UNAVAILABLE' };
+    }
+    if (room && Array.isArray(room.eventsBuffer)) {
+      room.eventsBuffer.push(event);
+    }
+    return { activated: true, event };
+  }
+
   player.ultCharge = 0;
 
   let event = null;
-  if (conf.id === 'AVATAR_OF_WAR') {
-    event = activateAvatarOfWar(player, room);
-  } else if (conf.id === 'SEISMIC_SLAM') {
+  if (conf.id === 'SEISMIC_SLAM') {
     event = executeSeismicSlam(player, conf, room);
   } else if (conf.id === 'BLINK_FROST_NOVA') {
     event = executeBlinkFrostNova(player, angle, conf, room);
@@ -200,7 +210,7 @@ function triggerPlayerUltimate(player, angle, room) {
     event = executeTacticalDrone(player, conf, room);
   }
 
-  if (event) {
+  if (event && room && Array.isArray(room.eventsBuffer)) {
     room.eventsBuffer.push(event);
   }
   return { activated: true, event };

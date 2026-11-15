@@ -626,6 +626,7 @@ test('Zombie melee attack passes source coordinates allowing Warrior Counter Shi
 
 const { Barricade } = require('../server/game/Barricade.js');
 const { Bullet } = require('../server/game/Bullet.js');
+const { triggerPlayerUltimate } = require('../server/game/UltimateAbilities.js');
 const {
   executeWarriorBasicAttack,
   triggerWarriorSkill,
@@ -1037,6 +1038,34 @@ test('Task 4: applyWarriorAmmoPickup(player) delegates to player.applyWarriorCoo
   assert.strictEqual(delegateCalled, true, 'applyWarriorAmmoPickup must delegate to player.applyWarriorCooldownBonus()');
   assert.ok(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown < 4.0);
   assert.strictEqual(warrior.ultCharge, 15);
+});
+
+test('Task 4 Review Fix: triggerPlayerUltimate integrates cleanly with Avatar of War', () => {
+  const room = createMockRoom();
+  const warrior = new Player('w1', 'Garen', 'WARRIOR', 400, 400);
+  warrior.ultCharge = 100;
+  room.players.set(warrior.id, warrior);
+
+  // 1. Successful ultimate trigger
+  const res = triggerPlayerUltimate(warrior, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.ok(res.event, 'event must be returned and non-null');
+  assert.strictEqual(res.event.type, 'ULTIMATE');
+  assert.strictEqual(res.event.ultId, 'AVATAR_OF_WAR');
+  assert.strictEqual(warrior.ultCharge, 0, 'ultCharge consumed to 0');
+  assert.strictEqual(warrior.warriorState.avatarActive, true);
+  assert.strictEqual(warrior.warriorState.avatarTimer, 10.0);
+  assert.strictEqual(room.eventsBuffer.length, 1);
+  assert.strictEqual(room.eventsBuffer[0].ultId, 'AVATAR_OF_WAR');
+
+  // 2. Calling while Avatar of War is already active does NOT consume ultCharge or break active state
+  warrior.ultCharge = 100; // artificial re-charge while active
+  const resAlreadyActive = triggerPlayerUltimate(warrior, 0, room);
+  assert.strictEqual(resAlreadyActive.activated, false);
+  assert.strictEqual(resAlreadyActive.reason, 'WARRIOR_ULT_UNAVAILABLE');
+  assert.strictEqual(warrior.ultCharge, 100, 'ultCharge must NOT be wiped if ultimate fails to activate');
+  assert.strictEqual(warrior.warriorState.avatarActive, true, 'avatarActive state must be preserved');
+  assert.strictEqual(warrior.warriorState.avatarTimer, 10.0, 'avatarTimer must remain active');
 });
 
 
