@@ -25,6 +25,7 @@ class Renderer {
     this.ambientParticles = [];
     this.shockwaves = [];
     this.blinkTrails = [];
+    this.swordTrails = [];
 
     // Zombie corpses array (blood pools & held death frames, capped at 60)
     this.corpses = [];
@@ -50,6 +51,7 @@ class Renderer {
     this.ambientParticles = [];
     this.shockwaves = [];
     this.blinkTrails = [];
+    this.swordTrails = [];
     this.camera.shake = 0;
     this.camera.shakeX = 0;
     this.camera.shakeY = 0;
@@ -156,6 +158,227 @@ class Renderer {
       duration: 0.35,
       elapsed: 0
     });
+  }
+
+  addSwordTrail(x, y, angle, options = {}) {
+    const radius = options.radius || 65;
+    const arcRad = options.arcRad || Math.PI * 0.75;
+    const color = options.color || '#ff3d00';
+    const duration = options.duration || 0.2;
+    const isFullCircle = Boolean(options.isFullCircle);
+
+    this.swordTrails.push({
+      x,
+      y,
+      angle: angle || 0,
+      radius,
+      arcRad,
+      color,
+      duration,
+      life: duration,
+      maxLife: duration,
+      isFullCircle
+    });
+  }
+
+  addWarriorSkillVfx(ev) {
+    if (!ev) return;
+    const type = ev.type;
+
+    if (type === 'WARRIOR_SKILL') {
+      const skillId = ev.skillId;
+      if (skillId === 'BERSERKER_STANCE') {
+        this.addSwordTrail(ev.x, ev.y, ev.angle, {
+          radius: 65,
+          arcRad: Math.PI * 0.75,
+          color: '#ff3d00',
+          duration: 0.18
+        });
+        for (let i = 0; i < 6; i++) {
+          const a = (ev.angle || 0) + (Math.random() - 0.5) * 0.8;
+          const spd = Math.random() * 120 + 80;
+          this.particles.push({
+            x: ev.x,
+            y: ev.y,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            radius: Math.random() * 3 + 2,
+            color: '#ff9100',
+            life: 0.2,
+            maxLife: 0.2
+          });
+        }
+      } else if (skillId === 'JUGGERNAUT_STANCE') {
+        this.addSwordTrail(ev.x, ev.y, ev.angle, {
+          radius: 85,
+          arcRad: Math.PI * 0.85,
+          color: '#ff6d00',
+          duration: 0.25
+        });
+        this.triggerScreenShake(3);
+        for (let i = 0; i < 8; i++) {
+          const a = (ev.angle || 0) + (Math.random() - 0.5) * 1.0;
+          const spd = Math.random() * 140 + 70;
+          this.particles.push({
+            x: ev.x,
+            y: ev.y,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            radius: Math.random() * 4 + 2,
+            color: '#ffab00',
+            life: 0.25,
+            maxLife: 0.25
+          });
+        }
+      } else if (skillId === 'BLADE_WHIRLWIND') {
+        this.addSwordTrail(ev.x, ev.y, 0, {
+          radius: ev.radius || 105,
+          isFullCircle: true,
+          color: '#ff3d00',
+          duration: 0.3
+        });
+        this.triggerScreenShake(4);
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const spd = Math.random() * 160 + 60;
+          this.particles.push({
+            x: ev.x,
+            y: ev.y,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            radius: Math.random() * 3 + 2,
+            color: Math.random() < 0.5 ? '#ff3d00' : '#80d8ff',
+            life: 0.28,
+            maxLife: 0.28
+          });
+        }
+      } else if (skillId === 'SHADOW_DASH_SLASH') {
+        if (typeof ev.toX === 'number' && typeof ev.toY === 'number') {
+          this.addBlinkTrail(ev.x, ev.y, ev.toX, ev.toY, '#ff3d00');
+          this.addSwordTrail(ev.toX, ev.toY, ev.angle || 0, {
+            radius: 75,
+            arcRad: Math.PI * 0.8,
+            color: '#ff1744',
+            duration: 0.22
+          });
+        } else {
+          this.addSwordTrail(ev.x, ev.y, ev.angle || 0, {
+            radius: 75,
+            arcRad: Math.PI * 0.8,
+            color: '#ff1744',
+            duration: 0.22
+          });
+        }
+        this.triggerScreenShake(4);
+      } else if (skillId === 'SEISMIC_SLAM') {
+        this.addShockwave(ev.x, ev.y, 220, '#ff6d00');
+        this.triggerScreenShake(8);
+        for (let i = 0; i < 16; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const spd = Math.random() * 180 + 70;
+          this.particles.push({
+            x: ev.x,
+            y: ev.y,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            radius: Math.random() * 5 + 3,
+            color: ['#ff6d00', '#ff9800', '#5d4037', '#212121'][Math.floor(Math.random() * 4)],
+            life: 0.45,
+            maxLife: 0.45
+          });
+        }
+      } else if (skillId === 'WAR_CRY') {
+        this.addShockwave(ev.x, ev.y, ev.radius || 900, '#ffd600');
+        this.triggerScreenShake(5);
+      } else if (skillId === 'COUNTER_SHIELD_BASH') {
+        this.addSwordTrail(ev.x, ev.y, ev.angle || 0, {
+          radius: 55,
+          arcRad: Math.PI * 0.8,
+          color: '#00e5ff',
+          duration: 0.25
+        });
+        this.triggerScreenShake(2);
+      }
+    } else if (type === 'WARRIOR_COUNTER') {
+      this.addShockwave(ev.x, ev.y, 110, '#00e5ff');
+      this.addSwordTrail(ev.x, ev.y, ev.angle || 0, {
+        radius: 90,
+        arcRad: Math.PI * 0.85,
+        color: '#00e5ff',
+        duration: 0.28
+      });
+      this.triggerScreenShake(6);
+      for (let i = 0; i < 15; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 220 + 90;
+        this.particles.push({
+          x: ev.x,
+          y: ev.y,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          radius: Math.random() * 4 + 2,
+          color: Math.random() < 0.6 ? '#00e5ff' : '#ffd600',
+          life: 0.35,
+          maxLife: 0.35
+        });
+      }
+    } else if (type === 'WARRIOR_MARK_EXPLODE') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 120, '#ff1744');
+      this.triggerScreenShake(7);
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 200 + 70;
+        this.particles.push({
+          x: ev.x,
+          y: ev.y,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          radius: Math.random() * 5 + 2,
+          color: '#ff1744',
+          life: 0.35,
+          maxLife: 0.35
+        });
+      }
+    } else if (type === 'WARRIOR_AVATAR_END') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 240, '#ff3d00');
+      this.addShockwave(ev.x, ev.y, (ev.radius || 240) * 0.6, '#ffd600');
+      this.triggerScreenShake(12);
+      for (let i = 0; i < 28; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 280 + 100;
+        this.particles.push({
+          x: ev.x,
+          y: ev.y,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          radius: Math.random() * 8 + 4,
+          color: ['#ff3d00', '#ff9100', '#ffd600', '#ffeb3b'][Math.floor(Math.random() * 4)],
+          life: 0.6,
+          maxLife: 0.6
+        });
+      }
+    } else if (type === 'ULTIMATE' && ev.ultId === 'AVATAR_OF_WAR') {
+      this.addShockwave(ev.x, ev.y, 160, '#ff3d00');
+      this.triggerScreenShake(8);
+      for (let i = 0; i < 20; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 200 + 80;
+        this.particles.push({
+          x: ev.x,
+          y: ev.y,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          radius: Math.random() * 6 + 3,
+          color: ['#ff3d00', '#ff6d00', '#ffd600'][Math.floor(Math.random() * 3)],
+          life: 0.45,
+          maxLife: 0.45
+        });
+      }
+    }
+  }
+
+  spawnWarriorVfx(ev) {
+    return this.addWarriorSkillVfx(ev);
   }
 
   addZombieCorpse(zombie) {
@@ -335,6 +558,15 @@ class Renderer {
         this.blinkTrails.splice(i, 1);
       }
     }
+
+    // Melee Sword Trails (Warrior slashes & whirlwind)
+    for (let i = this.swordTrails.length - 1; i >= 0; i--) {
+      const st = this.swordTrails[i];
+      st.life -= dt;
+      if (st.life <= 0) {
+        this.swordTrails.splice(i, 1);
+      }
+    }
   }
 
   render(gameState, localPlayerId, map) {
@@ -370,6 +602,9 @@ class Renderer {
     // 2.5 Draw Zombie Corpses (Blood pools and decaying remains)
     this.drawCorpses(ctx, 0.016);
 
+    // 2.6 Draw Ground Zones (Seismic fissures & Slash marks)
+    this.drawGroundZones(ctx, gameState.groundZones || []);
+
     // 3. Draw Ambient Weather Particles (Behind actors for depth)
     this.drawAmbientParticles(ctx);
 
@@ -399,6 +634,9 @@ class Renderer {
 
     // 9. Draw Muzzle Flashes
     this.drawMuzzleFlashes(ctx);
+
+    // 9.5 Draw Melee Sword Trails
+    this.drawSwordTrails(ctx);
 
     // 10. Draw Map Walls & Pillars (Over entities for 2.5D depth)
     this.drawMapStructures(ctx, map);
@@ -635,14 +873,59 @@ class Renderer {
   }
 
   drawBoxyPlayer(ctx, player, isLocal) {
+    const isWarrior = player.character === 'WARRIOR' && Boolean(player.warriorState);
+    const isAvatar = isWarrior && Boolean(player.warriorState.avatarActive);
+
     // 1. Draw Player Ring on ground
     this.drawPlayerRing(ctx, player);
+
+    // 1.5 Warrior Ground Auras (War Cry Foot Aura)
+    if (isWarrior && (player.warriorState.warCryAuraActive || player.hasWarCryBuff)) {
+      ctx.save();
+      const pulse = 1 + 0.1 * Math.sin(Date.now() / 150);
+      ctx.strokeStyle = '#ffd600';
+      ctx.shadowColor = '#ffea00';
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (typeof ctx.ellipse === 'function') {
+        ctx.ellipse(Math.round(player.x), Math.round(player.y), Math.round(28 * pulse), Math.round(18 * pulse), 0, 0, Math.PI * 2);
+      } else if (typeof ctx.arc === 'function') {
+        ctx.arc(Math.round(player.x), Math.round(player.y), Math.round(28 * pulse), 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // 2. Downed state
     if (player.isDowned) {
       this.drawDownedPlayer(ctx, player);
       this.drawPlayerTag(ctx, player, isLocal);
       return;
+    }
+
+    // Wrap body and weapon in Avatar scaling if active
+    if (isAvatar) {
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.scale(1.35, 1.35);
+      ctx.translate(-player.x, -player.y);
+
+      // Blazing flame aura under avatar
+      ctx.save();
+      const flamePulse = 1 + 0.15 * Math.sin(Date.now() / 90);
+      ctx.strokeStyle = '#ff3d00';
+      ctx.shadowColor = '#ffd600';
+      ctx.shadowBlur = 14;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (typeof ctx.ellipse === 'function') {
+        ctx.ellipse(Math.round(player.x), Math.round(player.y + 10), Math.round(32 * flamePulse), Math.round(20 * flamePulse), 0, 0, Math.PI * 2);
+      } else if (typeof ctx.arc === 'function') {
+        ctx.arc(Math.round(player.x), Math.round(player.y + 10), Math.round(32 * flamePulse), 0, Math.PI * 2);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
 
     // 3. Shadow under player
@@ -694,6 +977,50 @@ class Renderer {
       this.drawWeapon360(ctx, player);
     }
 
+    // Warrior Overlays (Counter Shield frontal arc & Whirlwind ring)
+    if (isWarrior) {
+      if (player.warriorState.counterShieldActive) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle);
+        ctx.strokeStyle = '#00e5ff';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(12, 0, 26, 26, 0, -Math.PI / 3, Math.PI / 3);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(12, 0, 26, -Math.PI / 3, Math.PI / 3);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (player.warriorState.whirlwindActive) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(Date.now() / 80);
+        ctx.strokeStyle = '#ff3d00';
+        ctx.shadowColor = '#ff6d00';
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, 48, 48, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, 48, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    if (isAvatar) {
+      ctx.restore();
+    }
+
     // 5. Draw Player HUD over head
     this.drawPlayerTag(ctx, player, isLocal);
   }
@@ -725,6 +1052,20 @@ class Renderer {
     } else if (weaponId === 'BARRICADE' || weaponId === 'BARREL') {
       ctx.fillStyle = weaponId === 'BARREL' ? '#c62828' : '#8d6e63';
       ctx.fillRect(20, -14, 30, 30);
+    } else if (weaponId === 'BERSERKER_STANCE') {
+      ctx.fillStyle = '#ffd600';
+      ctx.fillRect(12, 5, 4, 10);
+      ctx.fillStyle = '#d32f2f';
+      ctx.fillRect(16, 7, 28, 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(16, 7, 28, 2);
+    } else if (weaponId === 'JUGGERNAUT_STANCE') {
+      ctx.fillStyle = '#ff6d00';
+      ctx.fillRect(10, 4, 6, 12);
+      ctx.fillStyle = '#37474f';
+      ctx.fillRect(16, 5, 32, 10);
+      ctx.fillStyle = '#78909c';
+      ctx.fillRect(16, 7, 30, 4);
     } else {
       // Pistol default
       ctx.fillRect(16, 6, 24, 7);
@@ -752,21 +1093,37 @@ class Renderer {
     ctx.shadowBlur = 4;
     ctx.fillText(player.name, 0, 0);
 
-    // Health bar
     const barW = 36;
     const barH = 5;
     const hpRatio = Math.max(0, player.hp / player.maxHp);
+    const hasArmor = (player.maxArmor || 0) > 0;
 
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(-barW / 2 - 1, 4, barW + 2, barH + 2);
-    ctx.fillStyle = hpRatio > 0.5 ? '#00e676' : (hpRatio > 0.25 ? '#ffeb3b' : '#ff1744');
-    ctx.fillRect(-barW / 2, 5, barW * hpRatio, barH);
+    if (hasArmor) {
+      const armorRatio = Math.max(0, Math.min(1, (player.armor || 0) / player.maxArmor));
+      // Armor bar above HP
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(-barW / 2 - 1, 3, barW + 2, 4);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(-barW / 2, 4, barW * armorRatio, 2);
+
+      // HP bar below Armor
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(-barW / 2 - 1, 8, barW + 2, barH + 2);
+      ctx.fillStyle = hpRatio > 0.5 ? '#00e676' : (hpRatio > 0.25 ? '#ffeb3b' : '#ff1744');
+      ctx.fillRect(-barW / 2, 9, barW * hpRatio, barH);
+    } else {
+      // Standard Health bar
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(-barW / 2 - 1, 4, barW + 2, barH + 2);
+      ctx.fillStyle = hpRatio > 0.5 ? '#00e676' : (hpRatio > 0.25 ? '#ffeb3b' : '#ff1744');
+      ctx.fillRect(-barW / 2, 5, barW * hpRatio, barH);
+    }
 
     // Revive progress bar if active
     if (player.reviving) {
       const revRatio = player.reviveProgress / 2.0;
       ctx.fillStyle = '#00e5ff';
-      ctx.fillRect(-barW / 2, 12, barW * revRatio, 4);
+      ctx.fillRect(-barW / 2, hasArmor ? 16 : 12, barW * revRatio, 4);
     }
 
     ctx.restore();
@@ -886,6 +1243,28 @@ class Renderer {
       ctx.fillStyle = '#fff59d';
       ctx.textAlign = 'center';
       ctx.fillText('★ STUNNED ★', zombie.x, headY - 8);
+      ctx.restore();
+    }
+
+    // 5. Taunted & Feared Warrior Status Overlays
+    if (zombie.isTaunted) {
+      ctx.save();
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = '#ff1744';
+      ctx.shadowColor = '#ff5252';
+      ctx.shadowBlur = 6;
+      ctx.textAlign = 'center';
+      ctx.fillText('💢 TAUNTED', zombie.x, zombie.y - dh / 2 - 20);
+      ctx.restore();
+    }
+    if (zombie.isFeared) {
+      ctx.save();
+      ctx.font = 'bold 11px monospace';
+      ctx.fillStyle = '#e040fb';
+      ctx.shadowColor = '#ea80fc';
+      ctx.shadowBlur = 6;
+      ctx.textAlign = 'center';
+      ctx.fillText('😱 FEAR', zombie.x, zombie.y - dh / 2 - (zombie.isTaunted ? 34 : 20));
       ctx.restore();
     }
   }
@@ -1280,6 +1659,37 @@ class Renderer {
         ctx.lineTo(40, 0);
         ctx.stroke();
 
+      } else if (b.type === 'wind_blade') {
+        // Spinning crescent wind blade
+        ctx.rotate(b.angle || 0);
+        ctx.strokeStyle = '#80d8ff';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, 16, 7, 0, -Math.PI / 2, Math.PI / 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, 14, -Math.PI / 2, Math.PI / 2);
+        }
+        ctx.stroke();
+
+      } else if (b.type === 'fire_slash') {
+        // Blazing crescent fire slash
+        ctx.rotate(b.angle || 0);
+        ctx.strokeStyle = '#ff5722';
+        ctx.fillStyle = '#ffd600';
+        ctx.shadowColor = '#ff3d00';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, 22, 10, 0, -Math.PI / 2, Math.PI / 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, 18, -Math.PI / 2, Math.PI / 2);
+        }
+        ctx.stroke();
+
       } else {
         // Standard tracer bullet
         ctx.rotate(b.angle);
@@ -1490,6 +1900,161 @@ class Renderer {
       ctx.restore();
     }
   }
+
+  drawSwordTrails(ctx) {
+    if (!this.swordTrails || this.swordTrails.length === 0) return;
+    for (let i = 0; i < this.swordTrails.length; i++) {
+      const trail = this.swordTrails[i];
+      const alpha = Math.max(0, trail.life / (trail.maxLife || trail.duration || 0.2));
+      ctx.save();
+      ctx.translate(trail.x, trail.y);
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = trail.color || '#ff3d00';
+      ctx.shadowColor = trail.color || '#ff3d00';
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      if (trail.isFullCircle) {
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, trail.radius, trail.radius, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, trail.radius, 0, Math.PI * 2);
+        }
+      } else {
+        const start = trail.angle - trail.arcRad / 2;
+        const end = trail.angle + trail.arcRad / 2;
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, trail.radius, trail.radius, 0, start, end);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, trail.radius, start, end);
+        }
+      }
+      ctx.stroke();
+
+      // Inner brighter crescent core
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (trail.isFullCircle) {
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, trail.radius * 0.92, trail.radius * 0.92, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, trail.radius * 0.92, 0, Math.PI * 2);
+        }
+      } else {
+        const start = trail.angle - trail.arcRad / 2;
+        const end = trail.angle + trail.arcRad / 2;
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, trail.radius * 0.92, trail.radius * 0.92, 0, start, end);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, trail.radius * 0.92, start, end);
+        }
+      }
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  drawGroundZones(ctx, groundZones) {
+    if (!Array.isArray(groundZones) || groundZones.length === 0) return;
+
+    for (let i = 0; i < groundZones.length; i++) {
+      const gz = groundZones[i];
+      ctx.save();
+      ctx.translate(gz.x, gz.y);
+
+      if (gz.type === 'seismic_fissure') {
+        const rad = gz.radius || 160;
+        const pulse = 0.8 + 0.2 * Math.sin(Date.now() / 150);
+
+        // Outer glow circle
+        ctx.fillStyle = `rgba(255, 87, 34, ${0.15 * pulse})`;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        }
+        ctx.fill();
+
+        // Jagged magma cracks
+        ctx.strokeStyle = `rgba(255, 171, 0, ${0.85 * pulse})`;
+        ctx.shadowColor = '#ff6d00';
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        for (let a = 0; a < 6; a++) {
+          const baseAngle = (a * Math.PI) / 3;
+          const r1 = rad * 0.35;
+          const r2 = rad * 0.85;
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(baseAngle) * r1, Math.sin(baseAngle) * r1);
+          ctx.lineTo(Math.cos(baseAngle + 0.2) * r2, Math.sin(baseAngle + 0.2) * r2);
+        }
+        ctx.stroke();
+
+        // Glowing border
+        ctx.strokeStyle = `rgba(255, 61, 0, ${0.5 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+
+      } else if (gz.type === 'slash_mark') {
+        const rad = gz.radius || 120;
+        const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 100);
+
+        // Warning pull circle
+        ctx.fillStyle = `rgba(213, 0, 0, ${0.18 * pulse})`;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        }
+        ctx.fill();
+
+        // Crimson runic cross / slash
+        ctx.strokeStyle = '#d50000';
+        ctx.shadowColor = '#ff1744';
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.moveTo(-16, -16);
+        ctx.lineTo(16, 16);
+        ctx.moveTo(-16, 16);
+        ctx.lineTo(16, -16);
+        ctx.stroke();
+
+        // Warning border
+        ctx.strokeStyle = `rgba(255, 23, 68, ${0.8 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === 'function') {
+          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+        } else if (typeof ctx.arc === 'function') {
+          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+  }
 }
 
-window.Renderer = Renderer;
+if (typeof window !== 'undefined') {
+  window.Renderer = Renderer;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Renderer };
+}
