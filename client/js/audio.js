@@ -389,6 +389,8 @@ class SoundManager {
         osc.start(noteTime);
         osc.stop(noteTime + 0.1);
       });
+    } else if (ultId === 'AVATAR_OF_WAR') {
+      this.playWarriorSkill('AVATAR_OF_WAR');
     }
   }
 

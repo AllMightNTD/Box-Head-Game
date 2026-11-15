@@ -938,4 +938,11 @@ test('SoundManager: playWarriorSkill handles event object, (skillId, subType) an
   if (sm.ctx.createdNodes) {
     assert.strictEqual(sm.ctx.createdNodes.length, initialNodesCount, 'Muted soundManager should not create new audio nodes');
   }
+
+  // 6. SoundManager.playUltimate('AVATAR_OF_WAR') synthesizes Avatar audio
+  sm.muted = false;
+  const nodesBeforeUlt = sm.ctx.createdNodes ? sm.ctx.createdNodes.length : 0;
+  sm.playUltimate('AVATAR_OF_WAR');
+  const nodesAfterUlt = sm.ctx.createdNodes ? sm.ctx.createdNodes.length : 0;
+  assert.ok(nodesAfterUlt > nodesBeforeUlt, 'playUltimate(AVATAR_OF_WAR) must create audio nodes via WebAudio');
 });
