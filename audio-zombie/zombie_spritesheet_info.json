@@ -1,0 +1,60 @@
+{
+  "cell_size": {
+    "normal": 32,
+    "fast": 32,
+    "big": 48,
+    "rotten": 32,
+    "ghoul": 32,
+    "butcher": 48,
+    "boomer": 32,
+    "burned": 32,
+    "mutant": 40
+  },
+  "variants": {
+    "normal": "Zombie thường",
+    "fast": "Zombie nhanh: gầy, da đỏ nhạt",
+    "big": "Zombie to 1.5x, áo đậm",
+    "rotten": "Xác thối: hở sọ, lộ xương sườn, mất một mắt",
+    "ghoul": "Quỷ đói: gầy trắng bệch, mắt đỏ, tay dài móng vuốt",
+    "butcher": "Đồ tể: trùm bao tải khâu, tạp dề đẫm máu",
+    "boomer": "Zombie mủ: bụng phình, mụn mủ chi chít",
+    "burned": "Xác cháy: than đen, nứt lửa, mắt cam rực",
+    "mutant": "Dị biến: cơ bắp tím, gân xanh phát sáng, móng vuốt"
+  },
+  "columns": 6,
+  "directions_in_row_order": [
+    "S",
+    "SE",
+    "E",
+    "NE",
+    "N",
+    "NW",
+    "W",
+    "SW"
+  ],
+  "animations_in_block_order": [
+    {
+      "name": "idle",
+      "frames": 1
+    },
+    {
+      "name": "walk",
+      "frames": 6
+    },
+    {
+      "name": "attack",
+      "frames": 3
+    },
+    {
+      "name": "hit",
+      "frames": 2
+    },
+    {
+      "name": "die",
+      "frames": 5
+    }
+  ],
+  "row_formula": "row = animation_index * 8 + direction_index",
+  "pivot_hint": "chân nằm ở khoảng 7/8 chiều cao ô",
+  "note": "Dir NW/W/SW = lật ngang của NE/E/SE. Die: 5 frame, frame cuối nằm im."
+}

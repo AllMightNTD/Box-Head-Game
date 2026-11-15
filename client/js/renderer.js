@@ -902,9 +902,12 @@ class Renderer {
     }
 
     // 3. Shadow under player (fitted cleanly inside the 18x9 player ring at y + 24)
+    // 3. Shadow under player (fitted cleanly inside the 18x9 player ring at y + 24)
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
     ctx.beginPath();
+    ctx.ellipse(Math.round(player.x), Math.round(player.y + 24), 14, 6, 0, 0, Math.PI * 2);
     ctx.ellipse(Math.round(player.x), Math.round(player.y + 24), 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
