@@ -78,7 +78,11 @@ class ZombieAudioBank {
       return Date.now();
     };
 
-    this.fetchFn = options.fetchFn !== undefined ? options.fetchFn : (typeof fetch === 'function' ? fetch : null);
+    this.fetchFn = options.fetchFn !== undefined
+      ? options.fetchFn
+      : (typeof window !== 'undefined' && typeof window.fetch === 'function'
+        ? window.fetch.bind(window)
+        : (typeof fetch === 'function' ? fetch.bind(globalThis) : null));
 
     this.buffers = new Map();
     this.rawBuffers = new Map();
@@ -235,7 +239,11 @@ class ZombieAudioBank {
     if (this.decodePromise && this.decodeCtx === ctx) {
       return this.decodePromise;
     }
-    this.decodeCtx = ctx;
+    if (this.decodeCtx !== ctx) {
+      this.buffers.clear();
+      this.decodeCtx = ctx;
+      this.decodePromise = null;
+    }
 
     this.decodePromise = (async () => {
       const entries = this.getAllAssetEntries();

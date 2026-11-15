@@ -206,3 +206,47 @@ test('ZombieAudioBank.updateZombies triggers aggro once, ignores frozen/stunned/
   bank.reset();
   assert.equal(bank.zombieStates.size, 0);
 });
+
+test('ZombieAudioBank.decodeAll clears previous buffers when called with a new AudioContext', async () => {
+  const mockFetch = async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) });
+  const createMockCtx = (id) => ({
+    id,
+    decodeAudioData: async () => ({ duration: 0.5, ctxId: id })
+  });
+
+  const ctx1 = createMockCtx('ctx-1');
+  const ctx2 = createMockCtx('ctx-2');
+
+  const bank = new ZombieAudioBank({ fetchFn: mockFetch });
+  await bank.decodeAll(ctx1);
+  const count1 = bank.buffers.get('rotten/idle').length;
+  assert.equal(count1, 3);
+  assert.equal(bank.buffers.get('rotten/idle')[0].ctxId, 'ctx-1');
+
+  // Calling decodeAll with a new context must replace buffers, not append
+  await bank.decodeAll(ctx2);
+  const count2 = bank.buffers.get('rotten/idle').length;
+  assert.equal(count2, 3, 'Buffer count should not accumulate across context resets');
+  assert.equal(bank.buffers.get('rotten/idle')[0].ctxId, 'ctx-2');
+});
+
+test('ZombieAudioBank binds default fetch to window/globalThis, preventing illegal invocation', async () => {
+  const originalWindow = global.window;
+  try {
+    const mockWindow = {
+      fetch: function (url) {
+        if (this !== mockWindow) {
+          throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+        }
+        return Promise.resolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) });
+      }
+    };
+    global.window = mockWindow;
+
+    const bank = new ZombieAudioBank();
+    const count = await bank.preloadRaw(6);
+    assert.equal(count, 72);
+  } finally {
+    global.window = originalWindow;
+  }
+});
