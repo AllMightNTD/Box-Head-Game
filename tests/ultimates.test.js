@@ -12,7 +12,7 @@ test('UltimateConfig maps classes and legacy skins to valid ultimate specs', () 
 
   // Assert
   assert.strictEqual(humanUlt.id, 'TACTICAL_DRONE');
-  assert.strictEqual(warriorUlt.id, 'SEISMIC_SLAM');
+  assert.strictEqual(warriorUlt.id, 'AVATAR_OF_WAR');
   assert.strictEqual(mageUlt.id, 'BLINK_FROST_NOVA');
   assert.strictEqual(legacyUlt.id, 'TACTICAL_DRONE');
 });

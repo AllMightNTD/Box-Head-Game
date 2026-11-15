@@ -21,13 +21,18 @@ const ULTIMATE_CONFIGS = {
     knockback: 25
   },
   WARRIOR: {
-    id: 'SEISMIC_SLAM',
-    name: 'Seismic Slam',
-    radius: 220,
-    damage: 120,
-    stunDuration: 2.5,
-    bossStunDuration: 1.5,
-    knockback: 520
+    id: 'AVATAR_OF_WAR',
+    name: 'Avatar of War',
+    duration: 10.0,
+    damageMultiplier: 1.5,
+    attackSpeedMultiplier: 1.3,
+    moveSpeedMultiplier: 1.3,
+    fireSlashDamage: 55,
+    fireSlashSpeed: 750,
+    fireSlashRange: 340,
+    endExplosionRadius: 210,
+    endExplosionDamage: 180,
+    endExplosionKnockback: 350
   },
   MAGE: {
     id: 'BLINK_FROST_NOVA',
