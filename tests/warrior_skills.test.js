@@ -12,6 +12,7 @@ const {
 const { getUltimateConfigForClass } = require('../server/game/UltimateConfig.js');
 const { Player } = require('../server/game/Player.js');
 const { GameMap } = require('../server/game/Map.js');
+const { Zombie } = require('../server/game/Zombie.js');
 
 test('WarriorSkillsConfig defines 8 skills with exact combo unlock milestones and spec constants', () => {
   assert.strictEqual(WARRIOR_SKILL_KEYS.length, 8);
@@ -493,5 +494,133 @@ test('Warrior revive restores 50% maxArmor', () => {
   assert.strictEqual(warrior.hp, 40);
   // 50% of 75 = 37.5 -> rounded to 38
   assert.strictEqual(warrior.armor, 38);
+});
+
+test('Review Focus #2: Zombie Taunt overrides nearest target, clears on downed target, and Fear repels non-bosses', () => {
+  const map = new GameMap('THE_ROOMS');
+  const nearHuman = new Player('h1', 'Near', 'HUMAN', 250, 600);
+  const farWarrior = new Player('w1', 'Warrior', 'WARRIOR', 600, 600);
+  const z = new Zombie('z1', 'NORMAL', 300, 600);
+  const boss = new Zombie('b1', 'TANK', 300, 600);
+
+  // Taunt draws z toward farWarrior instead of nearHuman
+  z.applyTaunt('w1', 4.0);
+  z.update(0.1, [nearHuman, farWarrior], [], map, []);
+  assert.ok(z.x > 300, 'Taunted zombie must move East toward farWarrior');
+  assert.strictEqual(z.serialize().isTaunted, true);
+
+  // When farWarrior is downed, taunt clears immediately and zombie targets nearHuman
+  farWarrior.isDowned = true;
+  z.update(0.1, [nearHuman, farWarrior], [], map, []);
+  assert.strictEqual(z.tauntTargetId, null);
+  assert.strictEqual(z.tauntTimer, 0);
+  assert.strictEqual(z.serialize().isTaunted, false);
+
+  // When farWarrior dies, taunt also clears if re-applied
+  farWarrior.isDowned = false;
+  farWarrior.isDead = true;
+  z.applyTaunt('w1', 4.0);
+  z.update(0.1, [nearHuman, farWarrior], [], map, []);
+  assert.strictEqual(z.tauntTargetId, null);
+  assert.strictEqual(z.tauntTimer, 0);
+
+  // Fear forces normal zombie away from (350, 600) while boss ignores Fear
+  const zFear = new Zombie('z2', 'NORMAL', 300, 600);
+  zFear.applyFear(350, 600, 1.5);
+  boss.applyFear(350, 600, 1.5);
+  zFear.update(0.1, [farWarrior], [], map, []);
+  assert.ok(zFear.x < 300, 'Feared normal zombie must flee West away from Warrior');
+  assert.strictEqual(zFear.serialize().isFeared, true);
+  assert.strictEqual(boss.serialize().isFeared, false);
+
+  // Devil also ignores Fear
+  const devil = new Zombie('d1', 'DEVIL', 300, 600);
+  devil.applyFear(350, 600, 1.5);
+  assert.strictEqual(devil.fearTimer, 0);
+  assert.strictEqual(devil.serialize().isFeared, false);
+});
+
+test('Feared zombies flee without attacking or throwing fireballs, and handle identical coordinates cleanly', () => {
+  const map = new GameMap('THE_ROOMS');
+  const warrior = new Player('w1', 'Warrior', 'WARRIOR', 300, 600);
+  const z = new Zombie('z1', 'NORMAL', 305, 600); // within melee range
+  z.attackCooldown = 0;
+  z.applyFear(300, 600, 2.0);
+
+  const initialHp = warrior.hp;
+  z.update(0.1, [warrior], [], map, []);
+  assert.strictEqual(warrior.hp, initialHp, 'Feared zombie in melee range must flee instead of attacking');
+  assert.strictEqual(z.isAttacking, false);
+  assert.ok(z.x > 305, 'Zombie must flee East away from fear source at (300, 600)');
+
+  // Same coordinates fallback (no NaN)
+  const zCenter = new Zombie('zc', 'NORMAL', 300, 600);
+  zCenter.applyFear(300, 600, 1.0);
+  zCenter.update(0.1, [warrior], [], map, []);
+  assert.ok(!Number.isNaN(zCenter.x) && !Number.isNaN(zCenter.y), 'Coordinates must remain finite numbers');
+});
+
+test('Zombie applySlow validates inputs, preserves stronger slow, and reduces movement speed', () => {
+  const map = new GameMap('THE_ROOMS');
+  const player = new Player('p1', 'Target', 'HUMAN', 800, 600);
+
+  // Normal zombie speed baseline
+  const zNorm = new Zombie('zn', 'NORMAL', 300, 600);
+  zNorm.update(0.1, [player], [], map, []);
+  const normalDeltaX = zNorm.x - 300;
+
+  // Slowed zombie (e.g. 50% slow -> slowFactor 0.5)
+  const zSlow = new Zombie('zs', 'NORMAL', 300, 600);
+  zSlow.applySlow(2.0, 0.5);
+  zSlow.update(0.1, [player], [], map, []);
+  const slowDeltaX = zSlow.x - 300;
+
+  assert.ok(slowDeltaX > 0 && slowDeltaX < normalDeltaX, 'Slowed zombie moves slower than normal zombie');
+  assert.ok(Math.abs(slowDeltaX - normalDeltaX * 0.5) < 0.5, 'Slow factor 0.5 reduces movement displacement proportionally');
+
+  // Weaker slow does not weaken an active stronger slow
+  zSlow.applySlow(5.0, 0.8); // 0.8 is weaker than 0.5
+  assert.strictEqual(zSlow.slowFactor, 0.5, 'Active stronger slowFactor 0.5 must be preserved');
+  assert.strictEqual(zSlow.slowTimer >= 5.0 - 0.1, true, 'Duration extended to max');
+
+  // Dead zombie ignores applySlow
+  const zDead = new Zombie('zd', 'NORMAL', 300, 600);
+  zDead.isDead = true;
+  zDead.applySlow(2.0, 0.5);
+  assert.strictEqual(zDead.slowTimer, 0);
+
+  // Invalid inputs ignored
+  const zVal = new Zombie('zv', 'NORMAL', 300, 600);
+  zVal.applySlow(-1, 0.5);
+  zVal.applySlow(2.0, -0.5);
+  zVal.applySlow(2.0, 1.5);
+  zVal.applySlow(NaN, 0.5);
+  zVal.applySlow(2.0, NaN);
+  assert.strictEqual(zVal.slowTimer, 0);
+  assert.strictEqual(zVal.slowFactor, 1.0);
+});
+
+test('Zombie melee attack passes source coordinates allowing Warrior Counter Shield to parry', () => {
+  const map = new GameMap('THE_ROOMS');
+  const warrior = new Player('w1', 'Warrior', 'WARRIOR', 400, 400);
+  warrior.angle = 0; // Facing East (+X)
+  warrior.warriorState.counterShieldTimer = 1.0;
+  warrior.warriorState.counterShieldActive = true;
+
+  // Zombie is in front of warrior at (430, 400) - melee range, East of Warrior
+  const z = new Zombie('z1', 'NORMAL', 430, 400);
+  z.attackCooldown = 0;
+
+  const initialHp = warrior.hp;
+  const initialArmor = warrior.armor;
+  z.update(0.1, [warrior], [], map, []);
+
+  assert.strictEqual(warrior.hp, initialHp, 'Warrior HP must not decrease on parried melee attack');
+  assert.strictEqual(warrior.armor, initialArmor, 'Warrior Armor must not decrease on parried melee attack');
+  assert.strictEqual(warrior.warriorState.counterShieldTimer, 0, 'Counter Shield consumed on parry');
+  assert.ok(warrior.warriorState.pendingParry, 'Pending parry must be set on Warrior');
+  assert.strictEqual(warrior.warriorState.pendingParry.sourceType, 'MELEE');
+  assert.strictEqual(warrior.warriorState.pendingParry.sourceX, z.x);
+  assert.strictEqual(warrior.warriorState.pendingParry.sourceY, z.y);
 });
 
