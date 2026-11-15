@@ -10,6 +10,8 @@ const {
   getUnlockedWarriorSkills
 } = require('../server/game/WarriorSkillsConfig.js');
 const { getUltimateConfigForClass } = require('../server/game/UltimateConfig.js');
+const { Player } = require('../server/game/Player.js');
+const { GameMap } = require('../server/game/Map.js');
 
 test('WarriorSkillsConfig defines 8 skills with exact combo unlock milestones and spec constants', () => {
   assert.strictEqual(WARRIOR_SKILL_KEYS.length, 8);
@@ -234,3 +236,262 @@ test('UltimateConfig defines WARRIOR ultimate as AVATAR_OF_WAR with full spec pa
   assert.strictEqual(warriorUlt.endExplosionDamage, 180);
   assert.strictEqual(warriorUlt.endExplosionKnockback, 350);
 });
+
+test('Warrior starts with 75 Armor, absorbs damage before HP, and Juggernaut reduces frontal damage by 20%', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  warrior.angle = 0; // facing East (+X)
+  assert.strictEqual(warrior.maxArmor, 75);
+  assert.strictEqual(warrior.armor, 75);
+
+  // Unlock Juggernaut stance at combo 5 and switch
+  for (let i = 0; i < 4; i++) warrior.recordKill();
+  assert.strictEqual(warrior.warriorState.skills.JUGGERNAUT_STANCE.unlocked, true);
+  warrior.applyInput({ weaponId: 'JUGGERNAUT_STANCE' });
+  assert.strictEqual(warrior.warriorState.activeStance, 'JUGGERNAUT_STANCE');
+
+  // Frontal attack from East (500, 400): 25% melee + 20% Juggernaut = 45% reduction -> 100 * 0.55 = 55 -> absorbs into 75 armor
+  const resFront = warrior.takeDamage(100, 'MELEE', { sourceX: 500, sourceY: 400 });
+  assert.strictEqual(resFront.blocked, false);
+  assert.strictEqual(resFront.damage, 55);
+  assert.strictEqual(warrior.armor, 20);
+  assert.strictEqual(warrior.hp, 150);
+
+  // Rear attack from West (300, 400): only 25% melee reduction -> 100 * 0.75 = 75 -> drains remaining 20 armor + 55 HP
+  const resBack = warrior.takeDamage(100, 'MELEE', { sourceX: 300, sourceY: 400 });
+  assert.strictEqual(resBack.damage, 75);
+  assert.strictEqual(warrior.armor, 0);
+  assert.strictEqual(warrior.hp, 95);
+});
+
+test('Review Focus #1: Switching to Juggernaut clears Berserker furyStacks and ignores locked stance', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  warrior.warriorState.furyStacks = 6;
+  warrior.warriorState.furyTimer = 3.5;
+
+  // Before combo 5, switching to Juggernaut is rejected and keeps Berserker + stacks
+  warrior.applyInput({ weaponId: 'JUGGERNAUT_STANCE' });
+  assert.strictEqual(warrior.warriorState.activeStance, 'BERSERKER_STANCE');
+  assert.strictEqual(warrior.warriorState.furyStacks, 6);
+
+  // Unlock at combo 5 -> switch clears furyStacks immediately
+  for (let i = 0; i < 4; i++) warrior.recordKill();
+  warrior.applyInput({ weaponId: 'JUGGERNAUT_STANCE' });
+  assert.strictEqual(warrior.warriorState.activeStance, 'JUGGERNAUT_STANCE');
+  assert.strictEqual(warrior.warriorState.furyStacks, 0);
+  assert.strictEqual(warrior.warriorState.furyTimer, 0);
+});
+
+test('Review Focus #4 (Player): Counter Shield blocks frontal hits at 0 dmg once per activation, but rear hits bypass', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  warrior.angle = 0;
+  warrior.warriorState.counterShieldTimer = 1.5;
+  warrior.warriorState.counterShieldActive = true;
+
+  // Attack from behind (West, 180 deg) must NOT trigger parry
+  const rearHit = warrior.takeDamage(40, 'MELEE', { sourceX: 300, sourceY: 400 });
+  assert.strictEqual(rearHit.parried, false);
+  assert.strictEqual(warrior.warriorState.counterShieldTimer, 1.5);
+  assert.ok(warrior.armor < 75);
+
+  // Attack from 60 deg front-right triggers parry once with 0 damage
+  const armorBefore = warrior.armor;
+  const frontHit = warrior.takeDamage(40, 'MELEE', { sourceX: 450, sourceY: 480 });
+  assert.strictEqual(frontHit.blocked, true);
+  assert.strictEqual(frontHit.parried, true);
+  assert.strictEqual(frontHit.damage, 0);
+  assert.strictEqual(warrior.armor, armorBefore);
+  assert.strictEqual(warrior.warriorState.counterShieldTimer, 0);
+  assert.strictEqual(warrior.warriorState.counterShieldActive, false);
+  assert.ok(warrior.warriorState.pendingParry);
+  assert.strictEqual(warrior.warriorState.pendingParry.sourceX, 450);
+
+  // Second hit in the same tick after parry is NOT blocked
+  const secondHit = warrior.takeDamage(40, 'MELEE', { sourceX: 450, sourceY: 400 });
+  assert.strictEqual(secondHit.parried, false);
+});
+
+test('applyWarriorCooldownBonus() & re-reaching milestone reduces [3]..[7] cooldowns by 30% (min 1.5s) and adds +15 ultCharge without touching [8]', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  warrior.ultCharge = 10;
+  warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown = 4.0;
+  warrior.warriorState.skills.COUNTER_SHIELD_BASH.cooldown = 2.0;
+  warrior.warriorState.skills.AVATAR_OF_WAR.cooldown = 50.0;
+
+  // Direct method invocation:
+  // slot 3 (cd 4.0): max(1.5, 4.0 * 0.3 = 1.2) = 1.5 -> cd becomes 2.5
+  // slot 7 (cd 2.0): max(1.5, 2.0 * 0.3 = 0.6) = 1.5 -> cd becomes 0.5
+  // slot 8: unchanged at 50.0
+  warrior.applyWarriorCooldownBonus();
+  assert.strictEqual(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown, 2.5);
+  assert.strictEqual(warrior.warriorState.skills.COUNTER_SHIELD_BASH.cooldown, 0.5);
+  assert.strictEqual(warrior.warriorState.skills.AVATAR_OF_WAR.cooldown, 50.0);
+  assert.strictEqual(warrior.ultCharge, 25);
+
+  // Reach combo milestone 10 (BLADE_WHIRLWIND unlock)
+  for (let i = 0; i < 9; i++) warrior.recordKill();
+  assert.strictEqual(warrior.combo, 10);
+  assert.strictEqual(warrior.warriorState.skills.BLADE_WHIRLWIND.unlocked, true);
+
+  // Let combo decay back to 1
+  warrior.comboTimer = 0;
+  warrior.update(0.1, new GameMap(), []);
+  assert.strictEqual(warrior.combo, 1);
+
+  // Set cooldown on slot 3 again
+  warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown = 4.5;
+  const ultBefore = warrior.ultCharge;
+
+  // Re-reach combo 10
+  for (let i = 0; i < 9; i++) warrior.recordKill();
+  assert.strictEqual(warrior.combo, 10);
+  // Re-reaching milestone 10 triggered applyWarriorCooldownBonus:
+  // cd 4.5 -> reduction max(1.5, 4.5 * 0.3 = 1.35) = 1.5 -> 3.0
+  assert.strictEqual(warrior.warriorState.skills.BLADE_WHIRLWIND.cooldown, 3.0);
+  assert.ok(warrior.ultCharge >= ultBefore + 15);
+});
+
+test('Warrior update(dt) handles passive ult regen, fury expiration, cooldown ticking, speed multipliers, and dash displacement suppression', () => {
+  const map = new GameMap();
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  assert.strictEqual(warrior.speed, 144);
+
+  // 1. Passive ult regen when avatarTimer <= 0
+  warrior.ultCharge = 0;
+  warrior.update(1.0, map, []);
+  assert.ok(Math.abs(warrior.ultCharge - (100 / 60)) < 0.1, 'Should passively gain ~1.67 ultCharge per sec');
+
+  // No passive ult regen when avatarTimer > 0
+  warrior.warriorState.avatarTimer = 5.0;
+  warrior.warriorState.avatarActive = true;
+  const ultDuringAvatar = warrior.ultCharge;
+  warrior.update(1.0, map, []);
+  assert.strictEqual(warrior.ultCharge, ultDuringAvatar, 'No passive ult regen during Avatar');
+  assert.strictEqual(warrior.warriorState.avatarTimer, 4.0);
+  assert.strictEqual(warrior.warriorState.avatarActive, true, 'avatarActive must not be auto-cleared in Player.update');
+  warrior.warriorState.avatarTimer = 0;
+  warrior.warriorState.avatarActive = false;
+
+  // 2. Fury expiration and speed bonus in Berserker stance
+  warrior.warriorState.furyStacks = 5;
+  warrior.warriorState.furyTimer = 0.5;
+  warrior.update(0.1, map, []);
+  // speed: 144 * (1 + 5 * 0.02) = 144 * 1.10 = 158.4
+  assert.strictEqual(warrior.speed, 158.4);
+  assert.strictEqual(warrior.warriorState.furyStacks, 5);
+
+  // Fury expires after 0.5s total
+  warrior.update(0.5, map, []);
+  assert.strictEqual(warrior.warriorState.furyStacks, 0);
+  assert.strictEqual(warrior.warriorState.furyTimer, 0);
+  assert.strictEqual(warrior.speed, 144);
+
+  // 3. Counter Shield speed multiplier (0.75x)
+  warrior.warriorState.counterShieldTimer = 1.0;
+  warrior.warriorState.counterShieldActive = true;
+  warrior.update(0.1, map, []);
+  assert.strictEqual(warrior.speed, 144 * 0.75); // 108
+  warrior.warriorState.counterShieldTimer = 0;
+  warrior.warriorState.counterShieldActive = false;
+
+  // 4. Whirlwind speed multiplier (0.70x)
+  warrior.warriorState.whirlwind = { timer: 1.0, ticksRemaining: 4 };
+  warrior.update(0.1, map, []);
+  assert.strictEqual(warrior.speed, 144 * 0.70); // 100.8
+  warrior.warriorState.whirlwind = null;
+
+  // 5. Dash suppresses WASD movement displacement
+  warrior.warriorState.dash = { timer: 0.18 };
+  warrior.applyInput({ right: true });
+  const startX = warrior.x;
+  warrior.update(0.1, map, []);
+  assert.strictEqual(warrior.x, startX, 'WASD movement must be suppressed while dashing');
+  warrior.warriorState.dash = null;
+
+  // 6. Attack speed multiplier
+  warrior.warriorState.furyStacks = 4;
+  // 1 + 4 * 0.03 = 1.12
+  assert.strictEqual(Number(warrior.getWarriorAttackSpeedMultiplier().toFixed(2)), 1.12);
+  warrior.warriorState.avatarTimer = 5.0;
+  // 1.12 * 1.3 = 1.456
+  assert.strictEqual(Number(warrior.getWarriorAttackSpeedMultiplier().toFixed(3)), 1.456);
+
+  // 7. Damage multiplier
+  assert.strictEqual(warrior.getWarriorDamageMultiplier(), 1.5);
+  warrior.hasWarCryBuff = true;
+  assert.strictEqual(Number(warrior.getWarriorDamageMultiplier().toFixed(3)), Number((1.5 * 1.15).toFixed(3)));
+});
+
+test('Warrior takeDamage clears active channels on downed or dead, and restoreArmor caps at maxArmor', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  warrior.warriorState.whirlwind = { timer: 1.0 };
+  warrior.warriorState.dash = { timer: 0.1 };
+  warrior.warriorState.counterShieldTimer = 1.0;
+  warrior.warriorState.counterShieldActive = true;
+  warrior.warriorState.warCryAuraTimer = 3.0;
+  warrior.warriorState.avatarTimer = 5.0;
+  warrior.warriorState.avatarActive = true;
+  warrior.warriorState.furyStacks = 5;
+  warrior.warriorState.furyTimer = 3.0;
+  warrior.hasWarCryBuff = true;
+
+  // Armor restoration
+  warrior.armor = 50;
+  assert.strictEqual(warrior.restoreArmor(15), 65);
+  assert.strictEqual(warrior.restoreArmor(50), 75); // capped at maxArmor (75)
+
+  // Lethal blow to trigger downed state
+  warrior.takeDamage(500, 'EXPLOSIVE');
+  assert.strictEqual(warrior.isDowned, true);
+  assert.strictEqual(warrior.armor, 0);
+  assert.strictEqual(warrior.hp, 0);
+  assert.strictEqual(warrior.warriorState.whirlwind, null);
+  assert.strictEqual(warrior.warriorState.dash, null);
+  assert.strictEqual(warrior.warriorState.counterShieldTimer, 0);
+  assert.strictEqual(warrior.warriorState.counterShieldActive, false);
+  assert.strictEqual(warrior.warriorState.warCryAuraTimer, 0);
+  assert.strictEqual(warrior.warriorState.avatarTimer, 0);
+  assert.strictEqual(warrior.warriorState.avatarActive, false);
+  assert.strictEqual(warrior.warriorState.furyStacks, 0);
+  assert.strictEqual(warrior.warriorState.furyTimer, 0);
+  assert.strictEqual(warrior.hasWarCryBuff, false);
+});
+
+test('Player serialization includes Armor, hasWarCryBuff, and warriorState for WARRIOR while keeping other classes clean', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  const human = new Player('h1', 'Ranger', 'HUMAN', 400, 400);
+
+  const wSnap = warrior.serialize();
+  assert.strictEqual(wSnap.armor, 75);
+  assert.strictEqual(wSnap.maxArmor, 75);
+  assert.strictEqual(wSnap.hasWarCryBuff, false);
+  assert.ok(wSnap.warriorState);
+  assert.strictEqual(wSnap.warriorState.activeStance, 'BERSERKER_STANCE');
+  assert.strictEqual(wSnap.warriorState.skills.BERSERKER_STANCE.unlocked, true);
+  assert.strictEqual(wSnap.warriorState.skills.JUGGERNAUT_STANCE.unlocked, false);
+
+  const hSnap = human.serialize();
+  assert.strictEqual(hSnap.armor, 0);
+  assert.strictEqual(hSnap.maxArmor, 0);
+  assert.strictEqual(hSnap.hasWarCryBuff, false);
+  assert.strictEqual(hSnap.warriorState, null);
+});
+
+test('Warrior revive restores 50% maxArmor', () => {
+  const warrior = new Player('w1', 'Tank', 'WARRIOR', 400, 400);
+  const medic = new Player('m1', 'Medic', 'HUMAN', 410, 400);
+
+  // Knock down warrior
+  warrior.takeDamage(500, 'EXPLOSIVE');
+  assert.strictEqual(warrior.isDowned, true);
+  assert.strictEqual(warrior.armor, 0);
+
+  // Medic revives warrior
+  medic.startRevive(warrior);
+  const revived = medic.updateRevive(2.1);
+  assert.strictEqual(revived, warrior);
+  assert.strictEqual(warrior.isDowned, false);
+  assert.strictEqual(warrior.hp, 40);
+  // 50% of 75 = 37.5 -> rounded to 38
+  assert.strictEqual(warrior.armor, 38);
+});
+

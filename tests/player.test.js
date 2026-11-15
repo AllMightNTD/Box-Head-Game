@@ -72,9 +72,16 @@ test('Character classes (Human, Warrior, Mage) apply unique attributes', () => {
   assert.strictEqual(warrior.speed, 144);
   assert.strictEqual(warrior.meleeResistance, 0.25);
   assert.strictEqual(warrior.knockbackImmune, true);
+  assert.strictEqual(warrior.maxArmor, 75);
+  assert.strictEqual(warrior.armor, 75);
 
-  // Test Warrior melee damage reduction
-  warrior.takeDamage(40); // 40 - 25% = 30 dmg
+  // Test Warrior melee damage reduction (absorbs into armor first: 40 - 25% = 30 dmg -> armor becomes 45, hp remains 150)
+  warrior.takeDamage(40);
+  assert.strictEqual(warrior.armor, 45);
+  assert.strictEqual(warrior.hp, 150);
+  // Further damage depletes remaining 45 armor and deals 30 to hp (100 - 25% = 75 dmg -> absorbs 45 armor, 30 to hp -> hp becomes 120)
+  warrior.takeDamage(100);
+  assert.strictEqual(warrior.armor, 0);
   assert.strictEqual(warrior.hp, 120);
 
   const mage = new Player('m1', 'MageHero', 'MAGE', 100, 100);
