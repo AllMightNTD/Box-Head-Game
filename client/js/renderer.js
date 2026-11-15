@@ -13,10 +13,12 @@ class Renderer {
     };
 
     // Off-screen canvas for persistent blood splatters
-    this.bloodCanvas = document.createElement('canvas');
-    this.bloodCanvas.width = 1600;
-    this.bloodCanvas.height = 1200;
-    this.bloodCtx = this.bloodCanvas.getContext('2d');
+    if (typeof document !== 'undefined') {
+      this.bloodCanvas = document.createElement('canvas');
+      this.bloodCanvas.width = 1600;
+      this.bloodCanvas.height = 1200;
+      this.bloodCtx = this.bloodCanvas.getContext('2d');
+    }
 
     // Visual particles and floating texts
     this.particles = [];
@@ -645,22 +647,15 @@ class Renderer {
       return;
     }
 
-    // 3. Shadow under player
+    // 3. Shadow under player (fitted cleanly inside the 18x9 player ring at y + 24)
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
     ctx.beginPath();
-    ctx.ellipse(Math.round(player.x), Math.round(player.y + 20), 22, 11, 0, 0, Math.PI * 2);
+    ctx.ellipse(Math.round(player.x), Math.round(player.y + 24), 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
     const dirRow = (window.spriteManager && window.spriteManager.angleToDirectionRow(player.angle)) || 0;
-    // Facing up: Rows 3 (NE), 4 (N), 7 (NW)
-    const isFacingUp = (dirRow === 3 || dirRow === 4 || dirRow === 7);
-
-    // If facing up, weapon is behind player body
-    if (isFacingUp) {
-      this.drawWeapon360(ctx, player);
-    }
 
     // 4. Draw Player Sprite (or fallback)
     let drawnWithSprite = false;
@@ -687,10 +682,6 @@ class Renderer {
 
     if (!drawnWithSprite) {
       this.drawBoxyPlayerFallback(ctx, player);
-    }
-
-    // If facing down or sideways, weapon is in front of player body
-    if (!isFacingUp) {
       this.drawWeapon360(ctx, player);
     }
 
@@ -1492,4 +1483,9 @@ class Renderer {
   }
 }
 
-window.Renderer = Renderer;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Renderer };
+}
+if (typeof window !== 'undefined') {
+  window.Renderer = Renderer;
+}
