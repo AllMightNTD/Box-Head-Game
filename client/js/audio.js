@@ -7,7 +7,7 @@ if (!ZombieAudioBank && typeof require === 'function') {
     ZombieAudioBank = za.ZombieAudioBank;
     ZOMBIE_EVENT_MAX_DIST = za.ZOMBIE_EVENT_MAX_DIST;
   } catch (e) {
-    // Optional fallback when running in bundled or isolated test environments
+    console.warn('[SoundManager] Optional zombieAudio.js CommonJS require failed:', e);
   }
 }
 
