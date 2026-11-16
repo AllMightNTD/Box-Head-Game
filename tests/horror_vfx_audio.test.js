@@ -542,6 +542,407 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.updateHorrorAmbience.length, 1, 'No ambience updates when not in game');
 });
 
+test('SoundManager routes zombie WAV buffers through spatial bus and falls back to synth when unloaded', () => {
+  let bufferSourcesStarted = 0;
+  let oscillatorsStarted = 0;
 
+  const baseCtx = createMockAudioContext();
+  const origCreateBufSrc = baseCtx.createBufferSource;
+  const origCreateOsc = baseCtx.createOscillator;
+  baseCtx.createBufferSource = () => {
+    const n = origCreateBufSrc();
+    n.start = () => { bufferSourcesStarted++; };
+    return n;
+  };
+  baseCtx.createOscillator = () => {
+    const n = origCreateOsc();
+    n.start = () => { oscillatorsStarted++; };
+    return n;
+  };
 
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  // 1. Unloaded WAVs -> synth fallback (no throws)
+  assert.strictEqual(sm.playZombieAttack('DEVIL', 900, 800, 600, 600, 'z_d1', 'ranged'), true);
+  assert.ok(oscillatorsStarted >= 1, 'Devil attack without WAV buffer should fall back to synth');
+
+  // 2. Load mock decoded WAV buffers for all 6 events on TANK (mutant) & NORMAL (rotten)
+  bufferSourcesStarted = 0;
+  oscillatorsStarted = 0;
+  for (const ev of ['idle', 'aggro', 'attack', 'hit', 'die', 'step']) {
+    sm.zombieBank.buffers.set(`mutant/${ev}`, [{ duration: 0.5 }]);
+    sm.zombieBank.buffers.set(`rotten/${ev}`, [{ duration: 0.5 }]);
+  }
+
+  sm.playZombieHit('TANK', 'PISTOL', 850, 800, 610, 600, 'z_t1');
+  sm.playZombieDie('TANK', 850, 800, 610, 600, 'z_t1');
+  assert.strictEqual(sm.playZombieAttack('TANK', 850, 800, 610, 600, 'z_t1', 'melee'), true);
+  assert.strictEqual(sm.playZombieAggro('TANK', 850, 800, 610, 600, 'z_t1'), true);
+  assert.strictEqual(sm.playZombieStep('TANK', 850, 800, 610, 600, 'z_t1'), true);
+  sm.lastGrowlTime = -Infinity;
+  assert.strictEqual(sm.playZombieGrowl('NORMAL', 850, 800, 610, 600, 'z_n1'), true);
+  assert.strictEqual(sm.playZombieGrowl('NORMAL', 850, 800, 610, 600, 'z_n2'), false, 'Growl throttle must still apply with WAV');
+
+  assert.strictEqual(bufferSourcesStarted, 6, 'All 6 zombie WAV events must play via AudioBufferSourceNode');
+  assert.strictEqual(oscillatorsStarted, 0, 'Synth oscillators must not trigger when WAV buffers are present');
+
+  // 3. Muted prevents WAV playback
+  bufferSourcesStarted = 0;
+  sm.muted = true;
+  assert.strictEqual(sm.playZombieAttack('TANK', 850, 800, 610, 600, 'z_t2', 'melee'), false);
+  assert.strictEqual(bufferSourcesStarted, 0);
+
+  // 4. stopHorrorAmbience clears zombieBank tracking state
+  sm.muted = false;
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 2,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_amb', type: 'NORMAL', x: 850, y: 600, isDead: false }]
+  });
+  assert.strictEqual(sm.zombieBank.zombieStates.has('z_amb'), true);
+  sm.stopHorrorAmbience();
+  assert.strictEqual(sm.zombieBank.zombieStates.size, 0);
+});
+
+test('Integration: handleGameEvent routes ZOMBIE_ATTACK and passes 2D coordinates to SoundManager', () => {
+  const calls = { attack: [], hit: [], die: [] };
+  const mockSoundManager = {
+    playZombieAttack: (zType, x, lx, y, ly, zombieId, attackKind) =>
+      calls.attack.push({ zType, x, lx, y, ly, zombieId, attackKind }),
+    playZombieHit: (zType, weapon, x, lx, y, ly, zombieId) =>
+      calls.hit.push({ zType, weapon, x, lx, y, ly, zombieId }),
+    playZombieDie: (zType, x, lx, y, ly, zombieId) =>
+      calls.die.push({ zType, x, lx, y, ly, zombieId })
+  };
+  const mockRenderer = {
+    camera: { x: 800, y: 600 },
+    addDirectionalBlood: () => {},
+    addZombieCorpse: () => {}
+  };
+  const snapshot = {
+    wave: 2,
+    players: [{ id: 'p1', x: 400, y: 300 }],
+    zombies: []
+  };
+  const ctx = { soundManager: mockSoundManager, renderer: mockRenderer, myPlayerId: 'p1' };
+
+  handleGameEvent({ type: 'ZOMBIE_ATTACK', zombieId: 'z9', zType: 'DEVIL', x: 700, y: 350, attackKind: 'ranged' }, snapshot, ctx);
+  handleGameEvent({ type: 'HIT', zombieId: 'z9', zType: 'DEVIL', weapon: 'bullet', x: 700, y: 350, angle: 0 }, snapshot, ctx);
+  handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'DEVIL', x: 700, y: 350, killAngle: 0 }, snapshot, ctx);
+
+  assert.deepStrictEqual(calls.attack[0], {
+    zType: 'DEVIL', x: 700, lx: 400, y: 350, ly: 300, zombieId: 'z9', attackKind: 'ranged'
+  });
+  assert.strictEqual(calls.hit[0].y, 350);
+  assert.strictEqual(calls.hit[0].ly, 300);
+  assert.strictEqual(calls.hit[0].zombieId, 'z9');
+  assert.strictEqual(calls.die[0].y, 350);
+  assert.strictEqual(calls.die[0].ly, 300);
+});
+
+test('SoundManager.createSpatialBus with enableDistanceGain=false eliminates compound double distance attenuation for zombie WAV audio', () => {
+  const baseCtx = createMockAudioContext();
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const createdGains = [];
+  const origCreateGain = baseCtx.createGain.bind(baseCtx);
+  baseCtx.createGain = () => {
+    const g = origCreateGain();
+    createdGains.push(g);
+    return g;
+  };
+
+  const createdPanners = [];
+  const origCreatePanner = baseCtx.createStereoPanner.bind(baseCtx);
+  baseCtx.createStereoPanner = () => {
+    const p = origCreatePanner();
+    createdPanners.push(p);
+    return p;
+  };
+
+  sm.zombieBank.buffers.set('mutant/hit', [{ duration: 0.5 }]);
+
+  // Test 1: Horizontal zombie at (1000, 500), listener at (500, 500), maxDist = 1000
+  createdGains.length = 0;
+  createdPanners.length = 0;
+  const resH = sm.playZombieSample('TANK', 'hit', 1000, 500, 500, 500, { zombieId: 'z_h', reverbSend: 0 });
+  assert.strictEqual(resH, true);
+
+  const busInputGainH = createdGains[0].gain.value;
+  const wavGainH = createdGains[1].gain.value;
+  const panH = createdPanners[0].pan.value;
+
+  // Test 2: Vertical zombie at (500, 1000), listener at (500, 500), maxDist = 1000
+  sm.zombieBank.lastEventTimes.delete('hit');
+  createdGains.length = 0;
+  createdPanners.length = 0;
+  const resV = sm.playZombieSample('TANK', 'hit', 500, 1000, 500, 500, { zombieId: 'z_v', reverbSend: 0 });
+  assert.strictEqual(resV, true);
+
+  const busInputGainV = createdGains[0].gain.value;
+  const wavGainV = createdGains[1].gain.value;
+  const panV = createdPanners[0].pan.value;
+
+  // Assertions:
+  // 1. Equal Euclidean distance yields identical gain on WAV buffer gainNode (0.5 * baseVolume = 0.4)
+  assert.strictEqual(wavGainH, 0.4, 'Horizontal zombie WAV gainNode should be 0.4');
+  assert.strictEqual(wavGainV, 0.4, 'Vertical zombie WAV gainNode should be 0.4');
+  assert.strictEqual(wavGainH, wavGainV, 'WAV gainNode gains must be identical at equal Euclidean distance');
+
+  // 2. Spatial bus input gain must remain 1.0 (no 1D horizontal compounding)
+  assert.strictEqual(busInputGainH, 1.0, 'bus.input.gain for horizontal zombie must be 1.0');
+  assert.strictEqual(busInputGainV, 1.0, 'bus.input.gain for vertical zombie must be 1.0');
+
+  // 3. Stereo panning: horizontal zombie pans right (> 0), vertical zombie is centered (0)
+  assert.ok(panH > 0, `Horizontal zombie should pan right (> 0), got ${panH}`);
+  assert.strictEqual(panV, 0, 'Vertical zombie pan should be 0');
+
+  // 4. Backward compatibility: createSpatialBus defaults enableDistanceGain = true
+  const defaultBus = sm.createSpatialBus(1000, 500);
+  assert.ok(defaultBus.input.gain.value < 1.0, 'Default createSpatialBus must apply 1D distance attenuation');
+  assert.strictEqual(defaultBus.input.gain.value, sm.computeDistanceGain(1000, 500));
+});
+
+test('SoundManager.playZombieSample checks canPlayEvent before ensureContext', () => {
+  const sm = new SoundManager();
+  let ensureContextCalled = 0;
+  sm.ensureContext = () => { ensureContextCalled++; };
+  sm.zombieBank.buffers.set('mutant/hit', [{ duration: 0.5 }]);
+
+  sm.zombieBank.canPlayEvent = () => false;
+  const res = sm.playZombieSample('TANK', 'hit', 1000, 500, 500, 500);
+  assert.strictEqual(res, false);
+  assert.strictEqual(ensureContextCalled, 0, 'ensureContext must not be called when canPlayEvent returns false');
+});
+
+test('SoundManager setupAudioGraph handles missing compressor/convolver, configures zombieBusGain, and exposes diagnostics', () => {
+  const createdGains = [];
+  const baseCtx = createMockAudioContext();
+  const origCreateGain = baseCtx.createGain.bind(baseCtx);
+  baseCtx.createGain = () => {
+    const g = origCreateGain();
+    createdGains.push(g);
+    return g;
+  };
+  delete baseCtx.createDynamicsCompressor;
+  delete baseCtx.createConvolver;
+
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  assert.doesNotThrow(() => sm.setupAudioGraph());
+  sm.initialized = true;
+
+  assert.strictEqual(sm.masterGain.gain.value, 0.55);
+  assert.strictEqual(sm.compressor, sm.masterGain);
+  assert.strictEqual(sm.reverbNode, null);
+  assert.ok(sm.zombieBusGain, 'zombieBusGain must be created for zombie submix');
+  assert.strictEqual(sm.zombieBusGain.gain.value, 1.65);
+
+  const diag = sm.getAudioDiagnostics();
+  assert.strictEqual(diag.initialized, true);
+  assert.strictEqual(diag.muted, false);
+  assert.strictEqual(diag.ctxState, 'running');
+  assert.strictEqual(diag.totalCount, 72);
+  assert.strictEqual(diag.decodedCount, 0);
+});
+
+test('SoundManager.unlockFromGesture resumes suspended AudioContext, notifies subscribers, and playZombieSample skips suspended ctx', async () => {
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    await Promise.resolve();
+    mockCtx.state = 'running';
+    if (typeof mockCtx.onstatechange === 'function') mockCtx.onstatechange();
+  };
+
+  let decodeCalls = 0;
+  const sm = new SoundManager();
+  sm.zombieBank.decodeAll = async () => {
+    decodeCalls++;
+    sm.zombieBank.buffers.set('rotten/hit', [{ duration: 0.3 }]);
+    return 1;
+  };
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const events = [];
+  const unsub = sm.subscribe((d) => events.push(d.ctxState));
+
+  // While suspended, playZombieSample must NOT schedule or mutate cooldowns
+  sm.zombieBank.buffers.set('rotten/hit', [{ duration: 0.3 }]);
+  assert.strictEqual(sm.playZombieSample('NORMAL', 'hit', 800, 600, 800, 600, { zombieId: 'z_susp' }), false);
+
+  const unlocked = await sm.unlockFromGesture();
+  assert.strictEqual(unlocked, true);
+  assert.strictEqual(mockCtx.state, 'running');
+  assert.ok(events.includes('running'));
+  assert.strictEqual(sm.playUnlockTestChime(), true);
+
+  // When buffer count was 0, unlockFromGesture triggers decodeAll
+  sm.zombieBank.buffers.clear();
+  await sm.unlockFromGesture();
+  assert.strictEqual(decodeCalls, 1);
+
+  unsub();
+});
+
+test('SoundManager capture-phase bindGestureUnlock unlocks on pointerdown/keydown/touchstart/click', async () => {
+  const listeners = {};
+  const mockTarget = {
+    addEventListener: (ev, fn, opts) => {
+      listeners[ev] = { fn, opts };
+    },
+    removeEventListener: (ev) => {
+      delete listeners[ev];
+    }
+  };
+  const sm = new SoundManager();
+  let unlockCount = 0;
+  sm.unlockFromGesture = async () => {
+    unlockCount++;
+    return true;
+  };
+
+  sm.bindGestureUnlock(mockTarget);
+  for (const evName of ['pointerdown', 'mousedown', 'keydown', 'touchstart', 'click']) {
+    assert.ok(listeners[evName], `Expected ${evName} listener`);
+    assert.strictEqual(listeners[evName].opts.capture, true, `${evName} must use capture phase`);
+  }
+
+  listeners.pointerdown.fn();
+  assert.strictEqual(unlockCount, 1);
+});
+
+test('All 6 zombie types play WAV buffers across all 6 events through SoundManager', () => {
+  let startedCount = 0;
+  const ctx = createMockAudioContext();
+  const origBufSrc = ctx.createBufferSource;
+  ctx.createBufferSource = () => {
+    const src = origBufSrc();
+    src.start = () => {
+      startedCount++;
+      if (typeof src.onended === 'function') {
+        src.onended();
+      }
+    };
+    return src;
+  };
+
+  const sm = new SoundManager({ nowFn: () => 5000 });
+  sm.ctx = ctx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const profiles = ['rotten', 'ghoul', 'mutant', 'burned', 'butcher', 'boomer'];
+  const events = ['idle', 'aggro', 'attack', 'hit', 'die', 'step'];
+  for (const p of profiles) {
+    for (const ev of events) {
+      sm.zombieBank.buffers.set(`${p}/${ev}`, [{ duration: 0.4 }]);
+    }
+  }
+
+  const types = ['NORMAL', 'RUNNER', 'TANK', 'DEVIL', 'MUMMY', 'VAMPIRE'];
+  for (let i = 0; i < types.length; i++) {
+    const t = types[i];
+    const zid = `z_${t}_${i}`;
+    sm.playZombieHit(t, 'PISTOL', 820, 800, 610, 600, zid);
+    sm.playZombieDie(t, 820, 800, 610, 600, zid);
+    assert.strictEqual(sm.playZombieAttack(t, 820, 800, 610, 600, zid, 'melee'), true);
+    assert.strictEqual(sm.playZombieAggro(t, 820, 800, 610, 600, zid), true);
+    assert.strictEqual(sm.playZombieStep(t, 820, 800, 610, 600, zid), true);
+    sm.lastGrowlTime = -Infinity;
+    assert.strictEqual(sm.playZombieGrowl(t, 820, 800, 610, 600, zid), true);
+  }
+  assert.strictEqual(startedCount, 36, 'All 6 zombie types x 6 events must play WAV samples');
+  assert.strictEqual(sm.zombieBank.activeVoices, 0, 'Active voices must return to 0 when buffer playback ends');
+});
+
+test('Sound toggle state handling unlocks suspended AudioContext without muting and syncs WAV counts', async () => {
+  const sm = new SoundManager();
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    mockCtx.state = 'running';
+  };
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+  sm.zombieBank.decodeAll = async () => {
+    sm.zombieBank.buffers.set('rotten/idle', [{ duration: 0.4 }]);
+    return 1;
+  };
+
+  // Before unlock: suspended, unmuted, 0 decoded
+  const before = sm.getAudioDiagnostics();
+  assert.strictEqual(before.ctxState, 'suspended');
+  assert.strictEqual(before.muted, false);
+  assert.strictEqual(before.decodedCount, 0);
+
+  // Explicit unlock action from button click must keep muted=false and decode WAVs
+  const running = await sm.unlockFromGesture();
+  assert.strictEqual(running, true);
+  await sm.preloadZombieAudio();
+  const after = sm.getAudioDiagnostics();
+  assert.strictEqual(after.ctxState, 'running');
+  assert.strictEqual(after.muted, false);
+  assert.strictEqual(after.decodedCount, 1);
+  assert.strictEqual(sm.playUnlockTestChime(), true);
+});
+
+test('SoundManager.updateAmbienceGrowls retries aggro after gesture unlock when initial playback returned false', async () => {
+  let startedCount = 0;
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    await Promise.resolve();
+    mockCtx.state = 'running';
+  };
+  const origCreateBufSrc = mockCtx.createBufferSource;
+  mockCtx.createBufferSource = () => {
+    const src = origCreateBufSrc();
+    src.start = () => {
+      startedCount++;
+      if (typeof src.onended === 'function') {
+        src.onended();
+      }
+    };
+    return src;
+  };
+
+  const sm = new SoundManager();
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+  sm.zombieBank.buffers.set('rotten/aggro', [{ duration: 0.5 }]);
+
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 1,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_retry_sm', type: 'NORMAL', x: 850, y: 600, isFrozen: false, isStunned: false }]
+  });
+
+  assert.strictEqual(sm.zombieBank.zombieStates.get('z_retry_sm').hasAggroed, false);
+  assert.strictEqual(startedCount, 0);
+
+  await sm.unlockFromGesture();
+
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 1,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_retry_sm', type: 'NORMAL', x: 850, y: 600, isFrozen: false, isStunned: false }]
+  });
+
+  assert.strictEqual(startedCount, 1);
+  assert.strictEqual(sm.zombieBank.zombieStates.get('z_retry_sm').hasAggroed, true);
+});
 
