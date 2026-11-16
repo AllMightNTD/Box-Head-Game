@@ -209,25 +209,27 @@ class SoundManager {
       });
 
       // Post-shot event sequencing
-      if (norm === 'shotgun') {
-        setTimeout(() => {
-          if (!this.muted && this.ctx) {
-            this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'pump', { sourceX, listenerX, delay: 0 });
-            this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'casing', { sourceX, listenerX, delay: 0.05 });
-          }
-        }, 220);
-      } else if (norm === 'railgun') {
-        setTimeout(() => {
-          if (!this.muted && this.ctx) {
-            this.weaponBank.playSample(this.ctx, targetNode, 'railgun', 'cooldown', { sourceX, listenerX, delay: 0 });
-          }
-        }, 180);
-      } else if (norm === 'pistol' || norm === 'uzi') {
-        setTimeout(() => {
-          if (!this.muted && this.ctx) {
-            this.weaponBank.playSample(this.ctx, targetNode, norm, 'casing', { sourceX, listenerX, delay: 0 });
-          }
-        }, 50);
+      if (playedWav) {
+        if (norm === 'shotgun') {
+          setTimeout(() => {
+            if (!this.muted && this.ctx) {
+              this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'pump', { sourceX, listenerX, delay: 0 });
+              this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'casing', { sourceX, listenerX, delay: 0.05 });
+            }
+          }, 220);
+        } else if (norm === 'railgun') {
+          setTimeout(() => {
+            if (!this.muted && this.ctx) {
+              this.weaponBank.playSample(this.ctx, targetNode, 'railgun', 'cooldown', { sourceX, listenerX, delay: 0 });
+            }
+          }, 180);
+        } else if (norm === 'pistol' || norm === 'uzi') {
+          setTimeout(() => {
+            if (!this.muted && this.ctx) {
+              this.weaponBank.playSample(this.ctx, targetNode, norm, 'casing', { sourceX, listenerX, delay: 0 });
+            }
+          }, 50);
+        }
       }
     } else if (norm === 'grenade' && this.weaponBank && this.weaponBank.hasBuffer('grenade', 'throw')) {
       playedWav = this.weaponBank.playSample(this.ctx, targetNode, 'grenade', 'throw', {
@@ -487,10 +489,11 @@ class SoundManager {
       this.stopRocketLoops();
       return;
     }
+    const safeRockets = Array.isArray(rockets) ? rockets : [];
     const currentIds = new Set();
     const targetNode = this.compressor || this.masterGain || this.ctx.destination;
 
-    for (const r of rockets) {
+    for (const r of safeRockets) {
       if (!r || !r.id) continue;
       currentIds.add(r.id);
       if (!this.rocketLoops.has(r.id)) {

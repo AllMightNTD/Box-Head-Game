@@ -248,13 +248,18 @@ class WeaponAudioBank {
 
     endNode.connect(destNode);
 
-    this.activeVoices++;
     src.onended = () => {
       this.activeVoices = Math.max(0, this.activeVoices - 1);
     };
 
-    src.start(t);
-    return true;
+    try {
+      src.start(t);
+      this.activeVoices++;
+      return true;
+    } catch (err) {
+      src.onended = null;
+      return false;
+    }
   }
 
   createRocketLoop(ctx, destNode, options = {}) {

@@ -124,3 +124,28 @@ test('WeaponAudioBank - Preload, decode and playSample with mock AudioContext', 
   assert.strictEqual(bank.hasAnyBuffers(), false);
   assert.strictEqual(bank.activeVoices, 0);
 });
+
+test('WeaponAudioBank - playSample catches src.start errors and prevents activeVoices leak', () => {
+  const bank = new WeaponAudioBank({ maxVoices: 5 });
+  bank.buffers.set('pistol/fire_1', { duration: 0.5 });
+
+  const throwingCtx = {
+    currentTime: 0,
+    state: 'running',
+    createBufferSource: () => ({
+      buffer: null,
+      playbackRate: { setValueAtTime: () => {} },
+      connect: () => {},
+      start: () => { throw new Error('AudioContext in invalid state'); },
+      onended: null
+    }),
+    createGain: () => ({
+      gain: { setValueAtTime: () => {} },
+      connect: () => {}
+    })
+  };
+
+  const played = bank.playSample(throwingCtx, {}, 'pistol', 'fire');
+  assert.strictEqual(played, false);
+  assert.strictEqual(bank.activeVoices, 0);
+});

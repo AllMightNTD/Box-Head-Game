@@ -43,7 +43,7 @@ class Bullet {
           radius: this.explosionRadius,
           damage: this.explosionDamage,
           ownerId: this.ownerId,
-          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
+          source: (this.type || 'generic').toUpperCase()
         };
       }
     }
@@ -64,7 +64,7 @@ class Bullet {
           radius: this.explosionRadius,
           damage: this.explosionDamage,
           ownerId: this.ownerId,
-          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
+          source: (this.type || 'generic').toUpperCase()
         };
       }
       return null;
@@ -81,7 +81,7 @@ class Bullet {
           radius: this.explosionRadius,
           damage: this.explosionDamage,
           ownerId: this.ownerId,
-          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
+          source: (this.type || 'generic').toUpperCase()
         };
       }
       return null;

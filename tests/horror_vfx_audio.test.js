@@ -462,6 +462,26 @@ test('SoundManager weapon audio integration with procedural fallback', () => {
   sm.droneActive = true;
   sm.stopHorrorAmbience();
   assert.strictEqual(sm.rocketLoops.size, 0, 'stopHorrorAmbience must clear rocket loops');
+
+  // Null guard: updateRocketFlight(null, 0) should not throw and should clean up loops
+  sm.updateRocketFlight([{ id: 'r3', x: 100 }], 0);
+  assert.strictEqual(sm.rocketLoops.size, 1);
+  assert.doesNotThrow(() => {
+    sm.updateRocketFlight(null, 0);
+  });
+  assert.strictEqual(sm.rocketLoops.size, 0);
+
+  // Secondary shot sequencing guard: when playSample returns false, do not schedule secondary sounds
+  const secondaryCalls = [];
+  sm.weaponBank.hasBuffer = () => true;
+  sm.weaponBank.playSample = (ctx, dest, weapon, event) => {
+    secondaryCalls.push({ weapon, event });
+    return false;
+  };
+  sm.playShoot('SHOTGUN', 100, 0);
+  sm.playShoot('RAILGUN', 100, 0);
+  sm.playShoot('PISTOL', 100, 0);
+  assert.deepStrictEqual(secondaryCalls.map(c => c.event), ['fire', 'fire', 'fire']);
 });
 
 const { handleGameEvent, gameLoop } = require('../client/js/main.js');
