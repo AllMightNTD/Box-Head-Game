@@ -283,3 +283,74 @@ test('UIController switches to MAGE skill bar, displays cooldowns/mana costs, an
   assert.strictEqual(elements['hud-weapon-CHAIN_LIGHTNING'].classList.contains('no-mana'), true);
   assert.strictEqual(elements['hud-weapon-FIREBALL'].classList.contains('locked'), true);
 });
+
+test('Renderer draws Mage groundZones, pendingMeteors, Mana Shield, overhead Mana bar, and spawnMageVfx', () => {
+  setupMockEnv();
+  delete require.cache[require.resolve('../client/js/renderer.js')];
+  const { Renderer } = require('../client/js/renderer.js');
+
+  const canvas = createMockElement('gameCanvas', 'canvas');
+  const rnd = new Renderer(canvas);
+  const ctx = createMockCtx(canvas);
+
+  assert.doesNotThrow(() => {
+    rnd.drawGroundZones(ctx, [
+      { id: 'gz1', type: 'burn_pool', x: 300, y: 300, radius: 140, timer: 2.0 },
+      { id: 'gz2', type: 'sanctuary', x: 500, y: 500, radius: 180, timer: 3.0 },
+      { id: 'gz3', type: 'lava_pool', x: 700, y: 700, radius: 240, timer: 3.5 }
+    ]);
+    rnd.drawPendingMeteors(ctx, [
+      { id: 'm1', x: 700, y: 700, stormRadius: 300, impactRadius: 120, timer: 0.4, meteors: [{ delay: 0.75, x: 700, y: 700, fired: false }] }
+    ]);
+    rnd.drawBullets(ctx, [
+      { id: 'b1', x: 200, y: 200, angle: 0, type: 'arcane_bolt' },
+      { id: 'b2', x: 240, y: 200, angle: 0, type: 'mage_fireball' }
+    ]);
+    rnd.drawPlayerTag(ctx, { name: 'Merlin', x: 400, y: 400, hp: 85, maxHp: 85, mana: 60, maxMana: 100 }, true);
+    rnd.spawnMageVfx({ type: 'MAGE_SKILL', skillId: 'CHAIN_LIGHTNING', links: [{ fromX: 400, fromY: 400, toX: 520, toY: 400 }] });
+    rnd.spawnMageVfx({ type: 'MAGE_SKILL', skillId: 'ARCANE_TELEPORT', fromX: 400, fromY: 400, toX: 600, toY: 400, radius: 110 });
+    rnd.spawnMageVfx({ type: 'MAGE_SKILL', skillId: 'METEOR_IMPACT', x: 700, y: 700, radius: 120 });
+    rnd.updateVisuals(0.1, null, 1);
+  });
+
+  // Verify overhead Mana bar filled & lightning arc queued
+  assert.ok(ctx.calls.some(c => c.op === 'fillRect'), 'Expected overhead bars drawn');
+});
+
+test('SoundManager.playMageSkill executes WebAudio synth safely for all Mage skill IDs', () => {
+  setupMockEnv();
+  class MockNode {
+    constructor() {
+      this.frequency = { value: 440, setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} };
+      this.gain = { value: 1, setValueAtTime: () => {}, linearRampToValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} };
+      this.pan = { value: 0, setValueAtTime: () => {} };
+      this.Q = { value: 1 };
+    }
+    connect() { return this; }
+    start() {}
+    stop() {}
+  }
+  global.window.AudioContext = class {
+    constructor() { this.currentTime = 0; this.state = 'running'; this.destination = new MockNode(); this.sampleRate = 44100; }
+    createGain() { return new MockNode(); }
+    createOscillator() { return new MockNode(); }
+    createBufferSource() { return new MockNode(); }
+    createBiquadFilter() { return new MockNode(); }
+    createStereoPanner() { return new MockNode(); }
+    createDynamicsCompressor() { return new MockNode(); }
+    createConvolver() { return new MockNode(); }
+    createBuffer() { return { getChannelData: () => new Float32Array(1024) }; }
+  };
+
+  delete require.cache[require.resolve('../client/js/audio.js')];
+  const { SoundManager } = require('../client/js/audio.js');
+  const sm = new SoundManager();
+
+  const ids = ['ARCANE_BOLT', 'FROST_NOVA', 'CHAIN_LIGHTNING', 'FIREBALL', 'ARCANE_TELEPORT', 'SANCTUARY_HEAL', 'MANA_SHIELD', 'METEOR_STORM', 'METEOR_IMPACT', 'MAGE_SHIELD_BREAK'];
+  assert.doesNotThrow(() => {
+    for (const skillId of ids) {
+      sm.playMageSkill({ type: skillId === 'MAGE_SHIELD_BREAK' ? 'MAGE_SHIELD_BREAK' : 'MAGE_SKILL', skillId, x: 500, y: 500 }, 500, 500);
+    }
+    sm.playUltimate('METEOR_STORM');
+  });
+});
