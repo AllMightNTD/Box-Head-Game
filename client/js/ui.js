@@ -30,7 +30,13 @@ class UIController {
     this.modalMapPreview = document.getElementById('modal-map-preview');
     this.copyToast = document.getElementById('copy-toast');
 
+    this.lanBannerTitle = document.getElementById('lan-banner-title');
     this.lanIpDisplay = document.getElementById('lan-ip-display');
+    this.connectionStatusBanner = document.getElementById('connection-status-banner');
+    this.connectionStatusText = document.getElementById('connection-status-text');
+    this.deployConfig = (typeof window !== 'undefined' && window.DeployClient)
+      ? window.DeployClient.getDeployConfig(window)
+      : { showLanBanner: true, showColdStartHint: false };
     this.nicknameInput = document.getElementById('nickname-input');
     this.roomNameInput = document.getElementById('room-name-input');
     this.roomsListBody = document.getElementById('rooms-list-body');
@@ -135,16 +141,47 @@ class UIController {
   }
 
   fetchLanIp() {
-    fetch('/api/info')
+    const showLan = this.deployConfig && this.deployConfig.showLanBanner !== false && (typeof window !== 'undefined' && window.location.protocol !== 'https:');
+    if (!showLan) {
+      if (this.lanBannerTitle) {
+        this.lanBannerTitle.textContent = '🌐 LINK CHƠI ONLINE (CHIA SẺ CHO BẠN BÈ):';
+      }
+      if (this.lanIpDisplay) {
+        this.lanIpDisplay.textContent = (typeof window !== 'undefined' ? window.location.origin : '');
+      }
+      return;
+    }
+
+    const infoUrl = (typeof window !== 'undefined' && window.DeployClient)
+      ? window.DeployClient.resolveApiUrl('/api/info', this.deployConfig, window)
+      : '/api/info';
+
+    fetch(infoUrl)
       .then(r => r.json())
       .then(data => {
-        this.lanIp = data.lanIp;
-        this.lanPort = data.port;
-        this.lanIpDisplay.textContent = `http://${data.lanIp}:${data.port}`;
+        if (data && data.exposeLanIp && data.lanIp) {
+          this.lanIp = data.lanIp;
+          this.lanPort = data.port;
+          this.lanIpDisplay.textContent = `http://${data.lanIp}:${data.port}`;
+        } else {
+          if (this.lanBannerTitle) {
+            this.lanBannerTitle.textContent = '🌐 LINK CHƠI ONLINE (CHIA SẺ CHO BẠN BÈ):';
+          }
+          this.lanIpDisplay.textContent = window.location.origin;
+        }
       })
       .catch(() => {
         this.lanIpDisplay.textContent = window.location.origin;
       });
+  }
+
+  setConnectionStatus(state, message) {
+    if (!this.connectionStatusBanner || !this.connectionStatusText) return;
+    this.connectionStatusBanner.classList.remove('connecting', 'connected', 'disconnected', 'error', 'hidden');
+    if (state) {
+      this.connectionStatusBanner.classList.add(state);
+    }
+    this.connectionStatusText.textContent = message || '';
   }
 
   initSoundToggle() {
@@ -495,10 +532,16 @@ class UIController {
       this.showToast('⚠ Chưa vào phòng nào để copy link!');
       return;
     }
-    let base = window.location.origin;
-    if (this.lanIp && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      base = `http://${this.lanIp}:${this.lanPort}`;
-    }
+    const base = (typeof window !== 'undefined' && window.DeployClient)
+      ? window.DeployClient.resolveRoomInviteBaseUrl({
+          origin: window.location.origin,
+          hostname: window.location.hostname,
+          protocol: window.location.protocol,
+          lanIp: this.lanIp,
+          lanPort: this.lanPort,
+          showLanBanner: this.deployConfig ? this.deployConfig.showLanBanner : true
+        })
+      : (typeof window !== 'undefined' ? window.location.origin : '');
     const inviteUrl = `${base}/#room=${encodeURIComponent(this.currentRoom.id)}`;
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
