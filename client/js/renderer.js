@@ -2637,7 +2637,26 @@ class Renderer {
     if (!ev) return;
     const id = ev.skillId || ev.ultId;
     if (id === 'FROST_NOVA') {
-      this.addShockwave(ev.x, ev.y, ev.radius || 120, '#00e5ff');
+      const r = ev.radius || 180;
+      this.addShockwave(ev.x, ev.y, r, '#00e5ff');
+      this.addShockwave(ev.x, ev.y, Math.round(r * 0.65), '#e0f7fa');
+      this.triggerScreenShake(6);
+      if (!this.particles) this.particles = [];
+      const frostColors = ['#00e5ff', '#80deea', '#b2ebf2', '#e0f7fa', '#ffffff'];
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+        const spd = Math.random() * 180 + 90;
+        this.particles.push({
+          x: ev.x,
+          y: ev.y,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          radius: Math.random() * 4 + 3,
+          color: frostColors[Math.floor(Math.random() * frostColors.length)],
+          life: 0.45,
+          maxLife: 0.45
+        });
+      }
     } else if (id === 'CHAIN_LIGHTNING' && Array.isArray(ev.links)) {
       if (!this.lightningArcs) this.lightningArcs = [];
       this.lightningArcs.push({ links: ev.links, life: 0.25, maxLife: 0.25 });

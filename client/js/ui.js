@@ -1,12 +1,12 @@
 const MAGE_SKILL_DEFINITIONS = [
-  { id: 'ARCANE_BOLT', key: 1, name: 'Tia Ma Pháp', unlockCombo: 1, manaCost: 5, icon: '✨' },
-  { id: 'FROST_NOVA', key: 2, name: 'Băng Giá', unlockCombo: 5, manaCost: 20, icon: '❄️' },
+  { id: 'ARCANE_BOLT', key: 1, name: 'Tia Ma Pháp', unlockCombo: 1, manaCost: 0, icon: '✨' },
+  { id: 'FROST_NOVA', key: 2, name: 'Băng Giá', unlockCombo: 5, manaCost: 10, icon: '❄️' },
   { id: 'CHAIN_LIGHTNING', key: 3, name: 'Lôi Điện', unlockCombo: 10, manaCost: 30, icon: '⚡' },
   { id: 'FIREBALL', key: 4, name: 'Hỏa Cầu', unlockCombo: 15, manaCost: 35, icon: '🔥' },
   { id: 'ARCANE_TELEPORT', key: 5, name: 'Dịch Chuyển', unlockCombo: 20, manaCost: 25, icon: '🌀' },
   { id: 'SANCTUARY_HEAL', key: 6, name: 'Thánh Vực', unlockCombo: 30, manaCost: 35, icon: '💠' },
   { id: 'MANA_SHIELD', key: 7, name: 'Khiên Mana', unlockCombo: 40, manaCost: 15, icon: '🛡️' },
-  { id: 'METEOR_STORM', key: 8, name: 'Thiên Thạch', unlockCombo: 50, manaCost: 100, icon: '☄️' }
+  { id: 'METEOR_STORM', key: 8, name: 'Thiên Thạch', unlockCombo: 1, manaCost: 100, icon: '☄️' }
 ];
 
 const WARRIOR_SKILL_DEFINITIONS = [
@@ -185,28 +185,55 @@ class UIController {
   }
 
   initSoundToggle() {
-    const updateSoundLabels = (isMuted) => {
-      const text = isMuted ? '🔇 Âm thanh: TẮT' : '🔊 Âm thanh: BẬT';
+    const formatSoundLabel = (diag) => {
+      if (!diag) return '🔊 Âm thanh: BẬT';
+      if (!diag.supported) return '⚠ Web Audio không hỗ trợ';
+      if (diag.muted) return '🔇 Âm thanh: TẮT';
+      if (diag.ctxState !== 'running') {
+        return `⏳ Bấm để bật tiếng (${diag.decodedCount}/${diag.totalCount})`;
+      }
+      return `🔊 Âm thanh: BẬT (${diag.decodedCount}/${diag.totalCount})`;
+    };
+
+    const syncLabels = (diagOverride) => {
+      const sm = typeof window !== 'undefined' ? window.soundManager : null;
+      const diag = diagOverride || (sm && typeof sm.getAudioDiagnostics === 'function'
+        ? sm.getAudioDiagnostics()
+        : { supported: true, muted: Boolean(sm && sm.muted), ctxState: 'running', decodedCount: 0, totalCount: 72 });
+      const text = formatSoundLabel(diag);
       if (this.btnSoundToggle) this.btnSoundToggle.textContent = text;
       if (this.btnPauseSound) this.btnPauseSound.textContent = text;
     };
 
-    if (this.btnSoundToggle) {
-      this.btnSoundToggle.addEventListener('click', () => {
-        if (window.soundManager) {
-          const isMuted = window.soundManager.toggleMute();
-          updateSoundLabels(isMuted);
+    const handleSoundButtonClick = async () => {
+      const sm = typeof window !== 'undefined' ? window.soundManager : null;
+      if (!sm) return;
+      const diag = typeof sm.getAudioDiagnostics === 'function' ? sm.getAudioDiagnostics() : null;
+      if (diag && !diag.muted && diag.ctxState !== 'running' && typeof sm.unlockFromGesture === 'function') {
+        const running = await sm.unlockFromGesture();
+        if (running && typeof sm.playUnlockTestChime === 'function') {
+          sm.playUnlockTestChime();
         }
-      });
-    }
+        syncLabels();
+        return;
+      }
+      const isMuted = sm.toggleMute();
+      if (!isMuted && typeof sm.playUnlockTestChime === 'function') {
+        setTimeout(() => sm.playUnlockTestChime(), 20);
+      }
+      syncLabels();
+    };
 
+    if (typeof window !== 'undefined' && window.soundManager && typeof window.soundManager.subscribe === 'function') {
+      window.soundManager.subscribe((diag) => syncLabels(diag));
+    }
+    syncLabels();
+
+    if (this.btnSoundToggle) {
+      this.btnSoundToggle.addEventListener('click', handleSoundButtonClick);
+    }
     if (this.btnPauseSound) {
-      this.btnPauseSound.addEventListener('click', () => {
-        if (window.soundManager) {
-          const isMuted = window.soundManager.toggleMute();
-          updateSoundLabels(isMuted);
-        }
-      });
+      this.btnPauseSound.addEventListener('click', handleSoundButtonClick);
     }
   }
 
@@ -915,7 +942,19 @@ class UIController {
             return;
           }
 
-          if (ammoEl) ammoEl.textContent = `${s.manaCost} MP`;
+          if (s.key === 1) {
+            if (ammoEl) ammoEl.textContent = '∞';
+          } else if (s.key === 8) {
+            const cd = sk && sk.cooldown > 0 ? sk.cooldown : 0;
+            if (cd > 0) {
+              const cdStr = `${cd.toFixed(1)}s`;
+              if (ammoEl) ammoEl.textContent = cdStr;
+            } else {
+              if (ammoEl) ammoEl.textContent = currentMana >= 100 ? 'READY' : `${s.manaCost} MP`;
+            }
+          } else {
+            if (ammoEl) ammoEl.textContent = `${s.manaCost} MP`;
+          }
           const cd = sk && sk.cooldown > 0 ? sk.cooldown : 0;
           if (cd > 0) {
             const cdStr = `${cd.toFixed(1)}s`;
@@ -1078,7 +1117,7 @@ class UIController {
           this.hudUltFill.style.width = mPct + '%';
           this.hudUltStatus.textContent = `${curM} / ${maxM} MP`;
           this.hudUltContainer.classList.toggle('ready', curM >= 100);
-          if (this.hudUltHint) this.hudUltHint.textContent = 'Hồi +5 Mana/giây • [F] / [Chuột Phải] / [8]: Thiên Thạch (100 MP, x50)';
+          if (this.hudUltHint) this.hudUltHint.textContent = 'Hồi +5 Mana/giây • [F] / [Chuột Phải] / [8]: Thiên Thạch (100 MP, CD 50s)';
         } else {
           this.hudUltContainer.classList.remove('mana-mode');
           const maxC = localPlayer.ultMaxCharge || 100;

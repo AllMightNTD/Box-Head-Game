@@ -150,6 +150,7 @@ test('GameRoom emits enriched HIT and ZOMBIE_DIE events with angle, weapon, and 
   assert.strictEqual(typeof hitEv.angle, 'number');
   assert.strictEqual(hitEv.weapon, 'bullet');
   assert.strictEqual(hitEv.zType, 'TANK');
+  assert.strictEqual(hitEv.zombieId, 'z_test_2');
 
   assert.ok(dieEv, 'Expected ZOMBIE_DIE event to be emitted');
   assert.strictEqual(dieEv.zType, 'TANK');
@@ -176,5 +177,173 @@ test('GameRoom triggerExplosion emits ZOMBIE_DIE with killAngle', (t) => {
   assert.strictEqual(typeof dieEv.killAngle, 'number');
 });
 
+test('GameRoom triggerExplosion includes source tag in EXPLOSION event', () => {
+  const room = new GameRoom('test_room', 'host_id', 'Host');
+  if (room.initGame) room.initGame('hospital');
+  room.triggerExplosion(300, 300, 150, 200, 'host_id', 'ROCKET');
+
+  const expEvent = room.eventsBuffer.find(e => e.type === 'EXPLOSION');
+  assert.ok(expEvent, 'EXPLOSION event must be emitted');
+  assert.strictEqual(expEvent.source, 'ROCKET');
+});
+
+test('GameRoom triggerExplosion defaults to GENERIC source when unspecified', () => {
+  const room = new GameRoom('test_room_default', 'host_id', 'Host');
+  room.triggerExplosion(100, 100, 80, 50, 'host_id');
+
+  const expEvent = room.eventsBuffer.find(e => e.type === 'EXPLOSION');
+  assert.ok(expEvent, 'EXPLOSION event must be emitted');
+  assert.strictEqual(expEvent.source, 'GENERIC');
+});
+
+test('Bullet update returns source for grenade, rocket wall hit, and out-of-range', () => {
+  const { Bullet } = require('../server/game/Bullet.js');
+
+  // Grenade fuse explosion
+  const grenade = new Bullet('g1', 'p1', 100, 100, 0, {
+    type: 'grenade',
+    fuseTime: 0.1,
+    explosionRadius: 120,
+    explosionDamage: 150
+  });
+  const res1 = grenade.update(0.15);
+  assert.ok(res1 && res1.exploded, 'Grenade should explode when fuse expires');
+  assert.strictEqual(res1.source, 'GRENADE');
+
+  // Rocket out of range explosion
+  const rocket = new Bullet('r1', 'p1', 100, 100, 0, {
+    type: 'rocket',
+    speed: 1000,
+    range: 100,
+    explosionRadius: 160,
+    explosionDamage: 200
+  });
+  const res2 = rocket.update(0.2); // travels 200 >= 100
+  assert.ok(res2 && res2.exploded, 'Rocket should explode when out of range');
+  assert.strictEqual(res2.source, 'ROCKET');
+
+  // Rocket wall hit explosion
+  const mockMap = { isWall: () => true };
+  const rocketWall = new Bullet('r2', 'p1', 50, 50, 0, {
+    type: 'rocket',
+    speed: 500,
+    range: 1000
+  });
+  const res3 = rocketWall.update(0.01, mockMap);
+  assert.ok(res3 && res3.exploded, 'Rocket should explode on wall collision');
+  assert.strictEqual(res3.source, 'ROCKET');
+});
+
+test('GameRoom tick routes bullet, barrel, and fireball explosions with correct source tags', (t) => {
+  const emittedSnapshots = [];
+  const mockIo = {
+    to: () => ({
+      emit: (evName, data) => {
+        if (evName === 'game:snapshot') emittedSnapshots.push(data);
+      }
+    }),
+    emit: () => {}
+  };
+  const room = new GameRoom('room-audio-src', 'Audio Source Test', mockIo);
+  t.after(() => room.stop());
+  room.state = 'PLAYING';
+
+  const { Bullet } = require('../server/game/Bullet.js');
+  const { Barrel } = require('../server/game/Barricade.js');
+
+  // 1. Grenade exploding in tick
+  const grenade = new Bullet('g_tick', 'p1', 200, 200, 0, {
+    type: 'grenade',
+    fuseTime: 0.05
+  });
+  room.bullets.push(grenade);
+  room.tick(0.1);
+
+  const allEvents1 = emittedSnapshots.flatMap(s => s.events);
+  const grenadeExp = allEvents1.find(e => e.type === 'EXPLOSION' && e.source === 'GRENADE');
+  assert.ok(grenadeExp, 'Expected EXPLOSION event with source GRENADE');
+
+  // 2. Barrel exploding from bullet hit in tick
+  emittedSnapshots.length = 0;
+  const barrel = new Barrel('bar_tick', 300, 300);
+  room.barricades.push(barrel);
+  const bullet = new Bullet('b_tick', 'p1', 300, 300, 0, {
+    type: 'pistol',
+    damage: 100 // barrel has 100 hp, should detonate
+  });
+  room.bullets.push(bullet);
+  room.tick(0.01);
+
+  const allEvents2 = emittedSnapshots.flatMap(s => s.events);
+  const barrelExp = allEvents2.find(e => e.type === 'EXPLOSION' && e.source === 'BARREL');
+  assert.ok(barrelExp, 'Expected EXPLOSION event with source BARREL');
+
+  // 3. Fireball hitting player in tick
+  emittedSnapshots.length = 0;
+  const player = room.addPlayer('p_target', 'Target', 'HUMAN');
+  player.x = 740;
+  player.y = 550;
+  const fireball = new Bullet('fb_tick', null, 740, 550, 0, {
+    type: 'fireball',
+    isFireball: true,
+    explosionRadius: 55,
+    explosionDamage: 45
+  });
+  room.bullets.push(fireball);
+  room.tick(0.01);
+
+  const allEvents3 = emittedSnapshots.flatMap(s => s.events);
+  const fbExp = allEvents3.find(e => e.type === 'EXPLOSION' && e.source === 'FIREBALL');
+  assert.ok(fbExp, 'Expected EXPLOSION event with source FIREBALL');
+});
+
+test('GameRoom emits ZOMBIE_ATTACK for melee and Devil ranged attacks and suppresses when frozen', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('room-z-attack', 'Zombie Attack', mockIo);
+  t.after(() => room.stop());
+
+  const p = room.addPlayer('p1', 'Alice', 'HUMAN');
+  room.startGame();
+  p.x = 500;
+  p.y = 500;
+
+  const { Zombie } = require('../server/game/Zombie.js');
+  const meleeZ = new Zombie('z_melee', 'NORMAL', 515, 500);
+  meleeZ.attackCooldown = 0;
+  const devilZ = new Zombie('z_devil', 'DEVIL', 750, 500);
+  devilZ.attackCooldown = 0;
+  const frozenZ = new Zombie('z_frozen', 'RUNNER', 515, 500);
+  frozenZ.attackCooldown = 0;
+  frozenZ.applyFreeze(2.0);
+  room.zombies.push(meleeZ, devilZ, frozenZ);
+
+  const snapshots = [];
+  room.io = {
+    to: () => ({ emit: (ev, data) => { if (ev === 'game:snapshot') snapshots.push(data); } })
+  };
+
+  room.tick(0.02);
+  room.tick(0.02);
+
+  const tick1Events = snapshots[0].events.filter(e => e.type === 'ZOMBIE_ATTACK');
+  const tick2Events = snapshots[1].events.filter(e => e.type === 'ZOMBIE_ATTACK');
+
+  const meleeEv = tick1Events.find(e => e.zombieId === 'z_melee');
+  const devilEv = tick1Events.find(e => e.zombieId === 'z_devil');
+  const frozenEv = tick1Events.find(e => e.zombieId === 'z_frozen');
+
+  assert.ok(meleeEv, 'Expected melee ZOMBIE_ATTACK event');
+  assert.strictEqual(meleeEv.zType, 'NORMAL');
+  assert.strictEqual(meleeEv.attackKind, 'melee');
+  assert.strictEqual(typeof meleeEv.x, 'number');
+  assert.strictEqual(typeof meleeEv.y, 'number');
+
+  assert.ok(devilEv, 'Expected devil ranged ZOMBIE_ATTACK event');
+  assert.strictEqual(devilEv.zType, 'DEVIL');
+  assert.strictEqual(devilEv.attackKind, 'ranged');
+
+  assert.strictEqual(frozenEv, undefined, 'Frozen zombie must not emit ZOMBIE_ATTACK');
+  assert.strictEqual(tick2Events.length, 0, 'Cooldown tick must not repeat ZOMBIE_ATTACK');
+});
 
 

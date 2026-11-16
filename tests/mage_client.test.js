@@ -317,6 +317,28 @@ test('Renderer draws Mage groundZones, pendingMeteors, Mana Shield, overhead Man
   assert.ok(ctx.calls.some(c => c.op === 'fillRect'), 'Expected overhead bars drawn');
 });
 
+test('Renderer.spawnMageVfx creates dual shockwaves and frost particles for FROST_NOVA', () => {
+  setupMockEnv();
+  delete require.cache[require.resolve('../client/js/renderer.js')];
+  const { Renderer } = require('../client/js/renderer.js');
+  const canvas = createMockElement('gameCanvas', 'canvas');
+  const rnd = new Renderer(canvas);
+
+  rnd.spawnMageVfx({
+    type: 'MAGE_SKILL',
+    skillId: 'FROST_NOVA',
+    x: 500,
+    y: 500,
+    radius: 180
+  });
+
+  assert.ok(rnd.shockwaves.length >= 2, 'Should create at least dual shockwaves');
+  assert.strictEqual(rnd.shockwaves[0].maxRadius, 180);
+  assert.strictEqual(rnd.shockwaves[1].maxRadius, Math.round(180 * 0.65));
+  assert.ok(rnd.particles.length >= 20, 'Should spawn at least 20 frost particles');
+  assert.strictEqual(rnd.camera.shake > 0, true);
+});
+
 test('SoundManager.playMageSkill executes WebAudio synth safely for all Mage skill IDs', () => {
   setupMockEnv();
   class MockNode {
