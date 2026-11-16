@@ -472,6 +472,7 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
     triggerScreenShake: [],
     addMuzzleFlash: [],
     playZombieHit: [],
+    playRailgunImpact: [],
     addDirectionalBlood: [],
     playZombieDie: [],
     addZombieCorpse: [],
@@ -480,9 +481,13 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
     playWaveStart: [],
     addFloatingText: [],
     stopHorrorAmbience: 0,
+    stopRocketLoops: 0,
     resetSession: 0,
     updateVisuals: [],
     updateHorrorAmbience: [],
+    updateRocketFlight: [],
+    playWeaponReload: [],
+    playWeaponEmpty: [],
     render: [],
     updateHUD: []
   };
@@ -490,11 +495,17 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   const mockSoundManager = {
     playShoot: (w, x, lx) => calls.playShoot.push({ w, x, lx }),
     playZombieHit: (zt, w, x, lx) => calls.playZombieHit.push({ zt, w, x, lx }),
+    playRailgunImpact: (x, lx) => calls.playRailgunImpact.push({ x, lx }),
     playZombieDie: (zt, x, lx) => calls.playZombieDie.push({ zt, x, lx }),
-    playExplosion: (scale, x, lx) => calls.playExplosion.push({ scale, x, lx }),
+    playExplosion: (scale, x, lx, source) => calls.playExplosion.push({ scale, x, lx, source }),
     playWaveStart: (wave) => calls.playWaveStart.push(wave),
     playGameOver: () => {},
+    playPickup: () => {},
+    playWeaponReload: (w, x, lx) => calls.playWeaponReload.push({ w, x, lx }),
+    playWeaponEmpty: (w, x, lx) => calls.playWeaponEmpty.push({ w, x, lx }),
     stopHorrorAmbience: () => { calls.stopHorrorAmbience++; },
+    stopRocketLoops: () => { calls.stopRocketLoops++; },
+    updateRocketFlight: (rockets, lx) => calls.updateRocketFlight.push({ rockets, lx }),
     updateHorrorAmbience: (dt, state) => calls.updateHorrorAmbience.push({ dt, state })
   };
 
@@ -561,45 +572,73 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.addDirectionalBlood.length, 1);
   assert.strictEqual(calls.addDirectionalBlood[0].angle, 0.25);
   assert.strictEqual(calls.addDirectionalBlood[0].isKill, false);
+  assert.strictEqual(calls.playRailgunImpact.length, 0);
+
+  // HIT with railgun triggers playRailgunImpact
+  handleGameEvent({ type: 'HIT', zType: 'NORMAL', weapon: 'railgun', x: 880, y: 600, angle: 0 }, snapshot, context);
+  assert.strictEqual(calls.playRailgunImpact.length, 1);
+  assert.strictEqual(calls.playRailgunImpact[0].x, 880);
+  assert.strictEqual(calls.playRailgunImpact[0].lx, 800);
 
   // 3. ZOMBIE_DIE: Normal zombie -> visceral dark red #7f0000
   handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'NORMAL', x: 850, y: 600, killAngle: 1.2 }, snapshot, context);
   assert.strictEqual(calls.playZombieDie.length, 1);
-  assert.strictEqual(calls.addDirectionalBlood[1].color, '#7f0000');
-  assert.strictEqual(calls.addDirectionalBlood[1].isKill, true);
+  assert.strictEqual(calls.addDirectionalBlood[2].color, '#7f0000');
+  assert.strictEqual(calls.addDirectionalBlood[2].isKill, true);
   assert.strictEqual(calls.addZombieCorpse.length, 1);
 
   // ZOMBIE_DIE: Devil zombie -> crimson red #c62828
   handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'DEVIL', x: 850, y: 600, killAngle: 0.8 }, snapshot, context);
-  assert.strictEqual(calls.addDirectionalBlood[2].color, '#c62828');
+  assert.strictEqual(calls.addDirectionalBlood[3].color, '#c62828');
 
-  // 4. EXPLOSION: large radius -> scale 1.4
-  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 150 }, snapshot, context);
+  // 4. EXPLOSION: large radius -> scale 1.4 with source forwarding
+  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 150, source: 'ROCKET' }, snapshot, context);
   assert.strictEqual(calls.playExplosion[0].scale, 1.4);
+  assert.strictEqual(calls.playExplosion[0].source, 'ROCKET');
   assert.strictEqual(calls.addExplosionParticles.length, 1);
 
-  // EXPLOSION: standard radius -> scale 1.0
-  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 80 }, snapshot, context);
+  // EXPLOSION: standard radius -> scale 1.0 with source
+  handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 80, source: 'GRENADE' }, snapshot, context);
   assert.strictEqual(calls.playExplosion[1].scale, 1.0);
+  assert.strictEqual(calls.playExplosion[1].source, 'GRENADE');
 
   // 5. WAVE_START
   handleGameEvent({ type: 'WAVE_START', wave: 4 }, snapshot, context);
   assert.strictEqual(calls.playWaveStart[0], 4);
   assert.strictEqual(calls.addFloatingText.length, 1);
 
-  // 6. GAME_OVER & SESSION_RESET stop horror ambience
+  // PICKUP triggers playWeaponReload with active weapon
+  handleGameEvent({ type: 'PICKUP' }, snapshot, context);
+  assert.strictEqual(calls.playWeaponReload.length, 1);
+  assert.strictEqual(calls.playWeaponReload[0].w, 'PISTOL');
+  assert.strictEqual(calls.playWeaponReload[0].x, 800);
+  assert.strictEqual(calls.playWeaponReload[0].lx, 800);
+
+  // 6. GAME_OVER & SESSION_RESET stop horror ambience and rocket loops
   handleGameEvent({ type: 'GAME_OVER' }, snapshot, context);
   assert.strictEqual(calls.stopHorrorAmbience, 1);
   handleGameEvent({ type: 'SESSION_RESET' }, snapshot, context);
   assert.strictEqual(calls.stopHorrorAmbience, 2);
+  assert.strictEqual(calls.stopRocketLoops, 1);
   assert.strictEqual(calls.resetSession, 1);
 
   // 7. gameLoop bindings
+  snapshot.bullets = [
+    { id: 'r1', type: 'rocket', x: 860, y: 600 },
+    { id: 'b1', type: 'bullet', x: 880, y: 600 }
+  ];
+  const mockInput = {
+    isShooting: () => true
+  };
+  snapshot.players[0].selectedWeapon = 'UZI';
+  snapshot.players[0].weapons = { UZI: { ammo: 0 } };
+
   const loopContext = {
     interpolator: { getInterpolatedState: () => snapshot },
     renderer: mockRenderer,
     soundManager: mockSoundManager,
     ui: mockUI,
+    input: mockInput,
     isInGame: true,
     myPlayerId: 'player_me',
     currentMap: { name: 'THE_ROOMS' }
@@ -611,6 +650,14 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.updateHorrorAmbience.length, 1);
   assert.strictEqual(calls.updateHorrorAmbience[0].state.wave, 3);
   assert.strictEqual(calls.updateHorrorAmbience[0].state.isInGame, true);
+  assert.strictEqual(calls.updateRocketFlight.length, 1, 'updateRocketFlight should be called for active rockets');
+  assert.strictEqual(calls.updateRocketFlight[0].rockets.length, 1);
+  assert.strictEqual(calls.updateRocketFlight[0].rockets[0].id, 'r1');
+  assert.strictEqual(calls.updateRocketFlight[0].lx, 800);
+  assert.strictEqual(calls.playWeaponEmpty.length, 1, 'playWeaponEmpty should be called when shooting with 0 ammo');
+  assert.strictEqual(calls.playWeaponEmpty[0].w, 'UZI');
+  assert.strictEqual(calls.playWeaponEmpty[0].x, 800);
+  assert.strictEqual(calls.playWeaponEmpty[0].lx, 800);
   assert.strictEqual(calls.render.length, 1);
   assert.strictEqual(calls.updateHUD.length, 1);
 

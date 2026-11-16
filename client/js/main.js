@@ -6,14 +6,33 @@
     window.spriteManager.preloadAll().catch(err => console.warn('Sprite preload error:', err));
   }
 
+  // Preload weapon audio assets in background
+  if (isBrowser && window.soundManager && window.soundManager.weaponBank) {
+    window.soundManager.weaponBank.preloadRaw().catch(err => {
+      console.warn('Weapon audio preload error:', err);
+    });
+  }
+
   const socket = isBrowser && typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
   const canvas = isBrowser ? document.getElementById('gameCanvas') : null;
   const renderer = isBrowser && typeof Renderer === 'function' && canvas ? new Renderer(canvas) : null;
   const input = isBrowser && typeof InputHandler === 'function' && canvas ? new InputHandler(canvas) : {
     resetKeys: () => {},
     setWeaponSlot: () => {},
-    getInputPayload: () => ({})
+    getInputPayload: () => ({}),
+    isShooting: () => false
   };
+
+  if (typeof InputHandler !== 'undefined' && InputHandler.prototype && !InputHandler.prototype.isShooting) {
+    InputHandler.prototype.isShooting = function () {
+      return Boolean(this.keys && (this.keys.shoot || (this.mouse && this.mouse.isDown)));
+    };
+  }
+  if (input && typeof input.isShooting !== 'function') {
+    input.isShooting = function () {
+      return Boolean(this.keys && (this.keys.shoot || (this.mouse && this.mouse.isDown)));
+    };
+  }
   const interpolator = isBrowser && typeof Interpolator === 'function' ? new Interpolator() : {
     snapshots: [],
     addSnapshot: () => {},
@@ -353,6 +372,9 @@
     if (sm && typeof sm.stopHorrorAmbience === 'function') {
       sm.stopHorrorAmbience();
     }
+    if (sm && typeof sm.stopRocketLoops === 'function') {
+      sm.stopRocketLoops();
+    }
     if (rnd) rnd.resetSession();
     if (interpolator) interpolator.snapshots = [];
     if (input) {
@@ -376,7 +398,12 @@
     } else if (ev.type === 'ULTIMATE') {
       handleUltimateEvent(ev, rnd, snd);
     } else if (ev.type === 'HIT') {
-      if (snd) snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
+      if (snd) {
+        snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
+        if (ev.weapon === 'railgun' && typeof snd.playRailgunImpact === 'function') {
+          snd.playRailgunImpact(ev.x, listenerX);
+        }
+      }
       if (rnd) rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
     } else if (ev.type === 'ZOMBIE_DIE') {
       if (snd) snd.playZombieDie(ev.zType, ev.x, listenerX);
@@ -386,7 +413,7 @@
         rnd.addZombieCorpse(ev);
       }
     } else if (ev.type === 'EXPLOSION') {
-      if (snd) snd.playExplosion(ev.radius > 120 ? 1.4 : 1.0, ev.x, listenerX);
+      if (snd) snd.playExplosion(ev.radius > 120 ? 1.4 : 1.0, ev.x, listenerX, ev.source);
       if (rnd) rnd.addExplosionParticles(ev.x, ev.y, ev.radius);
     } else if (ev.type === 'UNLOCKED') {
       if (snd) snd.playComboUpgrade();
@@ -404,7 +431,13 @@
       const sm = snd || (typeof window !== 'undefined' ? window.soundManager : null);
       if (sm && typeof sm.stopHorrorAmbience === 'function') sm.stopHorrorAmbience();
     } else if (ev.type === 'PICKUP') {
-      if (snd) snd.playPickup();
+      if (snd) {
+        snd.playPickup();
+        const activeWeapon = (localPlayer && localPlayer.selectedWeapon) || 'PISTOL';
+        if (typeof snd.playWeaponReload === 'function') {
+          snd.playWeaponReload(activeWeapon, localPlayer ? localPlayer.x : 0, listenerX);
+        }
+      }
     } else if (ev.type === 'REVIVE') {
       if (rnd) rnd.addFloatingText('ĐÃ HỒI SINH ĐỒNG ĐỘI!', rnd.camera.x, rnd.camera.y - 40, '#00e5ff', 24);
     } else if (ev.type === 'SESSION_RESET') {
@@ -433,6 +466,7 @@
     const inGame = context.isInGame !== undefined ? context.isInGame : isInGame;
     const myId = context.myPlayerId !== undefined ? context.myPlayerId : myPlayerId;
     const activeMap = context.currentMap !== undefined ? context.currentMap : currentMap;
+    const activeInput = context.input !== undefined ? context.input : input;
 
     const state = inGame && interp ? interp.getInterpolatedState() : null;
     if (rnd) {
@@ -441,6 +475,8 @@
 
     if (inGame && state) {
       const localPlayer = state.players ? (state.players.find(p => p.id === myId) || state.players[0]) : null;
+      const listenerX = localPlayer ? localPlayer.x : (rnd && rnd.camera ? rnd.camera.x : 0);
+
       if (sm && typeof sm.updateHorrorAmbience === 'function') {
         sm.updateHorrorAmbience(dt, {
           isInGame: state.state !== 'GAMEOVER',
@@ -448,6 +484,15 @@
           localPlayer,
           zombies: state.zombies || []
         });
+      }
+      if (sm && typeof sm.updateRocketFlight === 'function') {
+        const rockets = (state.bullets || []).filter(b => b.type === 'rocket');
+        sm.updateRocketFlight(rockets, listenerX);
+      }
+      if (activeInput && typeof activeInput.isShooting === 'function' && activeInput.isShooting() && localPlayer && localPlayer.weapons?.[localPlayer.selectedWeapon]?.ammo === 0) {
+        if (sm && typeof sm.playWeaponEmpty === 'function') {
+          sm.playWeaponEmpty(localPlayer.selectedWeapon, localPlayer.x, listenerX);
+        }
       }
       if (rnd) rnd.render(state, myId, activeMap);
       if (uic) uic.updateHUD(state, myId);
