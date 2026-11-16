@@ -126,3 +126,134 @@ test('UltimateConfig maps MAGE to METEOR_STORM', () => {
   const mageUlt = getUltimateConfigForClass('MAGE');
   assert.strictEqual(mageUlt.id, 'METEOR_STORM');
 });
+
+const { Player } = require('../server/game/Player.js');
+
+test('Player initializes Mage Mana state, regenerates +5/s, and respects Sanctuary cooldown multiplier', () => {
+  // Arrange
+  const map = new GameMap('THE_ROOMS');
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 300);
+
+  // Assert initial state
+  assert.strictEqual(mage.maxHp, 85);
+  assert.strictEqual(mage.speed, 188);
+  assert.strictEqual(mage.maxMana, 100);
+  assert.strictEqual(mage.mana, 100);
+  assert.strictEqual(mage.selectedWeapon, 'ARCANE_BOLT');
+  assert.ok(mage.mageState);
+  assert.strictEqual(mage.mageState.skills.ARCANE_BOLT.unlocked, true);
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.unlocked, false);
+  assert.strictEqual(mage.mageState.skills.METEOR_STORM.unlocked, false);
+
+  // Act: spend mana and put skill on CD
+  assert.strictEqual(mage.consumeMana(40), true);
+  assert.strictEqual(mage.mana, 60);
+  assert.strictEqual(mage.consumeMana(70), false);
+  assert.strictEqual(mage.mana, 60);
+
+  mage.mageState.skills.FROST_NOVA.cooldown = 5.0;
+  mage.update(2.0, map, []);
+  assert.strictEqual(mage.mana, 70); // 60 + 5 * 2
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.cooldown, 3.0);
+
+  // Sanctuary buff speeds up cooldown recovery by 1.35x
+  mage.hasSanctuaryBuff = true;
+  mage.update(1.0, map, []);
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.cooldown, 1.65);
+});
+
+test('Mage recordKill skips gun unlocks & ultCharge, unlocks Mage skills by combo, and AMMO pickup restores +30 Mana & -1.5s CD', () => {
+  // Arrange
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 300);
+  mage.mana = 50;
+  mage.mageState.skills.FROST_NOVA.cooldown = 4.0;
+  mage.mageState.skills.CHAIN_LIGHTNING.cooldown = 1.0;
+
+  // Act: 4 kills -> combo reaches 5 -> unlocks FROST_NOVA
+  let unlocked = [];
+  for (let i = 0; i < 4; i++) {
+    unlocked = mage.recordKill(10);
+  }
+
+  // Assert
+  assert.strictEqual(mage.combo, 5);
+  assert.strictEqual(mage.ultCharge, 0, 'Mage must not accumulate ultCharge');
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.unlocked, true);
+  assert.ok(unlocked.some(u => u.id === 'FROST_NOVA'));
+
+  // Act: AMMO pickup
+  mage.applyMageAmmoPickup();
+  assert.strictEqual(mage.mana, 80);
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.cooldown, 2.5);
+  assert.strictEqual(mage.mageState.skills.CHAIN_LIGHTNING.cooldown, 0);
+});
+
+test('Mage Mana Shield absorbs 1:1 into Mana, overflows remainder to HP, and breaks early at 0 Mana', () => {
+  // Arrange
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 300);
+  mage.mana = 50;
+  mage.mageState.manaShieldActive = true;
+  mage.mageState.manaShieldTimer = 5.0;
+
+  // Act 1: 30 damage fully absorbed
+  const res1 = mage.takeDamage(30, 'MELEE');
+  assert.strictEqual(res1.absorbedMana, 30);
+  assert.strictEqual(res1.damage, 0);
+  assert.strictEqual(res1.shieldBroken, false);
+  assert.strictEqual(mage.mana, 20);
+  assert.strictEqual(mage.hp, 85);
+  assert.strictEqual(mage.mageState.manaShieldActive, true);
+
+  // Act 2: 35 damage (> 20 remaining mana) -> absorbs 20, overflows 15 to HP, breaks shield
+  const res2 = mage.takeDamage(35, 'MELEE');
+  assert.strictEqual(res2.absorbedMana, 20);
+  assert.strictEqual(res2.damage, 15);
+  assert.strictEqual(res2.shieldBroken, true);
+  assert.strictEqual(mage.mana, 0);
+  assert.strictEqual(mage.hp, 70);
+  assert.strictEqual(mage.mageState.manaShieldActive, false);
+  assert.strictEqual(mage.mageState.manaShieldTimer, 0);
+
+  // Serialization includes mana & mageState
+  const snap = mage.serialize();
+  assert.strictEqual(snap.mana, 0);
+  assert.strictEqual(snap.maxMana, 100);
+  assert.ok(snap.mageState);
+  assert.strictEqual(snap.mageState.manaShieldActive, false);
+
+  // Revive restores 50% Mana
+  mage.isDowned = true;
+  mage.hp = 0;
+  mage.mana = 0;
+  mage.revive();
+  assert.strictEqual(mage.isDowned, false);
+  assert.strictEqual(mage.hp, 40);
+  assert.strictEqual(mage.mana, 50);
+});
+
+test('Non-Mage characters preserve legacy gun, weapon switch, and ult charge behavior', () => {
+  const human = new Player('h1', 'Hero', 'HUMAN', 300, 300);
+  assert.strictEqual(human.mana, 0);
+  assert.strictEqual(human.maxMana, 0);
+  assert.strictEqual(human.mageState, null);
+  assert.strictEqual(human.selectedWeapon, 'PISTOL');
+  assert.strictEqual(human.consumeMana(10), false);
+  assert.strictEqual(human.restoreMana(10), 0);
+
+  // Weapon switch works for Human
+  human.weapons.SHOTGUN.unlocked = true;
+  human.applyInput({ weaponId: 'SHOTGUN' });
+  assert.strictEqual(human.selectedWeapon, 'SHOTGUN');
+
+  // Kill unlocks guns and adds ult charge
+  human.recordKill(10);
+  assert.ok(human.ultCharge > 0);
+
+  // Serialization for Human
+  const snap = human.serialize();
+  assert.strictEqual(snap.mana, 0);
+  assert.strictEqual(snap.maxMana, 0);
+  assert.strictEqual(snap.hasSanctuaryBuff, false);
+  assert.strictEqual(snap.mageState, null);
+});
+
