@@ -383,6 +383,87 @@ test('SoundManager executes 3-layer gunshots, monster vocalizations, and manages
   assert.strictEqual(sm.droneLfoGain, null, 'droneLfoGain should be null after stopHorrorAmbience');
 });
 
+test('SoundManager weapon audio integration with procedural fallback', () => {
+  const sm = new SoundManager();
+  sm.init();
+
+  assert.ok(sm.weaponBank, 'SoundManager should instantiate weaponBank');
+  assert.ok(sm.rocketLoops instanceof Map, 'SoundManager should instantiate rocketLoops Map');
+
+  // Headless call without AudioContext must not throw
+  assert.doesNotThrow(() => {
+    sm.playShoot('PISTOL', 100, 0);
+    sm.playShoot('SHOTGUN', 100, 0);
+    sm.playShoot('RAILGUN', 100, 0);
+    sm.playShoot('ROCKET', 100, 0);
+    sm.playShoot('GRENADE', 100, 0);
+    sm.playExplosion(1.0, 100, 0, 'ROCKET');
+    sm.playExplosion(1.0, 100, 0, 'GRENADE');
+    sm.playExplosion(1.0, 100, 0, 'GENERIC');
+    sm.playWeaponEmpty('PISTOL', 100, 0);
+    sm.playWeaponReload('SHOTGUN', 100, 0);
+    sm.playRailgunCharge(100, 0);
+    sm.playRailgunImpact(100, 0);
+    sm.updateRocketFlight([{ id: 'r1', x: 100 }], 0);
+    sm.stopRocketLoops();
+  });
+
+  // Inject mock AudioContext
+  sm.ctx = createMockAudioContext();
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  // When buffers not loaded, playShoot should not crash and should execute procedural fallback
+  assert.doesNotThrow(() => {
+    sm.playShoot('PISTOL', 100, 0);
+    sm.playShoot('UZI', 100, 0);
+    sm.playShoot('SHOTGUN', 100, 0);
+    sm.playShoot('RAILGUN', 100, 0);
+    sm.playShoot('ROCKET', 100, 0);
+    sm.playShoot('GRENADE', 100, 0);
+    sm.playExplosion(1.0, 100, 0, 'ROCKET');
+    sm.playExplosion(1.0, 100, 0, 'GRENADE');
+    sm.playExplosion(1.0, 100, 0, 'GENERIC');
+    sm.playWeaponEmpty('PISTOL', 100, 0);
+    sm.playWeaponReload('SHOTGUN', 100, 0);
+    sm.playWeaponReload('ROCKET', 100, 0);
+    sm.playWeaponReload('PISTOL', 100, 0);
+    sm.playRailgunCharge(100, 0);
+    sm.playRailgunImpact(100, 0);
+  });
+
+  // Verify rocket loop lifecycle
+  let loopStarted = false;
+  let loopUpdated = false;
+  let loopStopped = false;
+  sm.weaponBank.createRocketLoop = () => {
+    loopStarted = true;
+    return {
+      update: () => { loopUpdated = true; },
+      stop: () => { loopStopped = true; }
+    };
+  };
+
+  sm.updateRocketFlight([{ id: 'r1', x: 200 }], 0);
+  assert.strictEqual(loopStarted, true, 'createRocketLoop should be called for new rocket');
+  assert.strictEqual(sm.rocketLoops.has('r1'), true);
+
+  sm.updateRocketFlight([{ id: 'r1', x: 250 }], 0);
+  assert.strictEqual(loopUpdated, true, 'RocketLoop.update should be called for active rocket');
+
+  // Rocket removed -> stop called
+  sm.updateRocketFlight([], 0);
+  assert.strictEqual(loopStopped, true, 'RocketLoop.stop should be called when rocket removed');
+  assert.strictEqual(sm.rocketLoops.size, 0);
+
+  // stopHorrorAmbience also cleans up active rocket loops
+  sm.updateRocketFlight([{ id: 'r2', x: 300 }], 0);
+  assert.strictEqual(sm.rocketLoops.size, 1);
+  sm.droneActive = true;
+  sm.stopHorrorAmbience();
+  assert.strictEqual(sm.rocketLoops.size, 0, 'stopHorrorAmbience must clear rocket loops');
+});
+
 const { handleGameEvent, gameLoop } = require('../client/js/main.js');
 
 test('Integration: handleGameEvent and gameLoop route spatial audio, directional gore, screen shake, and horror ambience', () => {

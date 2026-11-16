@@ -20,6 +20,12 @@ class SoundManager {
     this.droneLfoGain = null;
     this.heartbeatTimer = 0;
     this.growlTimer = 0;
+
+    const WeaponBankClass = (typeof window !== 'undefined' && window.WeaponAudioBank)
+      ? window.WeaponAudioBank
+      : (typeof require === 'function' ? (require('./weaponAudio.js').WeaponAudioBank || null) : null);
+    this.weaponBank = WeaponBankClass ? new WeaponBankClass() : null;
+    this.rocketLoops = new Map();
   }
 
   init() {
@@ -35,6 +41,12 @@ class SoundManager {
 
       if (this.ctx.state === 'suspended') {
         this.ctx.resume();
+      }
+
+      if (this.weaponBank && this.ctx) {
+        this.weaponBank.decodeAll(this.ctx).catch(err => {
+          console.warn('[SoundManager] Weapon audio decode error:', err);
+        });
       }
     } catch (e) {
       console.warn('Web Audio not supported:', e);
@@ -87,6 +99,9 @@ class SoundManager {
     }
     if (this.muted && this.droneActive) {
       this.stopHorrorAmbience();
+    }
+    if (this.muted) {
+      this.stopRocketLoops();
     }
     return this.muted;
   }
@@ -184,12 +199,50 @@ class SoundManager {
     this.ensureContext();
     if (!this.ctx) return;
 
-    const bus = this.createSpatialBus(sourceX, listenerX, 0.22);
-    if (!bus) return;
+    const norm = String(weaponType).toLowerCase();
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    let playedWav = false;
 
-    this.playWeaponTransientLayer(weaponType, bus.input);
-    this.playWeaponBodyLayer(weaponType, bus.input);
-    this.playShellCasingClink(weaponType, sourceX, listenerX);
+    if (this.weaponBank && this.weaponBank.hasBuffer(norm, 'fire')) {
+      playedWav = this.weaponBank.playSample(this.ctx, targetNode, norm, 'fire', {
+        sourceX, listenerX, maxDist: 1100
+      });
+
+      // Post-shot event sequencing
+      if (norm === 'shotgun') {
+        setTimeout(() => {
+          if (!this.muted && this.ctx) {
+            this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'pump', { sourceX, listenerX, delay: 0 });
+            this.weaponBank.playSample(this.ctx, targetNode, 'shotgun', 'casing', { sourceX, listenerX, delay: 0.05 });
+          }
+        }, 220);
+      } else if (norm === 'railgun') {
+        setTimeout(() => {
+          if (!this.muted && this.ctx) {
+            this.weaponBank.playSample(this.ctx, targetNode, 'railgun', 'cooldown', { sourceX, listenerX, delay: 0 });
+          }
+        }, 180);
+      } else if (norm === 'pistol' || norm === 'uzi') {
+        setTimeout(() => {
+          if (!this.muted && this.ctx) {
+            this.weaponBank.playSample(this.ctx, targetNode, norm, 'casing', { sourceX, listenerX, delay: 0 });
+          }
+        }, 50);
+      }
+    } else if (norm === 'grenade' && this.weaponBank && this.weaponBank.hasBuffer('grenade', 'throw')) {
+      playedWav = this.weaponBank.playSample(this.ctx, targetNode, 'grenade', 'throw', {
+        sourceX, listenerX, maxDist: 700
+      });
+    }
+
+    if (!playedWav) {
+      // Procedural synth fallback
+      const bus = this.createSpatialBus(sourceX, listenerX, 0.22);
+      if (!bus) return;
+      this.playWeaponTransientLayer(weaponType, bus.input);
+      this.playWeaponBodyLayer(weaponType, bus.input);
+      this.playShellCasingClink(weaponType, sourceX, listenerX);
+    }
   }
 
   playWeaponTransientLayer(weaponType, destNode) {
@@ -326,46 +379,145 @@ class SoundManager {
     osc.stop(t + 0.04);
   }
 
-  playExplosion(scale = 1, sourceX, listenerX) {
+  playExplosion(scale = 1, sourceX, listenerX, source = 'GENERIC') {
     if (this.muted) return;
     this.ensureContext();
     if (!this.ctx) return;
 
-    const bus = this.createSpatialBus(sourceX, listenerX, 0.35);
-    if (!bus) return;
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    let playedWav = false;
+    const srcUpper = String(source).toUpperCase();
 
-    const t = this.ctx.currentTime || 0;
-    const dur = Math.min(0.7, 0.35 * scale);
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(90 * scale, t);
-    osc.frequency.exponentialRampToValueAtTime(20, t + dur);
-    gain.gain.setValueAtTime(0.8, t);
-    gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
-    osc.connect(gain);
-    gain.connect(bus.input);
-    osc.start(t);
-    osc.stop(t + dur);
-
-    const noise = this.ctx.createBufferSource();
-    const nBuffer = this.createNoiseBuffer(dur);
-    if (nBuffer) {
-      noise.buffer = nBuffer;
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(450, t);
-      filter.frequency.linearRampToValueAtTime(80, t + dur);
-      const nGain = this.ctx.createGain();
-      nGain.gain.setValueAtTime(0.8, t);
-      nGain.gain.exponentialRampToValueAtTime(0.01, t + dur);
-      noise.connect(filter);
-      filter.connect(nGain);
-      nGain.connect(bus.input);
-      noise.start(t);
-      noise.stop(t + dur);
+    if (this.weaponBank) {
+      if (srcUpper === 'GRENADE' && this.weaponBank.hasBuffer('grenade', 'explode')) {
+        playedWav = this.weaponBank.playSample(this.ctx, targetNode, 'grenade', 'explode', {
+          sourceX, listenerX, volume: Math.min(1.3, scale), maxDist: 1300
+        });
+      } else if (srcUpper === 'ROCKET' && this.weaponBank.hasBuffer('rocket', 'explode')) {
+        playedWav = this.weaponBank.playSample(this.ctx, targetNode, 'rocket', 'explode', {
+          sourceX, listenerX, volume: Math.min(1.4, scale * 1.1), maxDist: 1400
+        });
+      } else {
+        const fallbackWeapon = Math.random() < 0.5 ? 'rocket' : 'grenade';
+        if (this.weaponBank.hasBuffer(fallbackWeapon, 'explode')) {
+          playedWav = this.weaponBank.playSample(this.ctx, targetNode, fallbackWeapon, 'explode', {
+            sourceX, listenerX, volume: Math.min(1.2, scale), maxDist: 1200
+          });
+        }
+      }
     }
+
+    if (!playedWav) {
+      // Procedural synth fallback
+      const bus = this.createSpatialBus(sourceX, listenerX, 0.35);
+      if (!bus) return;
+
+      const t = this.ctx.currentTime || 0;
+      const dur = Math.min(0.7, 0.35 * scale);
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(90 * scale, t);
+      osc.frequency.exponentialRampToValueAtTime(20, t + dur);
+      gain.gain.setValueAtTime(0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+      osc.connect(gain);
+      gain.connect(bus.input);
+      osc.start(t);
+      osc.stop(t + dur);
+
+      const noise = this.ctx.createBufferSource();
+      const nBuffer = this.createNoiseBuffer(dur);
+      if (nBuffer) {
+        noise.buffer = nBuffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(450, t);
+        filter.frequency.linearRampToValueAtTime(80, t + dur);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.8, t);
+        nGain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(bus.input);
+        noise.start(t);
+        noise.stop(t + dur);
+      }
+    }
+  }
+
+  playWeaponEmpty(weaponType = 'PISTOL', sourceX, listenerX) {
+    if (this.muted || !this.weaponBank) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+    const norm = String(weaponType).toLowerCase();
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    this.weaponBank.playSample(this.ctx, targetNode, norm, 'empty', { sourceX, listenerX });
+  }
+
+  playWeaponReload(weaponType = 'PISTOL', sourceX, listenerX) {
+    if (this.muted || !this.weaponBank) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+    const norm = String(weaponType).toLowerCase();
+    const event = (norm === 'shotgun' || norm === 'rocket') ? 'load' : 'reload';
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    this.weaponBank.playSample(this.ctx, targetNode, norm, event, { sourceX, listenerX });
+  }
+
+  playRailgunCharge(sourceX, listenerX) {
+    if (this.muted || !this.weaponBank) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    this.weaponBank.playSample(this.ctx, targetNode, 'railgun', 'charge', { sourceX, listenerX });
+  }
+
+  playRailgunImpact(sourceX, listenerX) {
+    if (this.muted || !this.weaponBank) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+    this.weaponBank.playSample(this.ctx, targetNode, 'railgun', 'impact', { sourceX, listenerX });
+  }
+
+  updateRocketFlight(rockets = [], listenerX) {
+    if (this.muted || !this.weaponBank || !this.ctx) {
+      this.stopRocketLoops();
+      return;
+    }
+    const currentIds = new Set();
+    const targetNode = this.compressor || this.masterGain || this.ctx.destination;
+
+    for (const r of rockets) {
+      if (!r || !r.id) continue;
+      currentIds.add(r.id);
+      if (!this.rocketLoops.has(r.id)) {
+        const loop = this.weaponBank.createRocketLoop(this.ctx, targetNode, {
+          sourceX: r.x, listenerX
+        });
+        if (loop) this.rocketLoops.set(r.id, loop);
+      } else {
+        const loop = this.rocketLoops.get(r.id);
+        loop.update({ sourceX: r.x, listenerX });
+      }
+    }
+
+    for (const [id, loop] of this.rocketLoops.entries()) {
+      if (!currentIds.has(id)) {
+        loop.stop();
+        this.rocketLoops.delete(id);
+      }
+    }
+  }
+
+  stopRocketLoops() {
+    if (!this.rocketLoops) return;
+    for (const loop of this.rocketLoops.values()) {
+      loop.stop(0.05);
+    }
+    this.rocketLoops.clear();
   }
 
   playZombieHit(zType = 'NORMAL', weapon = 'bullet', sourceX, listenerX) {
@@ -700,6 +852,7 @@ class SoundManager {
   }
 
   stopHorrorAmbience() {
+    this.stopRocketLoops();
     if (!this.droneActive) return;
     this.safeStopAndDisconnect(this.droneOsc1);
     this.safeStopAndDisconnect(this.droneOsc2);
