@@ -112,6 +112,34 @@ body, html {
   border-radius: 4px;
 }
 
+.connection-banner {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid var(--border);
+  background: rgba(255, 214, 0, 0.1);
+  color: var(--accent);
+}
+
+.connection-banner.connected {
+  background: rgba(0, 230, 118, 0.1);
+  border-color: rgba(0, 230, 118, 0.45);
+  color: var(--success);
+}
+
+.connection-banner.disconnected,
+.connection-banner.error {
+  background: rgba(255, 23, 68, 0.14);
+  border-color: var(--danger);
+  color: #ff8a80;
+}
+
+.connection-banner.hidden {
+  display: none;
+}
+
 /* Nickname Input */
 .input-row {
   display: flex;

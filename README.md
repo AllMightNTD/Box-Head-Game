@@ -106,9 +106,58 @@ Khi vào phòng, mỗi người chơi chọn 1 nhân vật riêng biệt:
 ---
 
 ## 🛠️ CHẠY BỘ KIỂM THỬ TỰ ĐỘNG
-Để chạy toàn bộ 45 bài kiểm thử vật lý, AI, combo, chiêu thức chủ động (Ultimates) và mô phỏng 4 người chơi cùng lúc:
+Để chạy toàn bộ kiểm thử vật lý, AI, combo, chiêu thức, socket đồng bộ và multi-platform deployment:
 ```bash
-node --test tests/*.test.js
+npm test
 ```
-Tất cả 45 bài test đều vượt qua (100% PASS).
-# Box-Head-Game
+
+---
+
+## ☁️ HƯỚNG DẪN DEPLOY ĐA NỀN TẢNG (RENDER / CLOUDFLARE PAGES / DOCKER / VPS)
+
+Dự án hỗ trợ kiến trúc **Dual-Mode** được cấu hình tập trung tại `server/config/deployConfig.js`, sẵn sàng chạy trên nhiều môi trường khác nhau:
+
+### 1. Cách 1: Render (Web Service Free Tier - Khuyên Dùng Cho Người Mới)
+Game chạy chế độ **Monolith** (Node.js phục vụ cả Web Client + Socket.IO server).
+- **Bước 1:** Đẩy mã nguồn lên GitHub.
+- **Bước 2:** Vào [Render Dashboard](https://dashboard.render.com/) -> **New +** -> **Blueprint**.
+- **Bước 3:** Chọn repository của bạn. Render sẽ tự động đọc file [render.yaml](file:///home/dev_ntd/Documents/Box-Head-Game/render.yaml) (vùng Singapore, Free tier, health check `/healthz`).
+- **Bước 4:** Bấm **Apply**. Sau khi deploy xong, bạn nhận được link dạng `https://ten-game.onrender.com`. Mở link trên trình duyệt và gửi cho bạn bè cùng chơi!
+
+> **Lưu ý về Render Free Tier:**
+> - Máy chủ tự ngủ sau 15 phút không có người chơi. Khi có người truy cập lại, client hiển thị thông báo **"Đang đánh thức máy chủ (Cold Start 30–60s)"** và tự động kết nối lại ngay khi server sẵn sàng.
+> - Preset `render` tự động điều chỉnh tần số đồng bộ mạng `SNAPSHOT_HZ=25` (vẫn giữ vật lý simulation 50Hz) để tiết kiệm CPU và tránh chạm ngưỡng 5 GB băng thông/tháng.
+
+### 2. Cách 2: Tách Client (Cloudflare Pages / Vercel) + Backend Socket.IO (Render / VPS)
+Phương án tối ưu băng thông: Tài nguyên tĩnh (ảnh, âm thanh ~6.5MB) được Cloudflare Pages phục vụ với băng thông không giới hạn, backend Render chỉ gánh gói tin Socket.IO.
+1. **Chạy Backend:**
+   - Deploy backend lên Render với biến môi trường:
+     - `DEPLOY_PLATFORM=split-backend`
+     - `CORS_ORIGIN=https://ten-du-an.pages.dev` (hoặc `*`)
+2. **Build Client tĩnh:**
+   - Trên Cloudflare Pages / Vercel, cài đặt build:
+     - **Build Command:** `npm run build:client`
+     - **Build Output Directory:** `dist`
+     - **Environment Variable:** `BACKEND_URL=https://ten-backend.onrender.com`
+
+### 3. Cách 3: Docker Container (Koyeb, Zeabur, Back4App, Hugging Face Spaces, VPS)
+Dự án có sẵn `Dockerfile` chuẩn Node 20 Alpine với Healthcheck tích hợp:
+```bash
+# Build & chạy cục bộ hoặc trên VPS
+docker build -t boxhead-game .
+docker run -p 3000:3000 -e DEPLOY_PLATFORM=docker boxhead-game
+```
+
+### 📋 Bảng Biến Môi Trường (Environment Variables)
+
+| Biến | Mặc định | Mô tả |
+| :--- | :---: | :--- |
+| `DEPLOY_PLATFORM` | `lan` | Preset: `lan`, `render`, `docker`, `huggingface`, `split-backend`, `static-client` |
+| `DEPLOY_MODE` | theo preset | `monolith` (kèm static) hoặc `backend` (chỉ socket/API) |
+| `PORT` | `3000` (`10000` trên Render) | Cổng lắng nghe HTTP & Socket.IO |
+| `CORS_ORIGIN` | `*` | Danh sách domain được phép gọi socket (cách nhau bởi dấu phẩy) hoặc `*` |
+| `SIMULATION_HZ` | `50` | Tần số vòng lặp vật lý trò chơi (50Hz = 20ms) |
+| `SNAPSHOT_HZ` | `50` (LAN) / `25` (Cloud) | Tần số phát `game:snapshot` qua mạng tới client |
+| `MAX_ROOMS` | `50` (LAN) / `20` (Render) | Giới hạn số phòng tạo tối đa để bảo vệ RAM server |
+| `BACKEND_URL` | rỗng | URL máy chủ backend (dùng khi build static client `dist/`) |
+| `HEALTHCHECK_PATH` | `/healthz` | Đường dẫn kiểm tra trạng thái sức khỏe máy chủ |

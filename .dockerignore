@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.worktrees
+.superpowers
+docs
+tests
+character
+zom_bie_model
+pain_model.py
+*.log
+.env
+.env.*

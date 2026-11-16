@@ -17,10 +17,15 @@
       <h1 class="game-title">BOXHEAD: 2PLAY LAN</h1>
       <p class="game-subtitle">Co-op Zombie Survival Đỉnh Cao (1 - 4 Người Chơi)</p>
 
-      <!-- LAN IP Banner -->
+      <!-- Connection Status Banner (Cold start / Reconnect indicator) -->
+      <div id="connection-status-banner" class="connection-banner connecting">
+        <span id="connection-status-text">⏳ Đang kết nối máy chủ...</span>
+      </div>
+
+      <!-- LAN / Online Invite Banner -->
       <div class="lan-banner">
-        <span>🌐 LINK MẠNG LAN CHO BẠN BÈ:</span>
-        <span id="lan-ip-display" class="ip-link">Đang quét IP...</span>
+        <span id="lan-banner-title">🌐 LINK MẠNG LAN CHO BẠN BÈ:</span>
+        <span id="lan-ip-display" class="ip-link">Đang tải địa chỉ...</span>
       </div>
 
       <!-- Player Nickname -->
@@ -257,7 +262,9 @@
   <div id="copy-toast" class="copy-toast hidden">✔ Đã sao chép link phòng!</div>
 
   <!-- Scripts -->
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="config.js"></script>
+  <script src="vendor/socket.io.min.js"></script>
+  <script src="js/deployClient.js"></script>
   <script src="js/mapsConfig.js"></script>
   <script src="js/sprites.js"></script>
   <script src="js/weaponAudio.js"></script>

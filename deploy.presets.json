@@ -1,0 +1,50 @@
+{
+  "platforms": {
+    "lan": {
+      "DEPLOY_PLATFORM": "lan",
+      "DEPLOY_MODE": "monolith",
+      "PORT": "3000",
+      "SIMULATION_HZ": "50",
+      "SNAPSHOT_HZ": "50",
+      "MAX_ROOMS": "50",
+      "CORS_ORIGIN": "*"
+    },
+    "render": {
+      "DEPLOY_PLATFORM": "render",
+      "DEPLOY_MODE": "monolith",
+      "SIMULATION_HZ": "50",
+      "SNAPSHOT_HZ": "25",
+      "MAX_ROOMS": "20",
+      "CORS_ORIGIN": "*"
+    },
+    "render-split-backend": {
+      "DEPLOY_PLATFORM": "split-backend",
+      "DEPLOY_MODE": "backend",
+      "SIMULATION_HZ": "50",
+      "SNAPSHOT_HZ": "25",
+      "MAX_ROOMS": "20",
+      "CORS_ORIGIN": "https://your-game.pages.dev"
+    },
+    "cloudflare-pages-client": {
+      "buildCommand": "npm run build:client",
+      "outputDirectory": "dist",
+      "DEPLOY_PLATFORM": "static-client",
+      "BACKEND_URL": "https://your-render-backend.onrender.com",
+      "SNAPSHOT_HZ": "25"
+    },
+    "docker-paas": {
+      "DEPLOY_PLATFORM": "docker",
+      "DEPLOY_MODE": "monolith",
+      "PORT": "3000",
+      "SNAPSHOT_HZ": "25",
+      "MAX_ROOMS": "25"
+    },
+    "huggingface-spaces": {
+      "DEPLOY_PLATFORM": "huggingface",
+      "DEPLOY_MODE": "monolith",
+      "PORT": "7860",
+      "SNAPSHOT_HZ": "30",
+      "MAX_ROOMS": "30"
+    }
+  }
+}

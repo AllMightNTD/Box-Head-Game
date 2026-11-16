@@ -3,8 +3,14 @@ const { MAPS, DEFAULT_MAP_ID, getMapConfig } = require('./game/MapConfig.js');
 
 const CHARACTERS = ['HUMAN', 'WARRIOR', 'MAGE', 'BAMBO', 'BON', 'BINGO', 'BERT'];
 
-function socketHandler(io) {
+function socketHandler(io, options = {}) {
   const rooms = new Map();
+  const maxRooms = Number.isFinite(options.maxRooms) && options.maxRooms > 0
+    ? Math.floor(options.maxRooms)
+    : 50;
+  const roomOptions = options.roomOptions && typeof options.roomOptions === 'object'
+    ? options.roomOptions
+    : {};
 
   function getRoomList() {
     const list = [];
@@ -37,13 +43,24 @@ function socketHandler(io) {
       socket.emit('lobby:roomList', getRoomList());
     });
 
-    socket.on('room:create', ({ roomName, playerName, character, mapId }, callback) => {
+    socket.on('room:create', (payload, callback) => {
+      if (rooms.size >= maxRooms) {
+        const error = `Máy chủ đang đầy (${maxRooms} phòng tối đa), vui lòng thử lại sau!`;
+        if (typeof callback === 'function') {
+          callback({ success: false, error });
+        }
+        socket.emit('room:error', { error });
+        return;
+      }
+
+      const safePayload = payload && typeof payload === 'object' ? payload : {};
+      const { roomName, playerName, character, mapId } = safePayload;
       const roomId = 'room_' + Math.random().toString(36).substring(2, 8);
-      const name = (roomName || 'Phong ' + roomId).trim().substring(0, 24);
-      const playerNick = (playerName || 'Hero').trim().substring(0, 16);
+      const name = (typeof roomName === 'string' && roomName.trim() ? roomName : 'Phong ' + roomId).trim().substring(0, 24);
+      const playerNick = (typeof playerName === 'string' && playerName.trim() ? playerName : 'Hero').trim().substring(0, 16);
       const chosenMapId = MAPS[mapId] ? mapId : DEFAULT_MAP_ID;
 
-      const gameRoom = new GameRoom(roomId, name, io, chosenMapId);
+      const gameRoom = new GameRoom(roomId, name, io, chosenMapId, roomOptions);
       const room = {
         id: roomId,
         name,

@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hướng Dẫn Triển Khai Boxhead Multiplayer Lên Render</title>
+  <style>
+    :root {
+      --bg-body: #0d1117;
+      --bg-surface: #161b22;
+      --bg-card: #1f242c;
+      --bg-card-hover: #262c36;
+      --border: #30363d;
+      --border-accent: #ff3d00;
+      --primary: #ff3d00;
+      --primary-glow: rgba(255, 61, 0, 0.25);
+      --accent: #ffd600;
+      --success: #2ea043;
+      --success-glow: rgba(46, 160, 67, 0.2);
+      --info: #58a6ff;
+      --info-glow: rgba(88, 166, 255, 0.15);
+      --warning: #d29922;
+      --warning-glow: rgba(210, 153, 34, 0.15);
+      --danger: #f85149;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --code-bg: #090d13;
+      --font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      padding-bottom: 80px;
+    }
+
+    /* Layout */
+    .container {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 30px 20px;
+    }
+
+    /* Header Banner */
+    .hero {
+      background: linear-gradient(135deg, #1b0904 0%, #161b22 60%, #0d1117 100%);
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--primary);
+      border-radius: 12px;
+      padding: 35px 30px;
+      margin-bottom: 35px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 20px var(--primary-glow);
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255, 61, 0, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(255, 61, 0, 0.35);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .hero h1 {
+      font-size: 2.3rem;
+      color: #fff;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 800px;
+    }
+
+    /* Navigation TOC */
+    .toc-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 25px;
+      margin-bottom: 35px;
+    }
+
+    .toc-card h3 {
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 10px 20px;
+      list-style: none;
+    }
+
+    .toc-grid a {
+      color: var(--info);
+      text-decoration: none;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.15s, transform 0.15s;
+    }
+
+    .toc-grid a:hover {
+      color: #fff;
+      transform: translateX(4px);
+    }
+
+    /* Section & Cards */
+    section {
+      margin-bottom: 45px;
+      scroll-margin-top: 30px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    .section-header h2 {
+      font-size: 1.6rem;
+      color: #fff;
+    }
+
+    .section-number {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    /* Step flow */
+    .step-list {
+      list-style: none;
+      counter-reset: step-counter;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .step-item {
+      position: relative;
+      padding-left: 50px;
+    }
+
+    .step-item::before {
+      counter-increment: step-counter;
+      content: counter(step-counter);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 34px;
+      height: 34px;
+      background: var(--bg-card);
+      border: 2px solid var(--border-accent);
+      color: var(--primary);
+      font-weight: bold;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .step-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    /* Code blocks */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-code);
+      font-size: 0.9rem;
+      color: #c9d1d9;
+      margin: 12px 0;
+      line-height: 1.5;
+    }
+
+    code {
+      font-family: var(--font-code);
+      background: rgba(110, 118, 129, 0.2);
+      color: #ff9800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    /* Callouts */
+    .callout {
+      border-left: 4px solid var(--info);
+      background: var(--info-glow);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout.warning {
+      border-left-color: var(--warning);
+      background: var(--warning-glow);
+    }
+
+    .callout.success {
+      border-left-color: var(--success);
+      background: var(--success-glow);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: rgba(248, 81, 73, 0.15);
+    }
+
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--bg-card);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Pill Badges */
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .pill-green { background: rgba(46, 160, 67, 0.2); color: #3fb950; border: 1px solid #238636; }
+    .pill-orange { background: rgba(255, 61, 0, 0.2); color: #ff5722; border: 1px solid #d84315; }
+    .pill-blue { background: rgba(88, 166, 255, 0.2); color: #58a6ff; border: 1px solid #1f6feb; }
+    .pill-yellow { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #9e6a03; }
+
+    /* Comparison Grid */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 15px;
+    }
+
+    .compare-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .compare-card.highlight {
+      border-color: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .compare-header {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 50px;
+      border-top: 1px solid var(--border);
+      padding-top: 25px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- HERO HEADER -->
+    <header class="hero">
+      <div class="hero-badge">HƯỚNG DẪN TRIỂN KHAI CLOUD</div>
+      <h1>🧟 Hướng Dẫn Deploy Boxhead Multiplayer Lên Render</h1>
+      <p>
+        Tài liệu chuẩn dành cho lập trình viên để đưa game Boxhead LAN lên Internet công khai hoàn toàn <strong>miễn phí 100%</strong> (không cần thẻ tín dụng), hỗ trợ đầy đủ Socket.IO 4.7, đồng bộ vật lý 50Hz mượt mà và tối ưu hóa tài nguyên server.
+      </p>
+    </header>
+
+    <!-- TABLE OF CONTENTS -->
+    <nav class="toc-card">
+      <h3>📑 MỤC LỤC HƯỚNG DẪN</h3>
+      <ul class="toc-grid">
+        <li><a href="#section-1">1. Chuẩn bị trước khi Deploy</a></li>
+        <li><a href="#section-2">2. Cách 1: Deploy 1-Click bằng Blueprint (Khuyên Dùng)</a></li>
+        <li><a href="#section-3">3. Cách 2: Deploy Thủ Công (Manual Web Service)</a></li>
+        <li><a href="#section-4">4. Cách 3: Mô hình Hybrid (Cloudflare Pages + Render)</a></li>
+        <li><a href="#section-5">5. Cơ chế tối ưu Render Free Tier đã tích hợp</a></li>
+        <li><a href="#section-6">6. Kiểm tra & Khắc phục sự cố (Troubleshooting)</a></li>
+      </ul>
+    </nav>
+
+    <!-- SECTION 1 -->
+    <section id="section-1">
+      <div class="section-header">
+        <span class="section-number">1</span>
+        <h2>Chuẩn Bị Trước Khi Deploy</h2>
+      </div>
+
+      <div class="card">
+        <p style="margin-bottom: 14px;">Trước khi tiến hành deploy, hãy đảm bảo rằng repository của bạn đã có đầy đủ các file cấu hình chuẩn:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 28%;">Tệp tin</th>
+              <th style="width: 22%;">Trạng thái</th>
+              <th>Mục đích sử dụng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>render.yaml</code></td>
+              <td><span class="pill pill-green">Đã tạo sẵn</span></td>
+              <td>Bản mô tả Blueprint giúp Render tự động nhận cấu hình vùng Singapore, Free Tier, Healthcheck.</td>
+            </tr>
+            <tr>
+              <td><code>package.json</code></td>
+              <td><span class="pill pill-green">Đã cấu hình</span></td>
+              <td>Chứa lệnh <code>npm start</code>, <code>build:client</code> và Node.js engine <code>&gt;=20.0.0</code>.</td>
+            </tr>
+            <tr>
+              <td><code>server/config/deployConfig.js</code></td>
+              <td><span class="pill pill-green">Đã tích hợp</span></td>
+              <td>Tự động nhận diện môi trường Render qua <code>process.env.RENDER</code> hoặc <code>DEPLOY_PLATFORM</code>.</td>
+            </tr>
+            <tr>
+              <td><code>.gitignore</code></td>
+              <td><span class="pill pill-green">Đã kiểm tra</span></td>
+              <td>Loại bỏ <code>node_modules/</code>, <code>dist/</code>, file bí mật <code>.env</code> để bảo mật mã nguồn.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <div class="callout-title">💡 Yêu cầu tài khoản:</div>
+          Bạn chỉ cần 1 tài khoản <strong>GitHub</strong> và 1 tài khoản <strong>Render.com</strong> (đăng nhập nhanh bằng GitHub). Không bắt buộc phải thêm thẻ thanh toán (Credit/Debit Card) đối với gói Free Web Service.
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section id="section-2">
+      <div class="section-header">
+        <span class="section-number">2</span>
+        <h2>Cách 1: Deploy 1-Click Bằng Blueprint (render.yaml)</h2>
+      </div>
+
+      <div class="card">
+        <p style="margin-bottom: 18px;">
+          Đây là cách <strong>nhanh nhất, chuẩn xác nhất và ít xảy ra lỗi cấu hình nhất</strong>. Render sẽ tự động đọc file <code>render.yaml</code> đã được viết sẵn trong dự án.
+        </p>
+
+        <ol class="step-list">
+          <li class="step-item">
+            <div class="step-title">Đẩy code lên GitHub Repository</div>
+            <p>Đảm bảo nhánh chứa mã nguồn mới nhất (ví dụ nhánh <code>main</code>) đã được push lên GitHub của bạn.</p>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Mở Render Dashboard và chọn Blueprint</div>
+            <p>Đăng nhập vào <a href="https://dashboard.render.com/" target="_blank" style="color: var(--info);">dashboard.render.com</a>. Bấm vào nút <strong>New +</strong> (ở góc trên bên phải) và chọn <strong>Blueprint</strong>.</p>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Kết nối GitHub Repository</div>
+            <p>Chọn repository <code>Box-Head-Game</code> từ danh sách repo của bạn. Nếu chưa thấy, bấm <em>Configure account</em> để cấp quyền truy cập repository cho Render.</p>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Kiểm tra thông số tự động điền</div>
+            <p>Render sẽ quét file <code>render.yaml</code> và hiển thị thông tin cấu hình:</p>
+            <pre><code>Service Name: boxhead-multiplayer-game
+Runtime: Node
+Region: Singapore (Độ trễ thấp nhất cho người chơi tại Việt Nam & ĐNÁ)
+Plan: Free (0.1 CPU, 512 MB RAM)
+Health Check Path: /healthz
+Build Command: npm ci --omit=dev
+Start Command: npm start</code></pre>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Bấm Apply và Chờ Hoàn Tất</div>
+            <p>Bấm nút <strong>Apply</strong>. Render sẽ bắt đầu clone repo, chạy <code>npm ci</code> và khởi động server. Quá trình mất khoảng 1-2 phút. Khi log báo <code>Live</code>, game đã sẵn sàng!</p>
+            <div class="callout success">
+              <div class="callout-title">✔ Đường dẫn game của bạn:</div>
+              Render sẽ cung cấp domain HTTPS miễn phí có dạng: <br>
+              <code>https://boxhead-multiplayer-game.onrender.com</code>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section id="section-3">
+      <div class="section-header">
+        <span class="section-number">3</span>
+        <h2>Cách 2: Deploy Thủ Công (Manual Web Service)</h2>
+      </div>
+
+      <div class="card">
+        <p style="margin-bottom: 16px;">Nếu bạn không muốn sử dụng Blueprint mà muốn tự tay cấu hình từng thông số trên giao diện web:</p>
+
+        <ol class="step-list">
+          <li class="step-item">
+            <div class="step-title">Tạo Web Service mới</div>
+            <p>Tại Render Dashboard, bấm <strong>New +</strong> -&gt; chọn <strong>Web Service</strong> -&gt; chọn repository GitHub của bạn.</p>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Điền thông số cơ bản (Basic Settings)</div>
+            <table>
+              <tbody>
+                <tr>
+                  <td style="width: 35%;"><strong>Name</strong></td>
+                  <td><code>boxhead-game</code> (hoặc tên tùy thích)</td>
+                </tr>
+                <tr>
+                  <td><strong>Region</strong></td>
+                  <td><strong>Singapore</strong> (hoặc Oregon/Frankfurt)</td>
+                </tr>
+                <tr>
+                  <td><strong>Branch</strong></td>
+                  <td><code>main</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Runtime</strong></td>
+                  <td><strong>Node</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>Build Command</strong></td>
+                  <td><code>npm ci --omit=dev</code> (hoặc <code>npm install</code>)</td>
+                </tr>
+                <tr>
+                  <td><strong>Start Command</strong></td>
+                  <td><code>npm start</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Instance Type</strong></td>
+                  <td><strong>Free</strong> ($0/tháng)</td>
+                </tr>
+              </tbody>
+            </table>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Cấu hình Biến Môi Trường (Environment Variables)</div>
+            <p>Kéo xuống phần <strong>Environment Variables</strong>, bấm <strong>Add Environment Variable</strong> để thêm các khóa sau:</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Value</th>
+                  <th>Giải thích</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>NODE_ENV</code></td>
+                  <td><code>production</code></td>
+                  <td>Chạy Node tối ưu hiệu năng</td>
+                </tr>
+                <tr>
+                  <td><code>DEPLOY_PLATFORM</code></td>
+                  <td><code>render</code></td>
+                  <td>Kích hoạt preset Render (giới hạn 20 phòng, snapshot 25Hz)</td>
+                </tr>
+                <tr>
+                  <td><code>SIMULATION_HZ</code></td>
+                  <td><code>50</code></td>
+                  <td>Tần số vật lý trò chơi (50Hz = 20ms/tick)</td>
+                </tr>
+                <tr>
+                  <td><code>SNAPSHOT_HZ</code></td>
+                  <td><code>25</code></td>
+                  <td>Tần số broadcast Socket.IO (giảm 50% CPU và băng thông)</td>
+                </tr>
+                <tr>
+                  <td><code>MAX_ROOMS</code></td>
+                  <td><code>20</code></td>
+                  <td>Giới hạn tối đa 20 phòng tránh quá tải RAM 512MB</td>
+                </tr>
+                <tr>
+                  <td><code>CORS_ORIGIN</code></td>
+                  <td><code>*</code></td>
+                  <td>Cho phép mọi nguồn kết nối socket</td>
+                </tr>
+              </tbody>
+            </table>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Cấu hình Health Check Path</div>
+            <p>Kéo xuống mục <strong>Advanced</strong> -&gt; tại <strong>Health Check Path</strong>, điền:</p>
+            <pre><code>/healthz</code></pre>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">
+              Render sẽ gửi request kiểm tra định kỳ tới endpoint này để xác nhận server đang sống ổn định.
+            </p>
+          </li>
+
+          <li class="step-item">
+            <div class="step-title">Bấm Create Web Service</div>
+            <p>Bấm nút <strong>Create Web Service</strong> ở dưới cùng để khởi chạy tiến trình build và deploy.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section id="section-4">
+      <div class="section-header">
+        <span class="section-number">4</span>
+        <h2>Cách 3: Mô Hình Hybrid (Cloudflare Pages + Render Backend)</h2>
+      </div>
+
+      <div class="card">
+        <div class="callout warning">
+          <div class="callout-title">🎯 Vì sao nên cân nhắc mô hình này?</div>
+          Gói Render Free chỉ bao gồm <strong>5 GB băng thông ra (outbound bandwidth) mỗi tháng</strong>. Mỗi lần người chơi tải game sẽ tải khoảng ~6.5 MB hình ảnh sprite và âm thanh WAV. Nếu có 800 lượt tải trang, Render có thể hết quota băng thông.<br>
+          Bằng cách chuyển giao diện tĩnh sang <strong>Cloudflare Pages (Băng thông miễn phí không giới hạn)</strong>, Render chỉ cần gánh các gói tin Socket.IO siêu nhẹ, giúp game chạy ổn định vô thời hạn!
+        </div>
+
+        <div class="compare-grid">
+          <div class="compare-card">
+            <div>
+              <div class="compare-header">
+                <span>Frontend (Client)</span>
+                <span class="pill pill-orange">Cloudflare Pages</span>
+              </div>
+              <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;">Phục vụ file HTML, CSS, JS, Sprite, Audio WAV</p>
+              <ul style="padding-left: 20px; font-size: 0.9rem; color: #c9d1d9;">
+                <li>Băng thông: <strong>Không giới hạn (Unlimited)</strong></li>
+                <li>Tốc độ CDN toàn cầu siêu nhanh tại Việt Nam</li>
+                <li>Lệnh build: <code>npm run build:client</code></li>
+                <li>Thư mục xuất: <code>dist</code></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="compare-card highlight">
+            <div>
+              <div class="compare-header">
+                <span>Backend (Socket.IO)</span>
+                <span class="pill pill-green">Render Free</span>
+              </div>
+              <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;">Phục vụ Game Loop 50Hz &amp; Đồng bộ phòng</p>
+              <ul style="padding-left: 20px; font-size: 0.9rem; color: #c9d1d9;">
+                <li>Chế độ: <code>DEPLOY_PLATFORM=split-backend</code></li>
+                <li>Tắt phục vụ static file để dồn 100% RAM cho game</li>
+                <li>Băng thông chỉ tốn cho gói tin JSON Socket</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h4 style="margin: 22px 0 10px; color: #fff;">Các bước triển khai mô hình Hybrid:</h4>
+        <ol class="step-list">
+          <li class="step-item">
+            <div class="step-title">Deploy Backend trên Render</div>
+            <p>Deploy Render như Cách 1 hoặc 2, thêm biến môi trường:</p>
+            <pre><code>DEPLOY_PLATFORM=split-backend
+CORS_ORIGIN=https://ten-client-cua-ban.pages.dev</code></pre>
+          </li>
+          <li class="step-item">
+            <div class="step-title">Tạo Cloudflare Pages Project</div>
+            <p>Vào Cloudflare Dashboard -&gt; <strong>Workers &amp; Pages</strong> -&gt; <strong>Create application</strong> -&gt; tab <strong>Pages</strong> -&gt; Kết nối repo GitHub của bạn.</p>
+          </li>
+          <li class="step-item">
+            <div class="step-title">Điền thông số Build trên Cloudflare Pages</div>
+            <table>
+              <tbody>
+                <tr>
+                  <td style="width: 35%;"><strong>Build command</strong></td>
+                  <td><code>npm run build:client</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Build output directory</strong></td>
+                  <td><code>dist</code></td>
+                </tr>
+                <tr>
+                  <td><strong>Environment Variable</strong></td>
+                  <td><code>BACKEND_URL</code> = <code>https://ten-backend-tren-render.onrender.com</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </li>
+          <li class="step-item">
+            <div class="step-title">Hoàn thành</div>
+            <p>Cloudflare sẽ tự động build ra thư mục <code>dist/</code> với file <code>config.js</code> trỏ thẳng về Backend Render của bạn.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section id="section-5">
+      <div class="section-header">
+        <span class="section-number">5</span>
+        <h2>Các Cơ Chế Tối Ưu Cho Render Free Tier Đã Tích Hợp</h2>
+      </div>
+
+      <div class="card">
+        <p style="margin-bottom: 16px;">Dự án đã được lập trình sẵn các cơ chế bảo vệ và tối ưu đặc thù để game vận hành mượt mà trên môi trường Render Free:</p>
+
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+          <div style="background: var(--bg-card); padding: 16px; border-radius: 8px; border-left: 4px solid var(--accent);">
+            <strong style="color: var(--accent); font-size: 1.05rem;">1. Xử lý "Spin Down" (Ngủ đông sau 15 phút) &amp; Cold Start (30-60s)</strong>
+            <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px;">
+              Gói Render Free sẽ đưa server vào trạng thái ngủ sau 15 phút không có người truy cập. Giao diện game ở [client/index.html] đã tích hợp sẵn <strong>Connection Status Banner</strong>: khi người chơi mở trang web, client sẽ hiển thị <em>"⏳ Đang đánh thức máy chủ... (Lần đầu có thể mất 30–60s)"</em> và tự động thử lại (retry) liên tục cho tới khi kết nối thành công mà không bắt người chơi phải F5 lại trang.
+            </p>
+          </div>
+
+          <div style="background: var(--bg-card); padding: 16px; border-radius: 8px; border-left: 4px solid var(--success);">
+            <strong style="color: var(--success); font-size: 1.05rem;">2. Sửa lỗi "Sao chép link phòng" trên Cloud</strong>
+            <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px;">
+              Trước đây khi chơi LAN, game tự lấy IP nội bộ của máy chủ (ví dụ <code>http://192.168.1.x</code>). Khi lên Render, container chạy sau reverse proxy với IP nội bộ dạng <code>10.x.x.x</code>. Hàm <code>DeployClient.resolveRoomInviteBaseUrl()</code> đã được nâng cấp: khi phát hiện giao thức HTTPS hoặc domain internet, game luôn tạo link phòng chuẩn dạng <code>https://ten-game.onrender.com/#room=xxxx</code>, giúp bạn bè bấm vào là vào thẳng phòng.
+            </p>
+          </div>
+
+          <div style="background: var(--bg-card); padding: 16px; border-radius: 8px; border-left: 4px solid var(--info);">
+            <strong style="color: var(--info); font-size: 1.05rem;">3. Tách Snapshot HZ (25Hz) khỏi Simulation HZ (50Hz)</strong>
+            <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px;">
+              Render Free chỉ cấp 0.1 vCPU. Nếu phát 50 gói snapshot mỗi giây cho từng người chơi, CPU sẽ bị nghẽn dẫn đến lag. Server được tối ưu: vật lý di chuyển &amp; né đạn vẫn tính toán chuẩn xác ở <strong>50 Hz</strong>, nhưng chỉ gửi gói tin đồng bộ ở <strong>25 Hz</strong>. Phía Client, bộ nội suy <code>Interpolator.js</code> tự động điều chỉnh buffer lên <code>60ms</code>, giúp nhân vật và zombie di chuyển mượt như nhung mà tiết kiệm 50% CPU &amp; mạng.
+            </p>
+          </div>
+
+          <div style="background: var(--bg-card); padding: 16px; border-radius: 8px; border-left: 4px solid var(--danger);">
+            <strong style="color: var(--danger); font-size: 1.05rem;">4. Giới hạn MAX_ROOMS = 20 &amp; Graceful Shutdown</strong>
+            <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px;">
+              Để tránh tràn bộ nhớ RAM 512MB khi có nhiều người tạo phòng rác, server áp đặt ngưỡng tối đa 20 phòng cùng lúc. Khi Render cập nhật bản build mới hoặc restart container, tín hiệu <code>SIGTERM</code> sẽ kích hoạt dọn dẹp các timer phòng game sạch sẽ trước khi thoát.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 6 -->
+    <section id="section-6">
+      <div class="section-header">
+        <span class="section-number">6</span>
+        <h2>Kiểm Tra &amp; Khắc Phục Sự Cố (Troubleshooting)</h2>
+      </div>
+
+      <div class="card">
+        <h3 style="color: #fff; margin-bottom: 12px;">Các bước kiểm tra sức khỏe sau khi Deploy</h3>
+        <ul style="padding-left: 20px; margin-bottom: 20px; font-size: 0.95rem;">
+          <li>
+            <strong>Kiểm tra Health Check:</strong> Truy cập trình duyệt vào <code>https://ten-game.onrender.com/healthz</code>.<br>
+            Kết quả mong đợi: <code>{"status":"ok","platform":"render","mode":"monolith","uptimeSec":...,"rooms":0}</code>
+          </li>
+          <li style="margin-top: 8px;">
+            <strong>Kiểm tra API Info:</strong> Truy cập <code>https://ten-game.onrender.com/api/info</code>.<br>
+            Kết quả mong đợi: <code>{"lanIp":null,"port":10000,"platform":"render","mode":"monolith","exposeLanIp":false}</code>
+          </li>
+          <li style="margin-top: 8px;">
+            <strong>Kiểm tra Runtime Config:</strong> Truy cập <code>https://ten-game.onrender.com/config.js</code>.<br>
+            Kết quả mong đợi: trả về mã Javascript gán biến <code>window.BOXHEAD_DEPLOY_CONFIG</code>.
+          </li>
+        </ul>
+
+        <h3 style="color: #fff; margin-bottom: 12px;">Bảng xử lý các lỗi thường gặp</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30%;">Hiện tượng / Lỗi</th>
+              <th style="width: 30%;">Nguyên nhân</th>
+              <th>Cách khắc phục</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Lần đầu mở web tải rất lâu (gần 1 phút)</strong></td>
+              <td>Server Render Free tự ngủ sau 15 phút không có khách.</td>
+              <td>Đây là cơ chế bình thường của gói Free. Xem thanh thông báo ở sảnh để biết server đang thức dậy. Một khi đã thức, game chạy tức thì.</td>
+            </tr>
+            <tr>
+              <td><strong>Deploy báo lỗi build hoặc start thất bại</strong></td>
+              <td>Thiếu dependencies hoặc sai câu lệnh start.</td>
+              <td>Vào tab <strong>Logs</strong> của Render kiểm tra. Đảm bảo Build Command là <code>npm ci --omit=dev</code> và Start Command là <code>npm start</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Bấm "Copy Link Phòng" bạn bè không vào được</strong></td>
+              <td>Dùng phiên bản cũ bị dính IP mạng nội bộ 10.x.x.x.</td>
+              <td>Cập nhật nhánh mới nhất có <code>client/js/deployClient.js</code>. Link copy trên trình duyệt sẽ luôn là domain Render của bạn.</td>
+            </tr>
+            <tr>
+              <td><strong>Mất kết nối giữa trận đấu</strong></td>
+              <td>Mạng chập chờn hoặc hết quota băng thông 5 GB.</td>
+              <td>Kiểm tra tab <strong>Metrics</strong> trên Render xem lượng bandwidth đã dùng. Nếu sắp hết 5 GB, hãy chuyển sang mô hình <strong>Cách 3 (Hybrid với Cloudflare Pages)</strong>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <p>🎮 <strong>Boxhead Multiplayer LAN &amp; Online Game</strong> &bull; Hướng dẫn triển khai Render v1.0</p>
+      <p style="margin-top: 6px; font-size: 0.8rem;">Được xây dựng với kiến trúc Node.js, Express &amp; Socket.IO 4.7 &bull; Tài liệu tự động hóa</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

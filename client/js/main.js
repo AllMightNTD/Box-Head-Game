@@ -27,7 +27,12 @@
     }
   }
 
-  const socket = isBrowser && typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
+  const deployConfig = isBrowser && window.DeployClient ? window.DeployClient.getDeployConfig(window) : null;
+  const backendUrl = isBrowser && window.DeployClient ? window.DeployClient.resolveBackendUrl(deployConfig, window) : '';
+  const socketOptions = isBrowser && window.DeployClient ? window.DeployClient.buildSocketOptions(deployConfig) : undefined;
+  const socket = isBrowser && typeof io === 'function'
+    ? (backendUrl ? io(backendUrl, socketOptions) : io(socketOptions))
+    : { on: () => {}, emit: () => {} };
   const canvas = isBrowser ? document.getElementById('gameCanvas') : null;
   const renderer = isBrowser && typeof Renderer === 'function' && canvas ? new Renderer(canvas) : null;
   const input = isBrowser && typeof InputHandler === 'function' && canvas ? new InputHandler(canvas) : {
@@ -53,6 +58,13 @@
     getInterpolatedState: () => null
   };
   const ui = isBrowser && typeof UIController === 'function' ? new UIController() : null;
+
+  if (isBrowser && ui) {
+    const initialMsg = deployConfig && deployConfig.showColdStartHint
+      ? '⏳ Đang đánh thức máy chủ... (Lần đầu trên Free Tier có thể mất 30–60 giây)'
+      : '⏳ Đang kết nối tới máy chủ...';
+    ui.setConnectionStatus('connecting', initialMsg);
+  }
 
   let myPlayerId = null;
   let isInGame = false;
@@ -249,7 +261,11 @@
         const roomName = ui.roomNameInput.value.trim() || 'Phòng Chiến Đấu';
         const playerName = ui.nicknameInput.value.trim() || 'Hero';
         const mapId = ui.selectedMapId || currentMapId;
-        socket.emit('room:create', { roomName, playerName, character: 'HUMAN', mapId });
+        socket.emit('room:create', { roomName, playerName, character: 'HUMAN', mapId }, (res) => {
+          if (res && !res.success) {
+            ui.showToast(`⚠ ${res.error || 'Không thể tạo phòng!'}`);
+          }
+        });
       });
     }
 
@@ -332,6 +348,37 @@
   }
 
   // --- SOCKET LISTENERS ---
+  socket.on('connect', () => {
+    if (ui) {
+      const label = deployConfig && deployConfig.platform ? deployConfig.platform.toUpperCase() : 'ONLINE';
+      ui.setConnectionStatus('connected', `🟢 Đã kết nối máy chủ (${label})`);
+    }
+  });
+
+  socket.on('connect_error', () => {
+    if (ui) {
+      const msg = deployConfig && deployConfig.showColdStartHint
+        ? '⏳ Server đang khởi động lại (Cold Start 30–60s), đang tự thử lại...'
+        : '⚠ Không thể kết nối máy chủ, đang thử kết nối lại...';
+      ui.setConnectionStatus('disconnected', msg);
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    if (ui) {
+      ui.setConnectionStatus('disconnected', `⚠ Mất kết nối (${reason}). Đang kết nối lại...`);
+      if (isInGame) {
+        ui.showToast('⚠ Mất kết nối tới máy chủ, đang tự kết nối lại...');
+      }
+    }
+  });
+
+  socket.on('room:error', ({ error } = {}) => {
+    if (ui && error) {
+      ui.showToast(`⚠ ${error}`);
+    }
+  });
+
   socket.on('lobby:roomList', (rooms) => {
     ui.renderRoomsList(rooms, handleJoinRoom);
 

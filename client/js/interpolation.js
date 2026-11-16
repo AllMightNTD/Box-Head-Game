@@ -1,7 +1,18 @@
 class Interpolator {
-  constructor() {
+  constructor(bufferTimeMs) {
     this.snapshots = [];
-    this.bufferTime = 40; // 40ms render delay buffer
+    const configuredBuffer = (typeof window !== 'undefined'
+      && window.BOXHEAD_DEPLOY_CONFIG
+      && Number.isFinite(window.BOXHEAD_DEPLOY_CONFIG.interpolationBufferMs))
+      ? window.BOXHEAD_DEPLOY_CONFIG.interpolationBufferMs
+      : 40;
+    this.bufferTime = Number.isFinite(bufferTimeMs) && bufferTimeMs > 0 ? bufferTimeMs : configuredBuffer;
+  }
+
+  setBufferTime(ms) {
+    if (Number.isFinite(ms) && ms > 0) {
+      this.bufferTime = ms;
+    }
   }
 
   addSnapshot(snapshot) {
@@ -97,4 +108,9 @@ class Interpolator {
   }
 }
 
-window.Interpolator = Interpolator;
+if (typeof window !== 'undefined') {
+  window.Interpolator = Interpolator;
+}
+if (typeof module === 'object' && module.exports) {
+  module.exports = { Interpolator };
+}

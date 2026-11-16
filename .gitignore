@@ -92,6 +92,9 @@ ehthumbs_vista.db
 .Trash-*
 .nfs*
 
+# Build / Deploy Output
+dist/
+
 # Agent / Tooling Local State
 .superpowers/
 
