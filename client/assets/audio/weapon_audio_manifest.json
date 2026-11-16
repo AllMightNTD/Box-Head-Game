@@ -1,0 +1,135 @@
+{
+  "sample_rate": 44100,
+  "format": "wav mono 16-bit",
+  "volume": {
+    "fire": 1.0,
+    "explode": 1.0,
+    "reload": 0.6,
+    "empty": 0.5,
+    "casing": 0.35,
+    "pump": 0.75,
+    "load": 0.6,
+    "pin": 0.6,
+    "throw": 0.7,
+    "bounce": 0.7,
+    "flight": 0.55,
+    "charge": 0.8,
+    "cooldown": 0.6,
+    "impact": 0.8
+  },
+  "loop": [
+    "rocket/flight"
+  ],
+  "sounds": {
+    "pistol": {
+      "fire": [
+        "weapons/pistol/fire_1.wav",
+        "weapons/pistol/fire_2.wav",
+        "weapons/pistol/fire_3.wav"
+      ],
+      "reload": [
+        "weapons/pistol/reload_1.wav"
+      ],
+      "empty": [
+        "weapons/pistol/empty_1.wav"
+      ],
+      "casing": [
+        "weapons/pistol/casing_1.wav",
+        "weapons/pistol/casing_2.wav"
+      ]
+    },
+    "uzi": {
+      "fire": [
+        "weapons/uzi/fire_1.wav",
+        "weapons/uzi/fire_2.wav",
+        "weapons/uzi/fire_3.wav",
+        "weapons/uzi/fire_4.wav"
+      ],
+      "reload": [
+        "weapons/uzi/reload_1.wav"
+      ],
+      "empty": [
+        "weapons/uzi/empty_1.wav"
+      ],
+      "casing": [
+        "weapons/uzi/casing_1.wav",
+        "weapons/uzi/casing_2.wav"
+      ]
+    },
+    "shotgun": {
+      "fire": [
+        "weapons/shotgun/fire_1.wav",
+        "weapons/shotgun/fire_2.wav",
+        "weapons/shotgun/fire_3.wav"
+      ],
+      "pump": [
+        "weapons/shotgun/pump_1.wav",
+        "weapons/shotgun/pump_2.wav"
+      ],
+      "load": [
+        "weapons/shotgun/load_1.wav",
+        "weapons/shotgun/load_2.wav"
+      ],
+      "empty": [
+        "weapons/shotgun/empty_1.wav"
+      ],
+      "casing": [
+        "weapons/shotgun/casing_1.wav",
+        "weapons/shotgun/casing_2.wav"
+      ]
+    },
+    "grenade": {
+      "pin": [
+        "weapons/grenade/pin_1.wav"
+      ],
+      "throw": [
+        "weapons/grenade/throw_1.wav"
+      ],
+      "bounce": [
+        "weapons/grenade/bounce_1.wav",
+        "weapons/grenade/bounce_2.wav",
+        "weapons/grenade/bounce_3.wav"
+      ],
+      "explode": [
+        "weapons/grenade/explode_1.wav",
+        "weapons/grenade/explode_2.wav"
+      ]
+    },
+    "rocket": {
+      "load": [
+        "weapons/rocket/load_1.wav"
+      ],
+      "fire": [
+        "weapons/rocket/fire_1.wav",
+        "weapons/rocket/fire_2.wav"
+      ],
+      "flight": [
+        "weapons/rocket/flight_1.wav"
+      ],
+      "explode": [
+        "weapons/rocket/explode_1.wav",
+        "weapons/rocket/explode_2.wav"
+      ]
+    },
+    "railgun": {
+      "charge": [
+        "weapons/railgun/charge_1.wav"
+      ],
+      "fire": [
+        "weapons/railgun/fire_1.wav",
+        "weapons/railgun/fire_2.wav",
+        "weapons/railgun/fire_3.wav"
+      ],
+      "cooldown": [
+        "weapons/railgun/cooldown_1.wav"
+      ],
+      "empty": [
+        "weapons/railgun/empty_1.wav"
+      ],
+      "impact": [
+        "weapons/railgun/impact_1.wav",
+        "weapons/railgun/impact_2.wav"
+      ]
+    }
+  }
+}
