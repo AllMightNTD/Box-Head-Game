@@ -29,7 +29,12 @@ function createMockElement(id = '', tagName = 'div') {
     classList: {
       add: (...t) => t.forEach(x => classes.add(x)),
       remove: (...t) => t.forEach(x => classes.delete(x)),
-      contains: (x) => classes.has(x)
+      contains: (x) => classes.has(x),
+      toggle: (x, force) => {
+        const shouldAdd = force !== undefined ? Boolean(force) : !classes.has(x);
+        if (shouldAdd) classes.add(x); else classes.delete(x);
+        return shouldAdd;
+      }
     },
     get textContent() { return el._textContent; },
     set textContent(val) { el._textContent = String(val); el.children = []; },
@@ -221,4 +226,60 @@ test('main.js handleGameEvent routes MAGE_SKILL, MAGE_SHIELD_BREAK, and METEOR_S
   assert.strictEqual(vfxEvents.length, 3);
   assert.strictEqual(sfxEvents.length, 3);
   assert.ok(texts.some(t => t.includes('METEOR STORM')));
+});
+
+test('UIController switches to MAGE skill bar, displays cooldowns/mana costs, and renders Mana bar in Team Roster', () => {
+  const { elements } = setupMockEnv();
+  delete require.cache[require.resolve('../client/js/ui.js')];
+  const { UIController, MAGE_SKILL_DEFINITIONS } = require('../client/js/ui.js');
+
+  assert.strictEqual(MAGE_SKILL_DEFINITIONS.length, 8);
+  const ui = new UIController();
+
+  const state = {
+    state: 'PLAYING',
+    wave: 2,
+    zombiesLeft: 10,
+    players: [
+      {
+        id: 'm1',
+        name: 'Merlin',
+        character: 'MAGE',
+        hp: 70,
+        maxHp: 85,
+        mana: 25,
+        maxMana: 100,
+        combo: 12,
+        maxCombo: 12,
+        comboTimer: 2,
+        comboMaxTime: 3,
+        selectedWeapon: 'ARCANE_BOLT',
+        mageState: {
+          manaShieldActive: false,
+          skills: {
+            ARCANE_BOLT: { id: 'ARCANE_BOLT', slot: 1, unlocked: true, manaCost: 5, cooldown: 0 },
+            FROST_NOVA: { id: 'FROST_NOVA', slot: 2, unlocked: true, manaCost: 20, cooldown: 3.2 },
+            CHAIN_LIGHTNING: { id: 'CHAIN_LIGHTNING', slot: 3, unlocked: true, manaCost: 30, cooldown: 0 },
+            FIREBALL: { id: 'FIREBALL', slot: 4, unlocked: false, manaCost: 35, cooldown: 0 },
+            ARCANE_TELEPORT: { id: 'ARCANE_TELEPORT', slot: 5, unlocked: false, manaCost: 25, cooldown: 0 },
+            SANCTUARY_HEAL: { id: 'SANCTUARY_HEAL', slot: 6, unlocked: false, manaCost: 35, cooldown: 0 },
+            MANA_SHIELD: { id: 'MANA_SHIELD', slot: 7, unlocked: false, manaCost: 15, cooldown: 0 },
+            METEOR_STORM: { id: 'METEOR_STORM', slot: 8, unlocked: false, manaCost: 100, cooldown: 0 }
+          }
+        }
+      }
+    ]
+  };
+
+  ui.updateHUD(state, 'm1');
+
+  assert.strictEqual(ui.hudBarMode, 'MAGE');
+  assert.ok(elements['hud-team-list'].innerHTML.includes('teammate-mana-bar'));
+  assert.ok(elements['hud-team-list'].innerHTML.includes('25 MP'));
+  assert.strictEqual(elements['hud-ult-status'].textContent, '25 / 100 MP');
+  assert.strictEqual(elements['hud-cd-FROST_NOVA'].classList.contains('hidden'), false);
+  assert.strictEqual(elements['hud-cd-FROST_NOVA'].textContent, '3.2s');
+  // Chain Lightning costs 30 Mana > 25 current -> flagged no-mana
+  assert.strictEqual(elements['hud-weapon-CHAIN_LIGHTNING'].classList.contains('no-mana'), true);
+  assert.strictEqual(elements['hud-weapon-FIREBALL'].classList.contains('locked'), true);
 });

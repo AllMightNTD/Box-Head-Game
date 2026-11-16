@@ -1,3 +1,14 @@
+const MAGE_SKILL_DEFINITIONS = [
+  { id: 'ARCANE_BOLT', key: 1, name: 'Tia Ma Pháp', unlockCombo: 1, manaCost: 5, icon: '✨' },
+  { id: 'FROST_NOVA', key: 2, name: 'Băng Giá', unlockCombo: 5, manaCost: 20, icon: '❄️' },
+  { id: 'CHAIN_LIGHTNING', key: 3, name: 'Lôi Điện', unlockCombo: 10, manaCost: 30, icon: '⚡' },
+  { id: 'FIREBALL', key: 4, name: 'Hỏa Cầu', unlockCombo: 15, manaCost: 35, icon: '🔥' },
+  { id: 'ARCANE_TELEPORT', key: 5, name: 'Dịch Chuyển', unlockCombo: 20, manaCost: 25, icon: '🌀' },
+  { id: 'SANCTUARY_HEAL', key: 6, name: 'Thánh Vực', unlockCombo: 30, manaCost: 35, icon: '💠' },
+  { id: 'MANA_SHIELD', key: 7, name: 'Khiên Mana', unlockCombo: 40, manaCost: 15, icon: '🛡️' },
+  { id: 'METEOR_STORM', key: 8, name: 'Thiên Thạch', unlockCombo: 50, manaCost: 100, icon: '☄️' }
+];
+
 class UIController {
   constructor() {
     this.screenLobby = document.getElementById('screen-lobby');
@@ -74,7 +85,7 @@ class UIController {
     this.ultimateMeta = {
       HUMAN: { name: 'DRONE & HÀO QUANG ĐẠN', color: '#00e676' },
       WARRIOR: { name: 'SEISMIC SLAM (ĐẬP ĐẤT)', color: '#ff9800' },
-      MAGE: { name: 'BLINK & FROST NOVA', color: '#00e5ff' }
+      MAGE: { name: 'THIÊN THẠCH HỦY DIỆT', color: '#ff5722' }
     };
 
     this.currentRoom = null;
@@ -85,6 +96,9 @@ class UIController {
 
     // Callback when host selects a map in room
     this.onSelectMap = null;
+
+    this.hudBarMode = 'GUN';
+    this.mageSkillDefinitions = MAGE_SKILL_DEFINITIONS;
 
     this.weaponDefinitions = [
       { id: 'PISTOL', key: 1, name: 'Pistol', unlockCombo: 1, icon: '🔫' },
@@ -98,7 +112,7 @@ class UIController {
     ];
 
     this.fetchLanIp();
-    this.initWeaponsBar();
+    this.setWeaponsBarMode('GUN');
     this.initSoundToggle();
     this.initCopyButtons();
     this.initMapSelector();
@@ -499,8 +513,32 @@ class UIController {
     document.body.removeChild(ta);
   }
 
-  initWeaponsBar() {
+  setWeaponsBarMode(mode = 'GUN') {
+    this.hudBarMode = mode === 'MAGE' ? 'MAGE' : 'GUN';
+    if (!this.hudWeaponsBar) return;
     this.hudWeaponsBar.innerHTML = '';
+
+    if (this.hudBarMode === 'MAGE') {
+      this.mageSkillDefinitions.forEach(s => {
+        const slot = document.createElement('div');
+        slot.className = 'weapon-slot mage-slot' + (s.key === 1 ? ' active' : ' locked');
+        slot.id = 'hud-weapon-' + s.id;
+        slot.innerHTML = `
+          <div class="weapon-key">[${s.key}] ${s.icon}</div>
+          <div class="weapon-name">${s.name}</div>
+          <div class="weapon-ammo" id="hud-ammo-${s.id}">${s.key === 1 ? s.manaCost + ' MP' : 'x' + s.unlockCombo + ' 🔒'}</div>
+          <div class="skill-cooldown-overlay hidden" id="hud-cd-${s.id}"></div>
+        `;
+        slot.addEventListener('click', () => {
+          if (typeof this.onSelectWeapon === 'function') {
+            this.onSelectWeapon(s.key, s.id);
+          }
+        });
+        this.hudWeaponsBar.appendChild(slot);
+      });
+      return;
+    }
+
     this.weaponDefinitions.forEach(w => {
       const slot = document.createElement('div');
       slot.className = 'weapon-slot' + (w.id === 'PISTOL' ? ' active' : ' locked');
@@ -517,6 +555,10 @@ class UIController {
       });
       this.hudWeaponsBar.appendChild(slot);
     });
+  }
+
+  initWeaponsBar() {
+    this.setWeaponsBarMode('GUN');
   }
 
   showScreen(screenName) {
@@ -686,17 +728,32 @@ class UIController {
         const ultReady = ultPct >= 100;
         const ultBadge = `<span class="teammate-ult-badge ${ultReady ? 'ready' : ''}">${ultReady ? '⚡ READY' : ultPct + '%'}</span>`;
 
+        const maxMana = p.maxMana || 0;
+        const manaVal = Math.max(0, Math.floor(p.mana || 0));
+        const manaPct = maxMana > 0 ? Math.max(0, Math.min(100, (manaVal / maxMana) * 100)) : 0;
+        const manaBarHtml = maxMana > 0 ? `
+          <div class="teammate-mana-bar" title="Mana: ${manaVal}/${maxMana}">
+            <div class="teammate-mana-fill" style="width: ${manaPct}%;"></div>
+          </div>
+        ` : '';
+        const badgeHtml = maxMana > 0
+          ? `<span class="teammate-ult-badge">${manaVal} MP</span>`
+          : ultBadge;
+
         row.innerHTML = `
           <div style="display: flex; flex-direction: column; gap: 2px;">
             <span style="font-weight: bold; font-size: 0.85rem;">${escapeHtml(p.name)} ${isMe ? '(Bạn)' : ''}</span>
             <span style="font-size: 0.7rem; color: var(--text-muted);">${p.character || 'HUMAN'}</span>
           </div>
-          <div class="teammate-hp-bar">
-            <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+            <div class="teammate-hp-bar">
+              <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
+            </div>
+            ${manaBarHtml}
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="font-family: monospace; font-size: 0.8rem;">${p.isDowned ? '🚨 GỤC' : p.hp + ' HP'}</span>
-            ${ultBadge}
+            ${badgeHtml}
           </div>
         `;
         this.hudTeamList.appendChild(row);
@@ -720,42 +777,78 @@ class UIController {
       const comboRatio = localPlayer.comboMaxTime > 0 ? (localPlayer.comboTimer / localPlayer.comboMaxTime) * 100 : 0;
       this.hudComboFill.style.width = `${Math.max(0, Math.min(100, comboRatio))}%`;
 
-      // 4. Weapons Ammo & Active Slot
+      // 4. Weapons Ammo & Active Slot / Mage Skills
       const playerMaxCombo = Math.max(localPlayer.maxCombo || 1, localPlayer.combo || 1);
 
-      this.weaponDefinitions.forEach(w => {
-        const slotEl = document.getElementById('hud-weapon-' + w.id);
-        const ammoEl = document.getElementById('hud-ammo-' + w.id);
-        const pw = localPlayer.weapons ? localPlayer.weapons[w.id] : null;
+      if (localPlayer.character === 'MAGE') {
+        if (this.hudBarMode !== 'MAGE') this.setWeaponsBarMode('MAGE');
+        const ms = localPlayer.mageState;
+        const currentMana = localPlayer.mana || 0;
 
-        const isUnlocked = Boolean(
-          (pw && pw.unlocked) ||
-          (playerMaxCombo >= w.unlockCombo) ||
-          (w.id === 'PISTOL')
-        );
+        this.mageSkillDefinitions.forEach(s => {
+          const slotEl = document.getElementById('hud-weapon-' + s.id);
+          const ammoEl = document.getElementById('hud-ammo-' + s.id);
+          const cdEl = document.getElementById('hud-cd-' + s.id);
+          const sk = ms && ms.skills ? ms.skills[s.id] : null;
+          const isUnlocked = Boolean((sk && sk.unlocked) || (playerMaxCombo >= s.unlockCombo) || s.key === 1);
+          if (!slotEl) return;
 
-        if (slotEl && ammoEl) {
-          if (localPlayer.selectedWeapon === w.id) {
-            slotEl.classList.add('active');
-          } else {
-            slotEl.classList.remove('active');
+          const isShieldActive = s.key === 7 && Boolean(ms && ms.manaShieldActive);
+          slotEl.classList.toggle('active', s.key === 1 || isShieldActive);
+          slotEl.classList.toggle('locked', !isUnlocked);
+          slotEl.classList.toggle('no-mana', isUnlocked && currentMana < s.manaCost);
+
+          if (!isUnlocked) {
+            if (ammoEl) ammoEl.textContent = `x${s.unlockCombo} 🔒`;
+            if (cdEl) { cdEl.classList.add('hidden'); cdEl.textContent = ''; }
+            return;
           }
 
-          if (isUnlocked) {
-            slotEl.classList.remove('locked');
-            if (localPlayer.hasInfiniteAmmo && w.id !== 'BARRICADE' && w.id !== 'BARREL') {
-              ammoEl.textContent = '∞';
-            } else if (pw && pw.ammo !== undefined) {
-              ammoEl.textContent = pw.ammo === Infinity ? '∞' : pw.ammo;
+          if (ammoEl) ammoEl.textContent = `${s.manaCost} MP`;
+          const cd = sk && sk.cooldown > 0 ? sk.cooldown : 0;
+          if (cd > 0) {
+            if (cdEl) { cdEl.classList.remove('hidden'); cdEl.textContent = `${cd.toFixed(1)}s`; }
+          } else if (cdEl) {
+            cdEl.classList.add('hidden');
+            cdEl.textContent = '';
+          }
+        });
+      } else {
+        if (this.hudBarMode !== 'GUN') this.setWeaponsBarMode('GUN');
+        this.weaponDefinitions.forEach(w => {
+          const slotEl = document.getElementById('hud-weapon-' + w.id);
+          const ammoEl = document.getElementById('hud-ammo-' + w.id);
+          const pw = localPlayer.weapons ? localPlayer.weapons[w.id] : null;
+
+          const isUnlocked = Boolean(
+            (pw && pw.unlocked) ||
+            (playerMaxCombo >= w.unlockCombo) ||
+            (w.id === 'PISTOL')
+          );
+
+          if (slotEl && ammoEl) {
+            if (localPlayer.selectedWeapon === w.id) {
+              slotEl.classList.add('active');
             } else {
-              ammoEl.textContent = w.id === 'PISTOL' ? '∞' : '0';
+              slotEl.classList.remove('active');
             }
-          } else {
-            slotEl.classList.add('locked');
-            ammoEl.textContent = `x${w.unlockCombo} 🔒`;
+
+            if (isUnlocked) {
+              slotEl.classList.remove('locked');
+              if (localPlayer.hasInfiniteAmmo && w.id !== 'BARRICADE' && w.id !== 'BARREL') {
+                ammoEl.textContent = '∞';
+              } else if (pw && pw.ammo !== undefined) {
+                ammoEl.textContent = pw.ammo === Infinity ? '∞' : pw.ammo;
+              } else {
+                ammoEl.textContent = w.id === 'PISTOL' ? '∞' : '0';
+              }
+            } else {
+              slotEl.classList.add('locked');
+              ammoEl.textContent = `x${w.unlockCombo} 🔒`;
+            }
           }
-        }
-      });
+        });
+      }
 
       // 4.5 Ultimate Meter HUD
       if (this.hudUltContainer && this.hudUltFill && this.hudUltStatus) {
@@ -763,24 +856,37 @@ class UIController {
         const meta = this.ultimateMeta[char] || this.ultimateMeta.HUMAN;
         if (this.hudUltName) this.hudUltName.textContent = meta.name;
 
-        const maxC = localPlayer.ultMaxCharge || 100;
-        const pct = Math.floor(Math.min(100, ((localPlayer.ultCharge || 0) / maxC) * 100));
-        this.hudUltFill.style.width = pct + '%';
-
-        if (localPlayer.hasInfiniteAmmo) {
-          this.hudUltContainer.classList.add('buffed');
-          this.hudUltStatus.textContent = '⚡ ĐẠN VÔ HẠN!';
-          if (this.hudUltHint) this.hudUltHint.textContent = 'HÀO QUANG ĐẠN VÔ HẠN ĐANG HOẠT ĐỘNG';
-        } else {
+        if (char === 'MAGE') {
+          this.hudUltContainer.classList.add('mana-mode');
           this.hudUltContainer.classList.remove('buffed');
-          if (pct >= 100) {
-            this.hudUltContainer.classList.add('ready');
-            this.hudUltStatus.textContent = 'SẴN SÀNG!';
-            if (this.hudUltHint) this.hudUltHint.textContent = 'NHẤN [F] HOẶC [CHUỘT PHẢI] KÍCH HOẠT!';
+          const curM = Math.floor(localPlayer.mana || 0);
+          const maxM = localPlayer.maxMana || 100;
+          const mPct = Math.max(0, Math.min(100, Math.floor((curM / maxM) * 100)));
+          this.hudUltFill.style.width = mPct + '%';
+          this.hudUltStatus.textContent = `${curM} / ${maxM} MP`;
+          this.hudUltContainer.classList.toggle('ready', curM >= 100);
+          if (this.hudUltHint) this.hudUltHint.textContent = 'Hồi +5 Mana/giây • [F] / [Chuột Phải] / [8]: Thiên Thạch (100 MP, x50)';
+        } else {
+          this.hudUltContainer.classList.remove('mana-mode');
+          const maxC = localPlayer.ultMaxCharge || 100;
+          const pct = Math.floor(Math.min(100, ((localPlayer.ultCharge || 0) / maxC) * 100));
+          this.hudUltFill.style.width = pct + '%';
+
+          if (localPlayer.hasInfiniteAmmo) {
+            this.hudUltContainer.classList.add('buffed');
+            this.hudUltStatus.textContent = '⚡ ĐẠN VÔ HẠN!';
+            if (this.hudUltHint) this.hudUltHint.textContent = 'HÀO QUANG ĐẠN VÔ HẠN ĐANG HOẠT ĐỘNG';
           } else {
-            this.hudUltContainer.classList.remove('ready');
-            this.hudUltStatus.textContent = pct + '%';
-            if (this.hudUltHint) this.hudUltHint.textContent = '[F] hoặc [Chuột Phải] (Cần 100%)';
+            this.hudUltContainer.classList.remove('buffed');
+            if (pct >= 100) {
+              this.hudUltContainer.classList.add('ready');
+              this.hudUltStatus.textContent = 'SẴN SÀNG!';
+              if (this.hudUltHint) this.hudUltHint.textContent = 'NHẤN [F] HOẶC [CHUỘT PHẢI] KÍCH HOẠT!';
+            } else {
+              this.hudUltContainer.classList.remove('ready');
+              this.hudUltStatus.textContent = pct + '%';
+              if (this.hudUltHint) this.hudUltHint.textContent = '[F] hoặc [Chuột Phải] (Cần 100%)';
+            }
           }
         }
       }
@@ -809,4 +915,10 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-window.UIController = UIController;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { UIController, MAGE_SKILL_DEFINITIONS };
+}
+if (typeof window !== 'undefined') {
+  window.UIController = UIController;
+  window.MAGE_SKILL_DEFINITIONS = MAGE_SKILL_DEFINITIONS;
+}
