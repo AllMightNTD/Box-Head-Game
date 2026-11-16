@@ -500,3 +500,128 @@ test('maybeDropPickup respects 18% AMMO and 7% MEDKIT distribution', () => {
   assert.strictEqual(room.pickups[0].type, 'AMMO');
   assert.strictEqual(room.pickups[1].type, 'MEDKIT');
 });
+
+const { io: ioClient } = require('socket.io-client');
+const { GameRoom } = require('../server/game/GameRoom.js');
+const { startServer } = require('../server/server.js');
+const { socketHandler } = require('../server/socketHandler.js');
+
+test('GameRoom: Mage shoot spawns arcane_bolt, mage_fireball spawns burn_pool, AMMO pickup restores +30 Mana & -1.5s CD, and WAVE_CLEAR restores 100% Mana', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('r_mage_room', 'Mage Room', mockIo);
+  t.after(() => room.stop());
+
+  const mage = room.addPlayer('m1', 'Merlin', 'MAGE');
+  room.startGame();
+  mage.x = 500;
+  mage.y = 500;
+  mage.angle = 0;
+
+  // 1. Handle shoot spawns arcane_bolt
+  room.handleShoot('m1');
+  assert.strictEqual(mage.mana, 95);
+  assert.strictEqual(room.bullets.length, 1);
+  assert.strictEqual(room.bullets[0].type, 'arcane_bolt');
+
+  // 2. Arcane bolt hits zombie with MAGIC damage (no bullet resistance on Mummy)
+  const mummy = new Zombie('zm', 'MUMMY', 530, 500);
+  room.zombies.push(mummy);
+  room.tick(0.02);
+  assert.strictEqual(mummy.hp, 105); // 140 - 35 full damage (not 0.7x bullet resistance)
+
+  // 3. Fireball hit triggers explodeMageFireball -> spawns burn_pool
+  mage.combo = 15;
+  mage.maxCombo = 15;
+  mage.mageState.skills.FIREBALL.unlocked = true;
+  mage.fireCooldown = 0;
+  const resFb = room.handleSkill('m1', { slot: 4, angle: 0 });
+  assert.strictEqual(resFb.activated, true);
+  for (let i = 0; i < 5; i++) {
+    room.tick(0.02);
+  }
+  assert.ok(room.groundZones.some(gz => gz.type === 'burn_pool'));
+
+  // 4. AMMO pickup restores +30 Mana and reduces skill cooldown by 1.5s
+  mage.mana = 40;
+  mage.mageState.skills.FIREBALL.cooldown = 4.0;
+  room.pickups.push({ id: 'pk1', type: 'AMMO', x: mage.x, y: mage.y, life: 10 });
+  room.tick(0.02);
+  assert.ok(mage.mana >= 70 && mage.mana < 71);
+  assert.ok(mage.mageState.skills.FIREBALL.cooldown <= 2.5);
+
+  // 5. WAVE_CLEAR restores 100% Mana
+  mage.mana = 20;
+  room.zombies = [];
+  room.zombiesSpawnedInWave = room.waveTotalZombies;
+  room.tick(0.02);
+  assert.strictEqual(room.state, 'INTERMISSION');
+  assert.strictEqual(mage.mana, 100);
+});
+
+test('E2E Socket: player:skill & player:ultimate synchronize Mage groundZones and Mana Shield over Socket.IO', async (t) => {
+  // 1. Unit socketHandler check
+  const handlers = {};
+  const mockSocket = {
+    id: 'sock_m1',
+    emit: () => {},
+    join: () => {},
+    leave: () => {},
+    on: (ev, fn) => { handlers[ev] = fn; }
+  };
+  let connectionCb = null;
+  const mockIo = {
+    on: (ev, fn) => { if (ev === 'connection') connectionCb = fn; },
+    to: () => ({ emit: () => {} }),
+    emit: () => {}
+  };
+  const { rooms } = socketHandler(mockIo);
+  connectionCb(mockSocket);
+
+  let createdRoomId = null;
+  handlers['room:create']({ roomName: 'MageSock', playerName: 'Merlin', character: 'MAGE' }, (res) => {
+    createdRoomId = res.room.id;
+  });
+  const createdRoom = rooms.get(createdRoomId);
+  t.after(() => createdRoom.gameRoom.stop());
+  handlers['room:start']();
+
+  const gp = createdRoom.gameRoom.players.get('sock_m1');
+  gp.x = 500;
+  gp.y = 500;
+  gp.mageState.skills.ARCANE_TELEPORT.unlocked = true;
+  gp.mageState.skills.METEOR_STORM.unlocked = true;
+
+  // Cast [5] Teleport via player:skill
+  handlers['player:skill']({ slot: 5, angle: 0, targetX: 700, targetY: 500 });
+  assert.strictEqual(gp.x, 700);
+  assert.strictEqual(gp.mana, 75);
+
+  // Cast [8] Meteor Storm via player:ultimate after regenerating mana
+  gp.mana = 100;
+  handlers['player:ultimate']({ angle: 0, targetX: 850, targetY: 500 });
+  assert.strictEqual(gp.mana, 0);
+  assert.strictEqual(createdRoom.gameRoom.pendingMeteors.length, 1);
+
+  // 2. Real TCP Socket.IO snapshot check
+  const { server, port } = await startServer(0);
+  t.after(() => server.close());
+
+  const socket = ioClient(`http://localhost:${port}`, { reconnection: false });
+  await new Promise((resolve) => socket.on('connect', resolve));
+  t.after(() => socket.disconnect());
+
+  await new Promise((resolve) => {
+    socket.emit('room:create', { roomName: 'MageLive', playerName: 'Merlin', character: 'MAGE' }, resolve);
+  });
+  await new Promise((resolve) => {
+    socket.once('room:gameStarted', resolve);
+    socket.emit('room:start');
+  });
+
+  const snap = await new Promise((resolve) => socket.once('game:snapshot', resolve));
+  assert.strictEqual(snap.players[0].mana, 100);
+  assert.strictEqual(snap.players[0].maxMana, 100);
+  assert.strictEqual(snap.players[0].ultimateId, 'METEOR_STORM');
+  assert.ok(Array.isArray(snap.groundZones));
+  assert.ok(Array.isArray(snap.pendingMeteors));
+});

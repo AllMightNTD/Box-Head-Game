@@ -6,6 +6,14 @@ const { GameMap } = require('./Map.js');
 const { WEAPONS } = require('./WeaponsConfig.js');
 const { ULT_CHARGE_CONFIG } = require('./UltimateConfig.js');
 const { triggerPlayerUltimate } = require('./UltimateAbilities.js');
+const { MAGE_MANA_CONFIG } = require('./MageSkillsConfig.js');
+const {
+  executeMageArcaneBolt,
+  triggerMageSkill,
+  explodeMageFireball,
+  updateMageRoomSystems,
+  maybeDropPickup
+} = require('./MageAbilities.js');
 
 class GameRoom {
   constructor(id, name, io, mapId = 'THE_ROOMS') {
@@ -21,6 +29,8 @@ class GameRoom {
     this.barricades = [];
     this.pickups = [];
     this.drones = [];
+    this.groundZones = [];
+    this.pendingMeteors = [];
 
     this.state = 'LOBBY'; // LOBBY | PLAYING | INTERMISSION | GAMEOVER
     this.wave = 1;
@@ -71,6 +81,8 @@ class GameRoom {
     this.barricades = [];
     this.pickups = [];
     this.drones = [];
+    this.groundZones = [];
+    this.pendingMeteors = [];
     this.eventsBuffer = [{ type: 'SESSION_RESET' }];
 
     // Reset player positions & health
@@ -100,7 +112,12 @@ class GameRoom {
           maxAmmo: w.maxAmmo
         };
       }
-      p.selectedWeapon = 'PISTOL';
+      if (p.character === 'MAGE') {
+        p.resetMageState();
+      } else {
+        p.selectedWeapon = 'PISTOL';
+        p.hasSanctuaryBuff = false;
+      }
       idx++;
     }
 
@@ -156,6 +173,11 @@ class GameRoom {
   handleShoot(socketId) {
     const player = this.players.get(socketId);
     if (!player) return;
+
+    if (player.character === 'MAGE') {
+      executeMageArcaneBolt(player, this);
+      return;
+    }
 
     const weapon = WEAPONS[player.selectedWeapon];
     if (!weapon) return;
@@ -288,10 +310,41 @@ class GameRoom {
   handleUltimate(socketId, payload = {}) {
     const player = this.players.get(socketId);
     if (!player) return { activated: false };
-    const angle = payload && typeof payload.angle === 'number' && Number.isFinite(payload.angle)
-      ? payload.angle
+    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const angle = typeof safePayload.angle === 'number' && Number.isFinite(safePayload.angle)
+      ? safePayload.angle
       : player.angle;
-    return triggerPlayerUltimate(player, angle, this);
+    const targetPos = (typeof safePayload.targetX === 'number' && Number.isFinite(safePayload.targetX) &&
+      typeof safePayload.targetY === 'number' && Number.isFinite(safePayload.targetY))
+      ? { x: safePayload.targetX, y: safePayload.targetY }
+      : null;
+    return triggerPlayerUltimate(player, angle, this, targetPos);
+  }
+
+  /**
+   * Handles active skill cast request for Mage (slots 1..8).
+   * @param {string} socketId
+   * @param {object} [payload={}]
+   * @returns {object}
+   */
+  handleSkill(socketId, payload = {}) {
+    const player = this.players.get(socketId);
+    if (!player || player.character !== 'MAGE') {
+      return { activated: false };
+    }
+    if (this.state !== 'PLAYING' && this.state !== 'INTERMISSION') {
+      return { activated: false };
+    }
+    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const slot = safePayload.slot;
+    const angle = (typeof safePayload.angle === 'number' && Number.isFinite(safePayload.angle))
+      ? safePayload.angle
+      : player.angle;
+    const targetPos = (typeof safePayload.targetX === 'number' && Number.isFinite(safePayload.targetX) &&
+      typeof safePayload.targetY === 'number' && Number.isFinite(safePayload.targetY))
+      ? { x: safePayload.targetX, y: safePayload.targetY }
+      : null;
+    return triggerMageSkill(player, slot, angle, this, targetPos);
   }
 
   triggerExplosion(x, y, radius, damage, ownerId) {
@@ -327,6 +380,7 @@ class GameRoom {
             angle: z.angle,
             killAngle: Number(knockAngle.toFixed(2))
           });
+          maybeDropPickup(this, z);
         }
       }
     }
@@ -449,6 +503,9 @@ class GameRoom {
             p.isDowned = false;
             p.hp = 50;
           }
+          if (!p.isDead && p.character === 'MAGE') {
+            p.restoreMana(p.maxMana * MAGE_MANA_CONFIG.WAVE_CLEAR_RESTORE_RATIO);
+          }
         }
       }
     } else if (this.state === 'INTERMISSION') {
@@ -464,7 +521,11 @@ class GameRoom {
       const b = this.bullets[i];
       const explosion = b.update(dt, this.map);
       if (explosion) {
-        this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId);
+        if (b.isMageFireball) {
+          explodeMageFireball(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId, this);
+        } else {
+          this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId);
+        }
       }
 
       if (b.isDead) {
@@ -489,7 +550,13 @@ class GameRoom {
           const z = this.zombies[j];
           if (z.isDead) continue;
           if (b.checkHit(z)) {
-            z.takeDamage(b.damage, 'BULLET');
+            if (b.isMageFireball) {
+              b.isDead = true;
+              explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
+              break;
+            }
+
+            z.takeDamage(b.damage, b.damageType || 'BULLET');
             z.applyKnockback(b.angle, b.knockback);
             this.eventsBuffer.push({
               type: 'HIT',
@@ -501,7 +568,7 @@ class GameRoom {
             });
 
             const shooter = this.players.get(b.ownerId);
-            if (shooter && !b.fromUlt) {
+            if (shooter && !b.fromUlt && shooter.character !== 'MAGE') {
               const hitCharge = b.type === 'shotgun'
                 ? ULT_CHARGE_CONFIG.SHOTGUN_PELLET_HIT
                 : ULT_CHARGE_CONFIG.HIT_BASE;
@@ -510,10 +577,10 @@ class GameRoom {
 
             if (z.isDead) {
               if (shooter) {
-                const unlocks = shooter.recordKill(z.score, { awardUltCharge: !b.fromUlt });
+                const unlocks = shooter.recordKill(z.score, { awardUltCharge: !b.fromUlt && shooter.character !== 'MAGE' });
                 if (unlocks.length > 0) {
                   for (const u of unlocks) {
-                    this.eventsBuffer.push({ type: 'UNLOCKED', weapon: u.id, playerId: shooter.id });
+                    this.eventsBuffer.push({ type: 'UNLOCKED', weapon: u.name || u.id, playerId: shooter.id });
                   }
                 }
               }
@@ -526,16 +593,7 @@ class GameRoom {
                 killAngle: Number((b.angle || 0).toFixed(2))
               });
 
-              // 15% chance to drop ammo or medkit
-              if (Math.random() < 0.15) {
-                this.pickups.push({
-                  id: 'pk_' + Math.random().toString(36).substring(2, 7),
-                  type: Math.random() < 0.4 ? 'MEDKIT' : 'AMMO',
-                  x: Math.round(z.x),
-                  y: Math.round(z.y),
-                  life: 25 // 25s decay
-                });
-              }
+              maybeDropPickup(this, z);
             }
 
             if (!b.penetration) {
@@ -552,6 +610,11 @@ class GameRoom {
           if (bar.type === 'barrel') {
             const hit = (Math.hypot(b.x - bar.x, b.y - bar.y) <= (b.radius + bar.radius));
             if (hit) {
+              if (b.isMageFireball) {
+                b.isDead = true;
+                explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
+                break;
+              }
               const barrels = this.barricades.filter(x => x.type === 'barrel');
               bar.takeDamage(b.damage, barrels, (bx, by, br, bd, bo) => {
                 this.triggerExplosion(bx, by, br, bd, b.ownerId);
@@ -609,6 +672,9 @@ class GameRoom {
       }
     }
 
+    // 4.8. Update Mage groundZones & pendingMeteors
+    updateMageRoomSystems(dt, this);
+
     // 5. Update Pickups & Check collection
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
@@ -625,11 +691,15 @@ class GameRoom {
           if (p.type === 'MEDKIT') {
             player.heal(40);
           } else {
-            // Restore ammo to current weapon & others
-            for (const key of Object.keys(player.weapons)) {
-              if (player.weapons[key].unlocked) {
-                const conf = WEAPONS[key];
-                player.addAmmo(key, Math.ceil(conf.startingAmmo * 0.75));
+            if (player.character === 'MAGE') {
+              player.applyMageAmmoPickup();
+            } else {
+              // Restore ammo to current weapon & others
+              for (const key of Object.keys(player.weapons)) {
+                if (player.weapons[key].unlocked) {
+                  const conf = WEAPONS[key];
+                  player.addAmmo(key, Math.ceil(conf.startingAmmo * 0.75));
+                }
               }
             }
           }
@@ -661,6 +731,24 @@ class GameRoom {
       barricades: this.barricades.map(b => b.serialize()),
       pickups: this.pickups.map(p => ({ id: p.id, type: p.type, x: p.x, y: p.y })),
       drones: this.drones.map(d => d.serialize()),
+      groundZones: (this.groundZones || []).map(gz => ({
+        id: gz.id,
+        type: gz.type,
+        ownerId: gz.ownerId,
+        x: Math.round(gz.x),
+        y: Math.round(gz.y),
+        radius: gz.radius,
+        timer: Number(gz.timer.toFixed(2))
+      })),
+      pendingMeteors: (this.pendingMeteors || []).map(pm => ({
+        id: pm.id,
+        x: pm.x,
+        y: pm.y,
+        stormRadius: pm.stormRadius,
+        impactRadius: pm.impactRadius,
+        timer: Number(pm.timer.toFixed(2)),
+        meteors: pm.meteors.map(m => ({ delay: m.delay, x: m.x, y: m.y, fired: m.fired }))
+      })),
       events: [...this.eventsBuffer]
     };
   }
