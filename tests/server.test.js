@@ -22,3 +22,21 @@ test('Server starts and responds with LAN IP info', async (t) => {
   assert.strictEqual(res.body.lanIp, lanIp);
   assert.strictEqual(res.body.port, port);
 });
+
+test('Server serves weapon audio WAV assets statically', async () => {
+  const instance = await startServer(0);
+  const port = instance.port;
+
+  try {
+    const status = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${port}/assets/audio/weapons/pistol/fire_1.wav`, res => {
+        res.resume();
+        resolve(res.statusCode);
+      }).on('error', reject);
+    });
+    assert.strictEqual(status, 200);
+  } finally {
+    await new Promise(resolve => instance.server.close(resolve));
+  }
+});
+
