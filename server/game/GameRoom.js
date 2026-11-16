@@ -67,6 +67,10 @@ class GameRoom {
     }
   }
 
+  initGame(mapId = 'THE_ROOMS') {
+    if (mapId) this.setMap(mapId);
+  }
+
   addPlayer(socketId, name, character) {
     const spawnIndex = this.players.size % this.map.playerSpawns.length;
     const spawn = this.map.playerSpawns[spawnIndex];
@@ -374,12 +378,14 @@ class GameRoom {
     return { activated: false };
   }
 
-  triggerExplosion(x, y, radius, damage, ownerId) {
+  triggerExplosion(x, y, radius, damage, ownerId, source = 'GENERIC') {
+    const resolvedSource = (source ? String(source) : 'GENERIC').toUpperCase();
     this.eventsBuffer.push({
       type: 'EXPLOSION',
       x: Math.round(x),
       y: Math.round(y),
-      radius: Math.round(radius)
+      radius: Math.round(radius),
+      source: resolvedSource
     });
 
     // Damage zombies
@@ -430,7 +436,7 @@ class GameRoom {
       if (d <= radius + 22) {
         if (b.type === 'barrel') {
           b.takeDamage(damage, barrels, (bx, by, br, bd, bo) => {
-            this.triggerExplosion(bx, by, br, bd, bo);
+            this.triggerExplosion(bx, by, br, bd, bo, 'BARREL');
           });
         } else {
           b.takeDamage(damage);
@@ -554,7 +560,7 @@ class GameRoom {
         if (b.isMageFireball) {
           explodeMageFireball(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId, this);
         } else {
-          this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId);
+          this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId, explosion.source || 'GENERIC');
         }
       }
 
@@ -575,7 +581,7 @@ class GameRoom {
               break;
             }
             b.isDead = true;
-            this.triggerExplosion(b.x, b.y, b.explosionRadius, b.explosionDamage, null);
+            this.triggerExplosion(b.x, b.y, b.explosionRadius, b.explosionDamage, null, 'FIREBALL');
             break;
           }
         }
@@ -655,7 +661,7 @@ class GameRoom {
               }
               const barrels = this.barricades.filter(x => x.type === 'barrel');
               bar.takeDamage(b.damage, barrels, (bx, by, br, bd, bo) => {
-                this.triggerExplosion(bx, by, br, bd, b.ownerId);
+                this.triggerExplosion(bx, by, br, bd, b.ownerId, 'BARREL');
               });
               b.isDead = true;
               break;
@@ -706,7 +712,7 @@ class GameRoom {
         if (dist <= contactDist) {
           const allBarrels = this.barricades.filter(x => x.type === 'barrel');
           bar.detonate(allBarrels, (bx, by, br, bd, bo) => {
-            this.triggerExplosion(bx, by, br, bd, bar.ownerId);
+            this.triggerExplosion(bx, by, br, bd, bar.ownerId, 'BARREL');
           });
           break;
         }
