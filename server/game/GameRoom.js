@@ -604,6 +604,7 @@ class GameRoom {
             z.applyKnockback(b.angle, b.knockback);
             this.eventsBuffer.push({
               type: 'HIT',
+              zombieId: z.id,
               x: Math.round(z.x),
               y: Math.round(z.y),
               angle: Number((b.angle || 0).toFixed(2)),
@@ -683,6 +684,16 @@ class GameRoom {
         continue;
       }
       z.update(dt, playersArr, this.barricades, this.map, newBulletsFromZombies);
+      if (z.isAttacking) {
+        this.eventsBuffer.push({
+          type: 'ZOMBIE_ATTACK',
+          zombieId: z.id,
+          zType: z.type,
+          x: Math.round(z.x),
+          y: Math.round(z.y),
+          attackKind: z.type === 'DEVIL' ? 'ranged' : 'melee'
+        });
+      }
     }
     for (let i = 0; i < newBulletsFromZombies.length; i++) {
       this.bullets.push(newBulletsFromZombies[i]);

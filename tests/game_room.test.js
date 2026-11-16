@@ -150,6 +150,7 @@ test('GameRoom emits enriched HIT and ZOMBIE_DIE events with angle, weapon, and 
   assert.strictEqual(typeof hitEv.angle, 'number');
   assert.strictEqual(hitEv.weapon, 'bullet');
   assert.strictEqual(hitEv.zType, 'TANK');
+  assert.strictEqual(hitEv.zombieId, 'z_test_2');
 
   assert.ok(dieEv, 'Expected ZOMBIE_DIE event to be emitted');
   assert.strictEqual(dieEv.zType, 'TANK');
@@ -296,7 +297,53 @@ test('GameRoom tick routes bullet, barrel, and fireball explosions with correct 
   assert.ok(fbExp, 'Expected EXPLOSION event with source FIREBALL');
 });
 
+test('GameRoom emits ZOMBIE_ATTACK for melee and Devil ranged attacks and suppresses when frozen', (t) => {
+  const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
+  const room = new GameRoom('room-z-attack', 'Zombie Attack', mockIo);
+  t.after(() => room.stop());
 
+  const p = room.addPlayer('p1', 'Alice', 'HUMAN');
+  room.startGame();
+  p.x = 500;
+  p.y = 500;
 
+  const { Zombie } = require('../server/game/Zombie.js');
+  const meleeZ = new Zombie('z_melee', 'NORMAL', 515, 500);
+  meleeZ.attackCooldown = 0;
+  const devilZ = new Zombie('z_devil', 'DEVIL', 750, 500);
+  devilZ.attackCooldown = 0;
+  const frozenZ = new Zombie('z_frozen', 'RUNNER', 515, 500);
+  frozenZ.attackCooldown = 0;
+  frozenZ.applyFreeze(2.0);
+  room.zombies.push(meleeZ, devilZ, frozenZ);
+
+  const snapshots = [];
+  room.io = {
+    to: () => ({ emit: (ev, data) => { if (ev === 'game:snapshot') snapshots.push(data); } })
+  };
+
+  room.tick(0.02);
+  room.tick(0.02);
+
+  const tick1Events = snapshots[0].events.filter(e => e.type === 'ZOMBIE_ATTACK');
+  const tick2Events = snapshots[1].events.filter(e => e.type === 'ZOMBIE_ATTACK');
+
+  const meleeEv = tick1Events.find(e => e.zombieId === 'z_melee');
+  const devilEv = tick1Events.find(e => e.zombieId === 'z_devil');
+  const frozenEv = tick1Events.find(e => e.zombieId === 'z_frozen');
+
+  assert.ok(meleeEv, 'Expected melee ZOMBIE_ATTACK event');
+  assert.strictEqual(meleeEv.zType, 'NORMAL');
+  assert.strictEqual(meleeEv.attackKind, 'melee');
+  assert.strictEqual(typeof meleeEv.x, 'number');
+  assert.strictEqual(typeof meleeEv.y, 'number');
+
+  assert.ok(devilEv, 'Expected devil ranged ZOMBIE_ATTACK event');
+  assert.strictEqual(devilEv.zType, 'DEVIL');
+  assert.strictEqual(devilEv.attackKind, 'ranged');
+
+  assert.strictEqual(frozenEv, undefined, 'Frozen zombie must not emit ZOMBIE_ATTACK');
+  assert.strictEqual(tick2Events.length, 0, 'Cooldown tick must not repeat ZOMBIE_ATTACK');
+});
 
 
