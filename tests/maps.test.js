@@ -150,3 +150,16 @@ test('E2E Socket: Map selection at room creation, dynamic map change in lobby, a
   const snapshot = await new Promise(resolve => host.once('game:snapshot', resolve));
   assert.strictEqual(snapshot.mapId, 'VOLCANO');
 });
+
+test('Client MAPS_CONFIG matches server MAPS for walls, spawns, and theme across all 4 maps', () => {
+  const { MAPS_CONFIG } = require('../client/js/mapsConfig.js');
+  const mapIds = ['THE_ROOMS', 'DESERT', 'SNOW', 'VOLCANO'];
+
+  assert.deepStrictEqual(Object.keys(MAPS_CONFIG).sort(), [...mapIds].sort());
+  for (const mapId of mapIds) {
+    assert.deepStrictEqual(MAPS_CONFIG[mapId].walls, MAPS[mapId].walls, `${mapId} walls mismatch`);
+    assert.deepStrictEqual(MAPS_CONFIG[mapId].playerSpawns, MAPS[mapId].playerSpawns, `${mapId} playerSpawns mismatch`);
+    assert.deepStrictEqual(MAPS_CONFIG[mapId].zombieSpawns, MAPS[mapId].zombieSpawns, `${mapId} zombieSpawns mismatch`);
+    assert.deepStrictEqual(MAPS_CONFIG[mapId].theme, MAPS[mapId].theme, `${mapId} theme mismatch`);
+  }
+});

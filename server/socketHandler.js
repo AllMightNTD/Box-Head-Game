@@ -3,6 +3,14 @@ const { MAPS, DEFAULT_MAP_ID, getMapConfig } = require('./game/MapConfig.js');
 
 const CHARACTERS = ['HUMAN', 'WARRIOR', 'MAGE', 'BAMBO', 'BON', 'BINGO', 'BERT'];
 
+function safeObject(val) {
+  return val && typeof val === 'object' && !Array.isArray(val) ? val : {};
+}
+
+function isRoomInLobby(room) {
+  return Boolean(room && room.state === 'LOBBY' && (!room.gameRoom || room.gameRoom.state === 'LOBBY'));
+}
+
 function socketHandler(io, options = {}) {
   const rooms = new Map();
   const maxRooms = Number.isFinite(options.maxRooms) && options.maxRooms > 0
@@ -37,6 +45,39 @@ function socketHandler(io, options = {}) {
   io.on('connection', (socket) => {
     let currentRoomId = null;
 
+    function handleLeave() {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (!room) {
+        currentRoomId = null;
+        return;
+      }
+
+      room.players.delete(socket.id);
+      if (room.gameRoom) {
+        room.gameRoom.removePlayer(socket.id);
+      }
+      socket.leave(currentRoomId);
+
+      if (room.players.size === 0) {
+        if (room.gameRoom) room.gameRoom.stop();
+        rooms.delete(currentRoomId);
+      } else {
+        if (room.hostId === socket.id) {
+          const nextHost = room.players.values().next().value;
+          if (nextHost) {
+            nextHost.isHost = true;
+            nextHost.ready = true;
+            room.hostId = nextHost.id;
+          }
+        }
+        io.to(currentRoomId).emit('room:update', serializeRoom(room));
+      }
+
+      currentRoomId = null;
+      io.emit('lobby:roomList', getRoomList());
+    }
+
     socket.emit('lobby:roomList', getRoomList());
 
     socket.on('lobby:listRooms', () => {
@@ -44,7 +85,9 @@ function socketHandler(io, options = {}) {
     });
 
     socket.on('room:create', (payload, callback) => {
-      if (rooms.size >= maxRooms) {
+      const existingRoom = currentRoomId ? rooms.get(currentRoomId) : null;
+      const wouldFreeRoom = Boolean(existingRoom && existingRoom.players.size <= 1);
+      if (rooms.size >= maxRooms && !wouldFreeRoom) {
         const error = `Máy chủ đang đầy (${maxRooms} phòng tối đa), vui lòng thử lại sau!`;
         if (typeof callback === 'function') {
           callback({ success: false, error });
@@ -53,7 +96,11 @@ function socketHandler(io, options = {}) {
         return;
       }
 
-      const safePayload = payload && typeof payload === 'object' ? payload : {};
+      if (currentRoomId) {
+        handleLeave();
+      }
+
+      const safePayload = safeObject(payload);
       const { roomName, playerName, character, mapId } = safePayload;
       const roomId = 'room_' + Math.random().toString(36).substring(2, 8);
       const name = (typeof roomName === 'string' && roomName.trim() ? roomName : 'Phong ' + roomId).trim().substring(0, 24);
@@ -97,10 +144,23 @@ function socketHandler(io, options = {}) {
       io.emit('lobby:roomList', getRoomList());
     });
 
-    socket.on('room:join', ({ roomId, playerName, character }, callback) => {
+    socket.on('room:join', (payload, callback) => {
+      const safePayload = safeObject(payload);
+      const { roomId, playerName, character } = safePayload;
+      if (!roomId || typeof roomId !== 'string') {
+        if (typeof callback === 'function') callback({ success: false, error: 'Mã phòng không hợp lệ!' });
+        return;
+      }
       const room = rooms.get(roomId);
       if (!room) {
         if (typeof callback === 'function') callback({ success: false, error: 'Phòng không tồn tại!' });
+        return;
+      }
+
+      if (currentRoomId === roomId) {
+        if (typeof callback === 'function') {
+          callback({ success: true, room: serializeRoom(room), playerId: socket.id });
+        }
         return;
       }
 
@@ -109,7 +169,11 @@ function socketHandler(io, options = {}) {
         return;
       }
 
-      const playerNick = (playerName || 'Hero').trim().substring(0, 16);
+      if (currentRoomId) {
+        handleLeave();
+      }
+
+      const playerNick = (typeof playerName === 'string' && playerName.trim() ? playerName : 'Hero').trim().substring(0, 16);
       let chosenChar = CHARACTERS.includes(character) ? character : 'HUMAN';
 
       const player = {
@@ -138,10 +202,14 @@ function socketHandler(io, options = {}) {
       io.emit('lobby:roomList', getRoomList());
     });
 
-    socket.on('room:selectChar', ({ character }) => {
+    socket.on('room:selectChar', (payload) => {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);
-      if (!room) return;
+      if (!room || !isRoomInLobby(room)) return;
+
+      const safePayload = safeObject(payload);
+      const { character } = safePayload;
+      if (!character || typeof character !== 'string') return;
 
       const player = room.players.get(socket.id);
       if (!player) return;
@@ -158,10 +226,13 @@ function socketHandler(io, options = {}) {
       }
     });
 
-    socket.on('room:ready', ({ ready }) => {
+    socket.on('room:ready', (payload) => {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);
-      if (!room) return;
+      if (!room || !isRoomInLobby(room)) return;
+
+      const safePayload = safeObject(payload);
+      const { ready } = safePayload;
 
       const player = room.players.get(socket.id);
       if (!player) return;
@@ -170,10 +241,14 @@ function socketHandler(io, options = {}) {
       io.to(currentRoomId).emit('room:update', serializeRoom(room));
     });
 
-    socket.on('room:selectMap', ({ mapId }) => {
+    socket.on('room:selectMap', (payload) => {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);
-      if (!room || room.hostId !== socket.id) return;
+      if (!room || room.hostId !== socket.id || !isRoomInLobby(room)) return;
+
+      const safePayload = safeObject(payload);
+      const { mapId } = safePayload;
+      if (!mapId || typeof mapId !== 'string') return;
       if (!MAPS[mapId]) return;
 
       room.mapId = mapId;
@@ -229,7 +304,7 @@ function socketHandler(io, options = {}) {
       if (room && room.gameRoom) {
         const player = room.gameRoom.players.get(socket.id);
         if (player) {
-          player.applyInput(input);
+          player.applyInput(safeObject(input));
         }
       }
     });
@@ -254,7 +329,7 @@ function socketHandler(io, options = {}) {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);
       if (room && room.gameRoom) {
-        room.gameRoom.handleUltimate(socket.id, payload);
+        room.gameRoom.handleUltimate(socket.id, safeObject(payload));
       }
     });
 
@@ -262,40 +337,9 @@ function socketHandler(io, options = {}) {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);
       if (room && room.gameRoom) {
-        const safePayload = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-        room.gameRoom.handleSkill(socket.id, safePayload);
+        room.gameRoom.handleSkill(socket.id, safeObject(payload));
       }
     });
-
-    function handleLeave() {
-      if (!currentRoomId) return;
-      const room = rooms.get(currentRoomId);
-      if (!room) return;
-
-      room.players.delete(socket.id);
-      if (room.gameRoom) {
-        room.gameRoom.removePlayer(socket.id);
-      }
-      socket.leave(currentRoomId);
-
-      if (room.players.size === 0) {
-        if (room.gameRoom) room.gameRoom.stop();
-        rooms.delete(currentRoomId);
-      } else {
-        if (room.hostId === socket.id) {
-          const nextHost = room.players.values().next().value;
-          if (nextHost) {
-            nextHost.isHost = true;
-            nextHost.ready = true;
-            room.hostId = nextHost.id;
-          }
-        }
-        io.to(currentRoomId).emit('room:update', serializeRoom(room));
-      }
-
-      currentRoomId = null;
-      io.emit('lobby:roomList', getRoomList());
-    }
 
     socket.on('room:leave', handleLeave);
     socket.on('disconnect', handleLeave);
@@ -324,4 +368,4 @@ function socketHandler(io, options = {}) {
   return { rooms };
 }
 
-module.exports = { socketHandler, CHARACTERS };
+module.exports = { socketHandler, CHARACTERS, safeObject };

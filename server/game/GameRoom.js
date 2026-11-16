@@ -11,9 +11,9 @@ const {
   executeMageArcaneBolt,
   triggerMageSkill,
   explodeMageFireball,
-  updateMageRoomSystems,
-  maybeDropPickup
+  updateMageRoomSystems
 } = require('./MageAbilities.js');
+const { creditZombieKill } = require('./CombatUtils.js');
 const { WARRIOR_ARMOR_CONFIG } = require('./WarriorSkillsConfig.js');
 const {
   executeWarriorBasicAttack,
@@ -47,6 +47,7 @@ class GameRoom {
     this.zombies = [];
     this.bullets = [];
     this.barricades = [];
+    this._tickBarrels = [];
     this.pickups = [];
     this.drones = [];
     this.groundZones = [];
@@ -104,6 +105,7 @@ class GameRoom {
     this.zombies = [];
     this.bullets = [];
     this.barricades = [];
+    this._tickBarrels = [];
     this.pickups = [];
     this.drones = [];
     this.groundZones = [];
@@ -323,7 +325,9 @@ class GameRoom {
     // Check collision with existing barricades
     for (let i = 0; i < this.barricades.length; i++) {
       const existing = this.barricades[i];
-      if (Math.hypot(existing.x - px, existing.y - py) < 36) return;
+      const bdx = existing.x - px;
+      const bdy = existing.y - py;
+      if ((bdx * bdx + bdy * bdy) < 1296) return;
     }
 
     player.fireCooldown = weapon.fireDelay;
@@ -395,6 +399,17 @@ class GameRoom {
     return { activated: false };
   }
 
+  collectActiveBarrels(target = []) {
+    target.length = 0;
+    for (let i = 0; i < this.barricades.length; i++) {
+      const b = this.barricades[i];
+      if (b.type === 'barrel' && !b.isDead) {
+        target.push(b);
+      }
+    }
+    return target;
+  }
+
   triggerExplosion(x, y, radius, damage, ownerId, source = 'GENERIC') {
     const resolvedSource = (source ? String(source) : 'GENERIC').toUpperCase();
     this.eventsBuffer.push({
@@ -409,28 +424,21 @@ class GameRoom {
     for (let i = 0; i < this.zombies.length; i++) {
       const z = this.zombies[i];
       if (z.isDead) continue;
-      const d = Math.hypot(z.x - x, z.y - y);
-      if (d <= radius + z.radius) {
-        const falloff = 1 - (d / (radius + z.radius));
+      const dx = z.x - x;
+      const dy = z.y - y;
+      const d2 = dx * dx + dy * dy;
+      const maxR = radius + z.radius;
+      if (d2 <= maxR * maxR) {
+        const d = Math.sqrt(d2);
+        const falloff = 1 - (d / maxR);
         const effectiveDamage = Math.round(damage * Math.max(0.3, falloff));
         z.takeDamage(effectiveDamage, 'EXPLOSION');
-        const knockAngle = Math.atan2(z.y - y, z.x - x);
+        const knockAngle = Math.atan2(dy, dx);
         z.applyKnockback(knockAngle, 220);
 
         if (z.isDead) {
-          if (ownerId) {
-            const killer = this.players.get(ownerId);
-            if (killer) killer.recordKill(z.score);
-          }
-          this.eventsBuffer.push({
-            type: 'ZOMBIE_DIE',
-            x: z.x,
-            y: z.y,
-            zType: z.type,
-            angle: z.angle,
-            killAngle: Number(knockAngle.toFixed(2))
-          });
-          maybeDropPickup(this, z);
+          const killer = ownerId ? this.players.get(ownerId) : null;
+          creditZombieKill(killer, z, this, { killAngle: knockAngle });
         }
       }
     }
@@ -438,20 +446,28 @@ class GameRoom {
     // Damage players slightly (friendly fire reduced to 25% for safety & fun)
     for (const p of this.players.values()) {
       if (p.isDead) continue;
-      const d = Math.hypot(p.x - x, p.y - y);
-      if (d <= radius + p.radius) {
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const maxR = radius + p.radius;
+      if ((dx * dx + dy * dy) <= maxR * maxR) {
         p.takeDamage(Math.round(damage * 0.25), 'EXPLOSION', { sourceX: x, sourceY: y });
       }
     }
 
     // Damage and trigger other barrels/barricades
-    const barrels = this.barricades.filter(b => b.type === 'barrel');
+    let barrels = null;
+    const maxBarricadeR = radius + 22;
+    const maxBarricadeR2 = maxBarricadeR * maxBarricadeR;
     for (let i = 0; i < this.barricades.length; i++) {
       const b = this.barricades[i];
       if (b.isDead) continue;
-      const d = Math.hypot(b.x - x, b.y - y);
-      if (d <= radius + 22) {
+      const dx = b.x - x;
+      const dy = b.y - y;
+      if ((dx * dx + dy * dy) <= maxBarricadeR2) {
         if (b.type === 'barrel') {
+          if (!barrels) {
+            barrels = this.collectActiveBarrels();
+          }
           b.takeDamage(damage, barrels, (bx, by, br, bd, bo) => {
             this.triggerExplosion(bx, by, br, bd, bo, 'BARREL');
           });
@@ -529,6 +545,7 @@ class GameRoom {
     const anyAlive = playersArr.some(p => !p.isDowned && !p.isDead);
     if (!anyAlive && playersArr.length > 0) {
       this.state = 'GAMEOVER';
+      this.stop();
       this.eventsBuffer.push({ type: 'GAME_OVER', wave: this.wave });
       this.broadcastSnapshot();
       return;
@@ -570,6 +587,9 @@ class GameRoom {
       }
     }
 
+    // Collect active barrels once for the tick before bullet/zombie updates
+    this.collectActiveBarrels(this._tickBarrels);
+
     // 3. Update Bullets
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
@@ -608,7 +628,9 @@ class GameRoom {
         for (let j = 0; j < this.zombies.length; j++) {
           const z = this.zombies[j];
           if (z.isDead) continue;
+          if (b.hitTargets && b.hitTargets.has(z.id)) continue;
           if (b.checkHit(z)) {
+            if (b.hitTargets) b.hitTargets.add(z.id);
             if (b.isMageFireball) {
               b.isDead = true;
               explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
@@ -638,24 +660,10 @@ class GameRoom {
             }
 
             if (z.isDead) {
-              if (shooter) {
-                const unlocks = shooter.recordKill(z.score, { awardUltCharge: !b.fromUlt && shooter.character !== 'MAGE' });
-                if (unlocks.length > 0) {
-                  for (const u of unlocks) {
-                    this.eventsBuffer.push({ type: 'UNLOCKED', weapon: u.name || u.id, playerId: shooter.id });
-                  }
-                }
-              }
-              this.eventsBuffer.push({
-                type: 'ZOMBIE_DIE',
-                x: z.x,
-                y: z.y,
-                zType: z.type,
-                angle: z.angle,
-                killAngle: Number((b.angle || 0).toFixed(2))
+              creditZombieKill(shooter, z, this, {
+                awardUltCharge: Boolean(shooter && !b.fromUlt && shooter.character !== 'MAGE'),
+                killAngle: b.angle || 0
               });
-
-              maybeDropPickup(this, z);
             }
 
             if (!b.penetration) {
@@ -666,24 +674,20 @@ class GameRoom {
         }
 
         // Bullet hitting barrels
-        for (let j = 0; j < this.barricades.length; j++) {
-          const bar = this.barricades[j];
+        for (let j = 0; j < this._tickBarrels.length; j++) {
+          const bar = this._tickBarrels[j];
           if (bar.isDead) continue;
-          if (bar.type === 'barrel') {
-            const hit = (Math.hypot(b.x - bar.x, b.y - bar.y) <= (b.radius + bar.radius));
-            if (hit) {
-              if (b.isMageFireball) {
-                b.isDead = true;
-                explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
-                break;
-              }
-              const barrels = this.barricades.filter(x => x.type === 'barrel');
-              bar.takeDamage(b.damage, barrels, (bx, by, br, bd, bo) => {
-                this.triggerExplosion(bx, by, br, bd, b.ownerId, 'BARREL');
-              });
+          if (b.checkHit(bar)) {
+            if (b.isMageFireball) {
               b.isDead = true;
+              explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
               break;
             }
+            bar.takeDamage(b.damage, this._tickBarrels, (bx, by, br, bd, bo) => {
+              this.triggerExplosion(bx, by, br, bd, b.ownerId, 'BARREL');
+            });
+            b.isDead = true;
+            break;
           }
         }
       }
@@ -718,18 +722,17 @@ class GameRoom {
     }
 
     // 4.5. Check Zombie Contact with Explosive Barrels (Instant Detonation)
-    const activeBarrels = this.barricades.filter(b => b.type === 'barrel' && !b.isDead);
-    for (let i = 0; i < activeBarrels.length; i++) {
-      const bar = activeBarrels[i];
+    for (let i = 0; i < this._tickBarrels.length; i++) {
+      const bar = this._tickBarrels[i];
       if (bar.isDead) continue;
       for (let j = 0; j < this.zombies.length; j++) {
         const z = this.zombies[j];
         if (z.isDead) continue;
         const contactDist = z.radius + bar.radius + 6;
-        const dist = Math.hypot(z.x - bar.x, z.y - bar.y);
-        if (dist <= contactDist) {
-          const allBarrels = this.barricades.filter(x => x.type === 'barrel');
-          bar.detonate(allBarrels, (bx, by, br, bd, bo) => {
+        const dx = z.x - bar.x;
+        const dy = z.y - bar.y;
+        if ((dx * dx + dy * dy) <= (contactDist * contactDist)) {
+          bar.detonate(this._tickBarrels, (bx, by, br, bd, bo) => {
             this.triggerExplosion(bx, by, br, bd, bar.ownerId, 'BARREL');
           });
           break;
@@ -762,7 +765,10 @@ class GameRoom {
       for (let j = 0; j < playersArr.length; j++) {
         const player = playersArr[j];
         if (player.isDead || player.isDowned) continue;
-        if (Math.hypot(player.x - p.x, player.y - p.y) < player.radius + 26) {
+        const pickupDist = player.radius + 26;
+        const dx = player.x - p.x;
+        const dy = player.y - p.y;
+        if ((dx * dx + dy * dy) < pickupDist * pickupDist) {
           if (p.type === 'MEDKIT') {
             player.heal(40);
           } else {

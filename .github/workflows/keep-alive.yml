@@ -1,0 +1,32 @@
+name: Keep Render Alive
+
+# External Layer-2 Keep-Alive Watchdog for Render Free Tier.
+# Note:
+# - Public GitHub repositories receive unlimited free GitHub Actions minutes.
+# - Private GitHub repositories have a 2,000 min/month quota; for private repos,
+#   prefer Cron-job.org or UptimeRobot (free, unlimited) combined with the built-in Node.js pinger.
+#
+# Setup:
+#   Repository Settings -> Secrets and variables -> Actions -> Variables -> New repository variable
+#   Name:  RENDER_HEALTHCHECK_URL
+#   Value: https://your-service-name.onrender.com/healthz
+
+on:
+  schedule:
+    # Runs every 12 minutes to stay safely under Render's 15-minute idle spin-down limit
+    - cron: '*/12 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    runs-on: ubuntu-latest
+    if: ${{ vars.RENDER_HEALTHCHECK_URL != '' }}
+    steps:
+      - name: Ping Render Healthcheck Endpoint
+        env:
+          TARGET_URL: ${{ vars.RENDER_HEALTHCHECK_URL }}
+        run: |
+          echo "Pinging healthcheck endpoint..."
+          curl --fail --silent --show-error --location --max-time 75 --retry 2 --retry-delay 5 "$TARGET_URL"
+          echo ""
+          echo "Render instance is active."

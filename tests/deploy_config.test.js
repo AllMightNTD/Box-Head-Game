@@ -112,6 +112,54 @@ test('buildClientRuntimeConfig and renderClientConfigScript only expose safe cli
   assert.strictEqual(clientConfig.showColdStartHint, true);
   assert.strictEqual('maxRooms' in clientConfig, false);
   assert.strictEqual('corsOrigin' in clientConfig, false);
+  assert.strictEqual('keepAliveUrl' in clientConfig, false);
+  assert.strictEqual('keepAliveEnabled' in clientConfig, false);
   assert.ok(script.startsWith('window.BOXHEAD_DEPLOY_CONFIG = Object.freeze('));
   assert.ok(script.includes('"backendUrl":"https://boxhead-api.onrender.com"'));
+});
+
+test('resolveDeployConfig resolves keepAlive settings from RENDER_EXTERNAL_URL, KEEP_ALIVE_URL, and AUTO_PING_ENABLED', () => {
+  // Arrange & Act 1: Render auto-detects RENDER_EXTERNAL_URL + healthCheckPath
+  const renderConfig = resolveDeployConfig({
+    RENDER: 'true',
+    RENDER_EXTERNAL_URL: 'https://boxhead-game.onrender.com/'
+  });
+
+  // Assert 1
+  assert.strictEqual(renderConfig.keepAliveEnabled, true);
+  assert.strictEqual(renderConfig.keepAliveUrl, 'https://boxhead-game.onrender.com/healthz');
+  assert.strictEqual(renderConfig.keepAliveIntervalMs, 780000);
+
+  // Arrange & Act 2: Explicit KEEP_ALIVE_URL overrides and auto-enables on docker preset
+  const dockerCustom = resolveDeployConfig({
+    DEPLOY_PLATFORM: 'docker',
+    KEEP_ALIVE_URL: 'https://my-koyeb-app.koyeb.app/healthz',
+    KEEP_ALIVE_INTERVAL_MS: '600000'
+  });
+
+  // Assert 2
+  assert.strictEqual(dockerCustom.keepAliveEnabled, true);
+  assert.strictEqual(dockerCustom.keepAliveUrl, 'https://my-koyeb-app.koyeb.app/healthz');
+  assert.strictEqual(dockerCustom.keepAliveIntervalMs, 600000);
+
+  // Arrange & Act 3: Explicit AUTO_PING_ENABLED=false disables keep-alive even on Render
+  const disabledRender = resolveDeployConfig({
+    RENDER: 'true',
+    RENDER_EXTERNAL_URL: 'https://boxhead-game.onrender.com',
+    AUTO_PING_ENABLED: 'false'
+  });
+
+  // Assert 3
+  assert.strictEqual(disabledRender.keepAliveEnabled, false);
+
+  // Arrange & Act 4: LAN disables keep-alive by default and rejects invalid URLs/intervals
+  const lanInvalid = resolveDeployConfig({
+    KEEP_ALIVE_URL: 'ftp://invalid.local',
+    KEEP_ALIVE_INTERVAL_MS: '50'
+  });
+
+  // Assert 4
+  assert.strictEqual(lanInvalid.keepAliveEnabled, false);
+  assert.strictEqual(lanInvalid.keepAliveUrl, '');
+  assert.strictEqual(lanInvalid.keepAliveIntervalMs, 780000);
 });

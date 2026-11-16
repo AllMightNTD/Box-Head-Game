@@ -98,6 +98,9 @@ class UIController {
     this.hudUltStatus = document.getElementById('hud-ult-status');
     this.hudUltFill = document.getElementById('hud-ult-fill');
     this.hudUltHint = document.getElementById('hud-ult-hint');
+    this.goWaveReached = document.getElementById('go-wave-reached');
+    this.goTotalScore = document.getElementById('go-total-score');
+    this.goBestCombo = document.getElementById('go-best-combo');
 
     this.ultimateMeta = {
       HUMAN: { name: 'DRONE & HÀO QUANG ĐẠN', color: '#00e676' },
@@ -120,6 +123,9 @@ class UIController {
 
     this.hudBarMode = 'GUN';
     this.mageSkillDefinitions = MAGE_SKILL_DEFINITIONS;
+    this.teamRowCache = new Map();
+    this.lastTeamIdsKey = null;
+    this.hudSlotCache = new Map();
 
     this.weaponDefinitions = [
       { id: 'PISTOL', key: 1, name: 'Pistol', unlockCombo: 1, icon: '🔫' },
@@ -384,17 +390,19 @@ class UIController {
       card.id = `map-card-${map.id}`;
       card.setAttribute('data-map-id', map.id);
 
+      const safeMapId = escapeHtml(map.id);
+      const safeColor = sanitizeCssColor(map.badgeColor);
       card.innerHTML = `
         <div class="map-card-thumb">
-          <canvas width="160" height="120" id="thumb-canvas-${map.id}"></canvas>
+          <canvas width="160" height="120" id="thumb-canvas-${safeMapId}"></canvas>
         </div>
         <div class="map-card-body">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="map-card-badge" style="color: ${map.badgeColor};">${map.badge}</span>
+            <span class="map-card-badge" style="color: ${safeColor};">${escapeHtml(map.badge)}</span>
           </div>
           <div class="map-card-title">${escapeHtml(map.name)}</div>
           <div class="map-card-desc">${escapeHtml(map.desc)}</div>
-          <button class="map-card-btn-preview" data-preview-id="${map.id}">🔍 Xem chi tiết</button>
+          <button class="map-card-btn-preview" data-preview-id="${safeMapId}">🔍 Xem chi tiết</button>
         </div>
       `;
 
@@ -450,7 +458,8 @@ class UIController {
     if (!this.selectedMapNameLabel || !window.MAPS_CONFIG) return;
     const map = window.MAPS_CONFIG[this.selectedMapId];
     if (map) {
-      this.selectedMapNameLabel.innerHTML = `<span style="color: ${map.badgeColor};">${map.badge}</span> ${escapeHtml(map.name)}`;
+      const safeColor = sanitizeCssColor(map.badgeColor);
+      this.selectedMapNameLabel.innerHTML = `<span style="color: ${safeColor};">${escapeHtml(map.badge)}</span> ${escapeHtml(map.name)}`;
     }
   }
 
@@ -619,6 +628,7 @@ class UIController {
 
     if (!this.hudWeaponsBar) return;
     this.hudWeaponsBar.innerHTML = '';
+    this.hudSlotCache.clear();
 
     if (this.hudBarMode === 'MAGE') {
       this.mageSkillDefinitions.forEach(s => {
@@ -639,6 +649,12 @@ class UIController {
           }
         });
         this.hudWeaponsBar.appendChild(slot);
+        this.hudSlotCache.set(s.id, {
+          slotEl: slot,
+          ammoEl: document.getElementById('hud-ammo-' + s.id),
+          cdEl: document.getElementById('hud-cd-' + s.id),
+          cdText: document.getElementById('hud-cd-text-' + s.id)
+        });
       });
       return;
     }
@@ -662,6 +678,12 @@ class UIController {
           }
         });
         this.hudWeaponsBar.appendChild(slot);
+        this.hudSlotCache.set(s.id, {
+          slotEl: slot,
+          ammoEl: document.getElementById('hud-ammo-' + s.id),
+          cdEl: document.getElementById('hud-cd-' + s.id),
+          cdText: document.getElementById('hud-cd-text-' + s.id)
+        });
       });
       return;
     }
@@ -681,7 +703,27 @@ class UIController {
         }
       });
       this.hudWeaponsBar.appendChild(slot);
+      this.hudSlotCache.set(w.id, {
+        slotEl: slot,
+        ammoEl: document.getElementById('hud-ammo-' + w.id),
+        cdEl: null,
+        cdText: null
+      });
     });
+  }
+
+  getHudSlotRefs(id) {
+    let refs = this.hudSlotCache.get(id);
+    if (!refs || !refs.slotEl) {
+      refs = {
+        slotEl: document.getElementById('hud-weapon-' + id),
+        ammoEl: document.getElementById('hud-ammo-' + id),
+        cdEl: document.getElementById('hud-cd-' + id),
+        cdText: document.getElementById('hud-cd-text-' + id)
+      };
+      this.hudSlotCache.set(id, refs);
+    }
+    return refs;
   }
 
   showScreen(screenName) {
@@ -715,19 +757,19 @@ class UIController {
 
       const mapConf = (window.MAPS_CONFIG && window.MAPS_CONFIG[r.mapId]) || null;
       const badge = r.mapBadge || (mapConf ? mapConf.badge : '🏢 KINH ĐIỂN');
-      const badgeColor = (mapConf && mapConf.badgeColor) || '#00e5ff';
+      const badgeColor = sanitizeCssColor((mapConf && mapConf.badgeColor) || r.mapBadgeColor);
       const mapName = r.mapName || (mapConf ? mapConf.name : 'The Rooms');
 
       tr.innerHTML = `
         <td style="font-weight: bold;">${escapeHtml(r.name)}</td>
         <td>
-          <span class="map-tag" style="border-color: ${badgeColor}; color: ${badgeColor};">${badge}</span>
+          <span class="map-tag" style="border-color: ${badgeColor}; color: ${badgeColor};">${escapeHtml(badge)}</span>
           <span style="font-size: 0.88rem; margin-left: 4px;">${escapeHtml(mapName)}</span>
         </td>
-        <td>${r.playerCount} / 4</td>
-        <td style="color: ${statusColor}; font-weight: bold;">${statusText}</td>
+        <td>${Number(r.playerCount) || 0} / 4</td>
+        <td style="color: ${statusColor}; font-weight: bold;">${escapeHtml(statusText)}</td>
         <td>
-          <button class="btn btn-secondary btn-join" ${isFull || isPlaying ? 'disabled' : ''} data-room-id="${r.id}" style="padding: 6px 14px; font-size: 0.85rem;">
+          <button class="btn btn-secondary btn-join" ${isFull || isPlaying ? 'disabled' : ''} data-room-id="${escapeHtml(r.id)}" style="padding: 6px 14px; font-size: 0.85rem;">
             Tham Gia
           </button>
         </td>
@@ -798,11 +840,13 @@ class UIController {
 
       if (player) {
         const isMe = player.id === myPlayerId;
+        const safeChar = escapeHtml(player.character || 'HUMAN');
+        const safeInitial = escapeHtml((player.name || '?').substring(0, 1));
         slot.className = 'slot-card occupied' + (isMe ? ' is-me' : '');
         slot.innerHTML = `
-          <div class="slot-avatar char-${player.character}" style="box-shadow: 0 0 10px ${ringColor}; border-color: ${ringColor};">${player.name.substring(0, 1)}</div>
+          <div class="slot-avatar char-${safeChar}" style="box-shadow: 0 0 10px ${ringColor}; border-color: ${ringColor};">${safeInitial}</div>
           <div style="font-weight: bold; font-size: 1.1rem;">${escapeHtml(player.name)} ${isMe ? '(Bạn)' : ''}</div>
-          <div style="font-size: 0.85rem; color: ${ringColor}; font-weight: bold;">P${i + 1} • ${player.character}</div>
+          <div style="font-size: 0.85rem; color: ${ringColor}; font-weight: bold;">P${i + 1} • ${safeChar}</div>
           <div style="margin-top: 6px;">
             ${player.isHost ? '<span style="color: var(--accent); font-weight: bold;">👑 CHỦ PHÒNG</span>' : (player.ready ? '<span style="color: var(--success); font-weight: bold;">✔ SẴN SÀNG</span>' : '<span style="color: var(--text-muted);">Đang chờ...</span>')}
           </div>
@@ -839,61 +883,76 @@ class UIController {
     const localPlayer = (gameState.players && gameState.players.find(p => p.id === localPlayerId)) ||
                         (gameState.players && gameState.players[0]) || null;
 
-    // 1. Team Roster
-    this.hudTeamList.innerHTML = '';
-    if (gameState.players) {
-      gameState.players.forEach(p => {
-        const isMe = p.id === localPlayerId;
+    // 1. Team Roster (pooled per player ID + dirty-checked to avoid 60 FPS DOM thrashing)
+    const players = gameState.players || [];
+    const idsKey = players.map((p, idx) => `${p.id !== undefined ? p.id : 'p'}_${idx}`).join(',');
+    if (idsKey !== this.lastTeamIdsKey) {
+      this.hudTeamList.innerHTML = '';
+      this.teamRowCache.clear();
+      this.lastTeamIdsKey = idsKey;
+      for (let i = 0; i < players.length; i++) {
+        const rowId = `${players[i].id !== undefined ? players[i].id : 'p'}_${i}`;
         const row = document.createElement('div');
         row.className = 'teammate-row';
-        const hpPercent = Math.max(0, (p.hp / p.maxHp) * 100);
-        const ultPct = Math.floor(Math.min(100, p.ultCharge || 0));
-        const ultReady = ultPct >= 100;
-        const ultBadge = `<span class="teammate-ult-badge ${ultReady ? 'ready' : ''}">${ultReady ? '⚡ READY' : ultPct + '%'}</span>`;
-        const maxArmor = p.maxArmor || 0;
-        const armor = Math.max(0, p.armor || 0);
-        const armorPercent = maxArmor > 0 ? Math.max(0, Math.min(100, (armor / maxArmor) * 100)) : 0;
-        const armorBarHtml = maxArmor > 0 ? `
-          <div class="teammate-armor-bar" title="Giáp: ${armor}/${maxArmor}">
-            <div class="teammate-armor-fill" style="width: ${armorPercent}%;"></div>
-          </div>
-        ` : '';
-
-        const statText = p.isDowned
-          ? '🚨 GỤC'
-          : (maxArmor > 0 ? `${p.hp} HP • ${armor} AP` : `${p.hp} HP`);
-
-        const maxMana = p.maxMana || 0;
-        const manaVal = Math.max(0, Math.floor(p.mana || 0));
-        const manaPct = maxMana > 0 ? Math.max(0, Math.min(100, (manaVal / maxMana) * 100)) : 0;
-        const manaBarHtml = maxMana > 0 ? `
-          <div class="teammate-mana-bar" title="Mana: ${manaVal}/${maxMana}">
-            <div class="teammate-mana-fill" style="width: ${manaPct}%;"></div>
-          </div>
-        ` : '';
-        const badgeHtml = maxMana > 0
-          ? `<span class="teammate-ult-badge">${manaVal} MP</span>`
-          : ultBadge;
-
-        row.innerHTML = `
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-weight: bold; font-size: 0.85rem;">${escapeHtml(p.name)} ${isMe ? '(Bạn)' : ''}</span>
-            <span style="font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(p.character || 'HUMAN')}</span>
-          </div>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
-            <div class="teammate-hp-bar">
-              <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
-            </div>
-            ${armorBarHtml}
-            ${manaBarHtml}
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-family: monospace; font-size: 0.8rem;">${statText}</span>
-            ${badgeHtml}
-          </div>
-        `;
         this.hudTeamList.appendChild(row);
-      });
+        this.teamRowCache.set(rowId, { row, key: '' });
+      }
+    }
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      const rowId = `${p.id !== undefined ? p.id : 'p'}_${i}`;
+      const isMe = p.id === localPlayerId;
+      const hpPercent = Math.max(0, (p.hp / p.maxHp) * 100);
+      const ultPct = Math.floor(Math.min(100, p.ultCharge || 0));
+      const ultReady = ultPct >= 100;
+      const maxArmor = p.maxArmor || 0;
+      const armor = Math.max(0, p.armor || 0);
+      const armorPercent = maxArmor > 0 ? Math.max(0, Math.min(100, (armor / maxArmor) * 100)) : 0;
+      const maxMana = p.maxMana || 0;
+      const manaVal = Math.max(0, Math.floor(p.mana || 0));
+      const manaPct = maxMana > 0 ? Math.max(0, Math.min(100, (manaVal / maxMana) * 100)) : 0;
+
+      const rowKey = `${p.name}|${p.character || 'HUMAN'}|${isMe ? 1 : 0}|${p.hp}/${p.maxHp}|${armor}/${maxArmor}|${manaVal}/${maxMana}|${ultPct}|${p.isDowned ? 1 : 0}`;
+      const cached = this.teamRowCache.get(rowId);
+      if (!cached || cached.key === rowKey) continue;
+      cached.key = rowKey;
+
+      const ultBadge = `<span class="teammate-ult-badge ${ultReady ? 'ready' : ''}">${ultReady ? '⚡ READY' : ultPct + '%'}</span>`;
+      const armorBarHtml = maxArmor > 0 ? `
+        <div class="teammate-armor-bar" title="Giáp: ${armor}/${maxArmor}">
+          <div class="teammate-armor-fill" style="width: ${armorPercent}%;"></div>
+        </div>
+      ` : '';
+      const statText = p.isDowned
+        ? '🚨 GỤC'
+        : (maxArmor > 0 ? `${p.hp} HP • ${armor} AP` : `${p.hp} HP`);
+      const manaBarHtml = maxMana > 0 ? `
+        <div class="teammate-mana-bar" title="Mana: ${manaVal}/${maxMana}">
+          <div class="teammate-mana-fill" style="width: ${manaPct}%;"></div>
+        </div>
+      ` : '';
+      const badgeHtml = maxMana > 0
+        ? `<span class="teammate-ult-badge">${manaVal} MP</span>`
+        : ultBadge;
+
+      cached.row.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: bold; font-size: 0.85rem;">${escapeHtml(p.name)} ${isMe ? '(Bạn)' : ''}</span>
+          <span style="font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(p.character || 'HUMAN')}</span>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+          <div class="teammate-hp-bar">
+            <div class="teammate-hp-fill" style="width: ${hpPercent}%; background: ${p.isDowned ? 'var(--danger)' : 'var(--success)'};"></div>
+          </div>
+          ${armorBarHtml}
+          ${manaBarHtml}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-family: monospace; font-size: 0.8rem;">${statText}</span>
+          ${badgeHtml}
+        </div>
+      `;
     }
 
     // 2. Wave Announcement
@@ -922,10 +981,7 @@ class UIController {
         const currentMana = localPlayer.mana || 0;
 
         this.mageSkillDefinitions.forEach(s => {
-          const slotEl = document.getElementById('hud-weapon-' + s.id);
-          const ammoEl = document.getElementById('hud-ammo-' + s.id);
-          const cdEl = document.getElementById('hud-cd-' + s.id);
-          const cdText = document.getElementById('hud-cd-text-' + s.id);
+          const { slotEl, ammoEl, cdEl, cdText } = this.getHudSlotRefs(s.id);
           const sk = ms && ms.skills ? ms.skills[s.id] : null;
           const isUnlocked = Boolean((sk && sk.unlocked) || (playerMaxCombo >= s.unlockCombo) || s.key === 1);
           if (!slotEl) return;
@@ -975,10 +1031,7 @@ class UIController {
         const furyStacks = ws ? (ws.furyStacks || 0) : 0;
 
         this.warriorSkillDefinitions.forEach(s => {
-          const slotEl = document.getElementById('hud-weapon-' + s.id);
-          const ammoEl = document.getElementById('hud-ammo-' + s.id);
-          const cdEl = document.getElementById('hud-cd-' + s.id);
-          const cdText = document.getElementById('hud-cd-text-' + s.id);
+          const { slotEl, ammoEl, cdEl, cdText } = this.getHudSlotRefs(s.id);
           const sk = ws && ws.skills ? ws.skills[s.id] : null;
 
           const isUnlocked = Boolean(
@@ -1068,8 +1121,7 @@ class UIController {
         }
 
         this.weaponDefinitions.forEach(w => {
-          const slotEl = document.getElementById('hud-weapon-' + w.id);
-          const ammoEl = document.getElementById('hud-ammo-' + w.id);
+          const { slotEl, ammoEl } = this.getHudSlotRefs(w.id);
           const pw = localPlayer.weapons ? localPlayer.weapons[w.id] : null;
 
           const isUnlocked = Boolean(
@@ -1160,15 +1212,21 @@ class UIController {
     // 5. Game Over Modal
     if (gameState.state === 'GAMEOVER') {
       this.modalGameOver.classList.remove('hidden');
-      document.getElementById('go-wave-reached').textContent = `Wave ${gameState.wave}`;
+      const waveEl = this.goWaveReached || document.getElementById('go-wave-reached');
+      const scoreEl = this.goTotalScore || document.getElementById('go-total-score');
+      const comboEl = this.goBestCombo || document.getElementById('go-best-combo');
+      if (waveEl) waveEl.textContent = `Wave ${gameState.wave}`;
+      let totalScore = 0;
       let totalKills = 0;
       let bestCombo = 1;
-      gameState.players.forEach(p => {
-        totalKills += p.kills;
-        if (p.combo > bestCombo) bestCombo = p.combo;
+      (gameState.players || []).forEach(p => {
+        totalScore += (p.score || 0);
+        totalKills += (p.kills || 0);
+        const peakCombo = Math.max(p.maxCombo || 1, p.combo || 1);
+        if (peakCombo > bestCombo) bestCombo = peakCombo;
       });
-      document.getElementById('go-total-score').textContent = totalKills + ' Kills';
-      document.getElementById('go-best-combo').textContent = `x${bestCombo}`;
+      if (scoreEl) scoreEl.textContent = `${totalScore} (${totalKills} Kills)`;
+      if (comboEl) comboEl.textContent = `x${bestCombo}`;
     } else {
       this.modalGameOver.classList.add('hidden');
     }
@@ -1176,12 +1234,29 @@ class UIController {
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeCssColor(color, fallback = '#00e5ff') {
+  if (typeof color !== 'string') return fallback;
+  const trimmed = color.trim();
+  return /^(#[0-9a-fA-F]{3,8}|var\(--[a-zA-Z0-9-]+\))$/.test(trimmed) ? trimmed : fallback;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { UIController, MAGE_SKILL_DEFINITIONS, WARRIOR_SKILL_DEFINITIONS };
+  module.exports = {
+    UIController,
+    MAGE_SKILL_DEFINITIONS,
+    WARRIOR_SKILL_DEFINITIONS,
+    escapeHtml,
+    sanitizeCssColor
+  };
 }
 if (typeof window !== 'undefined') {
   window.UIController = UIController;

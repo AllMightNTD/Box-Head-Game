@@ -7,6 +7,8 @@
 
 const ALLOWED_TRANSPORTS = new Set(['websocket', 'polling']);
 
+const DEFAULT_KEEP_ALIVE_INTERVAL_MS = 13 * 60 * 1000;
+
 const PLATFORM_PRESETS = Object.freeze({
   lan: Object.freeze({
     mode: 'monolith',
@@ -24,7 +26,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: false,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: false,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   }),
   render: Object.freeze({
     mode: 'monolith',
@@ -42,7 +46,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: true,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: true,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   }),
   docker: Object.freeze({
     mode: 'monolith',
@@ -60,7 +66,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: true,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: false,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   }),
   huggingface: Object.freeze({
     mode: 'monolith',
@@ -78,7 +86,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: true,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: false,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   }),
   'split-backend': Object.freeze({
     mode: 'backend',
@@ -96,7 +106,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: true,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: true,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   }),
   'static-client': Object.freeze({
     mode: 'static-client',
@@ -114,7 +126,9 @@ const PLATFORM_PRESETS = Object.freeze({
     showColdStartHint: true,
     pingIntervalMs: 25000,
     pingTimeoutMs: 20000,
-    healthCheckPath: '/healthz'
+    healthCheckPath: '/healthz',
+    keepAliveEnabled: false,
+    keepAliveIntervalMs: DEFAULT_KEEP_ALIVE_INTERVAL_MS
   })
 });
 
@@ -200,6 +214,30 @@ function normalizeHealthPath(raw, fallback = '/healthz') {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
+function resolveKeepAliveSettings(mergedEnv, preset, healthCheckPath) {
+  const explicitUrl = normalizeHttpUrl(mergedEnv.KEEP_ALIVE_URL);
+  const externalBase = normalizeHttpUrl(mergedEnv.RENDER_EXTERNAL_URL) || normalizeHttpUrl(mergedEnv.PUBLIC_URL);
+  const keepAliveUrl = explicitUrl || (externalBase ? `${externalBase}${healthCheckPath}` : '');
+
+  const rawFlag = mergedEnv.AUTO_PING_ENABLED !== undefined
+    ? mergedEnv.AUTO_PING_ENABLED
+    : mergedEnv.KEEP_ALIVE_ENABLED;
+  const defaultEnabled = explicitUrl ? true : Boolean(preset.keepAliveEnabled);
+  const keepAliveEnabled = parseBoolean(rawFlag, defaultEnabled);
+
+  const rawInterval = mergedEnv.KEEP_ALIVE_INTERVAL_MS !== undefined
+    ? mergedEnv.KEEP_ALIVE_INTERVAL_MS
+    : mergedEnv.AUTO_PING_INTERVAL_MS;
+  const keepAliveIntervalMs = parsePositiveInt(
+    rawInterval,
+    preset.keepAliveIntervalMs || DEFAULT_KEEP_ALIVE_INTERVAL_MS,
+    10000,
+    1800000
+  );
+
+  return { keepAliveEnabled, keepAliveUrl, keepAliveIntervalMs };
+}
+
 function resolveDeployConfig(env = process.env, overrides = {}) {
   const safeEnv = env || {};
   const safeOverrides = overrides && typeof overrides === 'object' ? overrides : {};
@@ -222,6 +260,8 @@ function resolveDeployConfig(env = process.env, overrides = {}) {
     : parseBoolean(mergedEnv.SERVE_STATIC, preset.serveStatic);
 
   const portInput = safeOverrides.port !== undefined ? safeOverrides.port : mergedEnv.PORT;
+  const healthCheckPath = normalizeHealthPath(mergedEnv.HEALTHCHECK_PATH, preset.healthCheckPath);
+  const keepAlive = resolveKeepAliveSettings(mergedEnv, preset, healthCheckPath);
 
   return Object.freeze({
     platform,
@@ -243,7 +283,10 @@ function resolveDeployConfig(env = process.env, overrides = {}) {
     publicUrl: normalizeHttpUrl(mergedEnv.PUBLIC_URL),
     pingIntervalMs: parsePositiveInt(mergedEnv.PING_INTERVAL_MS, preset.pingIntervalMs, 5000, 120000),
     pingTimeoutMs: parsePositiveInt(mergedEnv.PING_TIMEOUT_MS, preset.pingTimeoutMs, 5000, 120000),
-    healthCheckPath: normalizeHealthPath(mergedEnv.HEALTHCHECK_PATH, preset.healthCheckPath)
+    healthCheckPath,
+    keepAliveEnabled: keepAlive.keepAliveEnabled,
+    keepAliveUrl: keepAlive.keepAliveUrl,
+    keepAliveIntervalMs: keepAlive.keepAliveIntervalMs
   });
 }
 

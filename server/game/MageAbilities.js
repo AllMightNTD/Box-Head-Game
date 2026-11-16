@@ -9,51 +9,15 @@
 
 const {
   MAGE_SKILLS,
-  MAGE_AMMO_PICKUP,
   getMageSkillBySlot
 } = require('./MageSkillsConfig.js');
 const { Bullet } = require('./Bullet.js');
 const { resolveBlinkDestination } = require('./UltimateAbilities.js');
-
-/**
- * Normalizes angle difference into [-Math.PI, Math.PI].
- * @param {number} diff
- * @returns {number}
- */
-function normalizeAngleDiff(diff) {
-  let d = diff;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
-  return d;
-}
-
-/**
- * Rolls zombie pickup drop using 18% AMMO and 7% MEDKIT probabilities.
- * @param {object} room
- * @param {object} zombie
- * @returns {object|null}
- */
-function maybeDropPickup(room, zombie) {
-  if (!room || !Array.isArray(room.pickups) || !zombie) return null;
-  const roll = Math.random();
-  let type = null;
-  if (roll < MAGE_AMMO_PICKUP.AMMO_DROP_CHANCE) {
-    type = 'AMMO';
-  } else if (roll < MAGE_AMMO_PICKUP.AMMO_DROP_CHANCE + MAGE_AMMO_PICKUP.MEDKIT_DROP_CHANCE) {
-    type = 'MEDKIT';
-  }
-  if (!type) return null;
-
-  const pickup = {
-    id: 'pk_' + Math.random().toString(36).substring(2, 7),
-    type,
-    x: Math.round(zombie.x),
-    y: Math.round(zombie.y),
-    life: 25
-  };
-  room.pickups.push(pickup);
-  return pickup;
-}
+const {
+  normalizeAngleDiff,
+  maybeDropPickup,
+  damageAndCreditZombie: sharedDamageAndCreditZombie
+} = require('./CombatUtils.js');
 
 /**
  * Clamps cursor target within maxRange from origin, falling back to angle direction.
@@ -100,52 +64,10 @@ function clampCastTarget(player, angle, maxRange, targetPos) {
  * @param {object} [options={}]
  */
 function damageAndCreditZombie(attacker, zombie, damage, sourceType, room, options = {}) {
-  if (!zombie || zombie.isDead) return;
-
-  zombie.takeDamage(damage, sourceType);
-
-  if (options.knockback && options.knockAngle !== undefined) {
-    zombie.applyKnockback(options.knockAngle, options.knockback);
-  }
-  if (options.freezeDuration) {
-    const isBoss = zombie.type === 'TANK' || zombie.type === 'DEVIL';
-    const dur = isBoss && options.bossFreezeDuration !== undefined
-      ? options.bossFreezeDuration
-      : options.freezeDuration;
-    if (dur > 0) zombie.applyFreeze(dur);
-  }
-  if (options.stunDuration && options.stunDuration > 0) {
-    zombie.applyStun(options.stunDuration);
-  }
-
-  if (zombie.isDead) {
-    if (attacker) {
-      const unlocks = attacker.recordKill(zombie.score, { awardUltCharge: false });
-      if (room && Array.isArray(room.eventsBuffer) && Array.isArray(unlocks)) {
-        for (let i = 0; i < unlocks.length; i++) {
-          room.eventsBuffer.push({
-            type: 'UNLOCKED',
-            weapon: unlocks[i].name || unlocks[i].id,
-            playerId: attacker.id,
-            slot: unlocks[i].slot
-          });
-        }
-      }
-    }
-    if (room && Array.isArray(room.eventsBuffer)) {
-      room.eventsBuffer.push({
-        type: 'ZOMBIE_DIE',
-        x: zombie.x,
-        y: zombie.y,
-        zType: zombie.type,
-        angle: zombie.angle,
-        killAngle: Number((options.killAngle !== undefined ? options.killAngle : zombie.angle).toFixed(2))
-      });
-    }
-    if (options.dropPickup !== false) {
-      maybeDropPickup(room, zombie);
-    }
-  }
+  return sharedDamageAndCreditZombie(attacker, zombie, damage, sourceType, room, {
+    ...options,
+    awardUltCharge: false
+  });
 }
 
 /**

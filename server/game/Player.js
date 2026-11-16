@@ -1031,6 +1031,8 @@ class Player {
       isDowned: this.isDowned,
       isDead: this.isDead,
       bleedoutTimer: Math.ceil(this.bleedoutTimer),
+      reviving: Boolean(this.revivingTarget && this.reviveProgress > 0),
+      reviveProgress: Number((this.reviveProgress || 0).toFixed(2)),
       selectedWeapon: this.selectedWeapon,
       score: this.score,
       kills: this.kills,

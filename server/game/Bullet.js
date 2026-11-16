@@ -1,9 +1,23 @@
+function distToSegmentSquared(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return (px - projX) * (px - projX) + (py - projY) * (py - projY);
+}
+
 class Bullet {
   constructor(id, ownerId, x, y, angle, options = {}) {
     this.id = id;
     this.ownerId = ownerId;
     this.x = x;
     this.y = y;
+    this.prevX = x;
+    this.prevY = y;
     this.angle = angle;
 
     this.speed = options.speed || 900;
@@ -22,6 +36,7 @@ class Bullet {
     this.penetration = options.penetration !== undefined
       ? Boolean(options.penetration)
       : (options.type === 'wind_blade' || options.type === 'fire_slash');
+    this.hitTargets = this.penetration ? new Set() : null;
     this.knockback = options.knockback !== undefined ? options.knockback : (options.type === 'shotgun' ? 180 : 50);
     this.fromUlt = Boolean(options.fromUlt);
 
@@ -37,6 +52,18 @@ class Bullet {
     );
   }
 
+  createExplosionPayload() {
+    return {
+      exploded: true,
+      x: this.x,
+      y: this.y,
+      radius: this.explosionRadius,
+      damage: this.explosionDamage,
+      ownerId: this.ownerId,
+      source: (this.type || 'generic').toUpperCase()
+    };
+  }
+
   update(dt, map) {
     if (this.isDead) return null;
 
@@ -46,55 +73,34 @@ class Bullet {
       this.speed = Math.max(0, this.speed - 300 * dt);
       if (this.life >= this.fuseTime) {
         this.isDead = true;
-        return {
-          exploded: true,
-          x: this.x,
-          y: this.y,
-          radius: this.explosionRadius,
-          damage: this.explosionDamage,
-          ownerId: this.ownerId,
-          source: (this.type || 'generic').toUpperCase()
-        };
+        return this.createExplosionPayload();
       }
     }
 
-    const dist = this.speed * dt;
-    this.x += Math.cos(this.angle) * dist;
-    this.y += Math.sin(this.angle) * dist;
-    this.distanceTraveled += dist;
+    this.prevX = this.x;
+    this.prevY = this.y;
 
-    // Check boundary or wall hit
-    if (map && map.isWall(this.x, this.y, this.radius)) {
-      this.isDead = true;
-      if (this.isExplosive) {
-        return {
-          exploded: true,
-          x: this.x,
-          y: this.y,
-          radius: this.explosionRadius,
-          damage: this.explosionDamage,
-          ownerId: this.ownerId,
-          source: (this.type || 'generic').toUpperCase()
-        };
-      }
-      return null;
-    }
+    const totalDist = this.speed * dt;
+    const maxSubStep = 20;
+    const steps = (totalDist > maxSubStep && map) ? Math.max(1, Math.ceil(totalDist / maxSubStep)) : 1;
+    const stepDist = totalDist / steps;
+    const cosA = Math.cos(this.angle);
+    const sinA = Math.sin(this.angle);
 
-    // Out of range
-    if (this.distanceTraveled >= this.range) {
-      this.isDead = true;
-      if (this.isExplosive) {
-        return {
-          exploded: true,
-          x: this.x,
-          y: this.y,
-          radius: this.explosionRadius,
-          damage: this.explosionDamage,
-          ownerId: this.ownerId,
-          source: (this.type || 'generic').toUpperCase()
-        };
+    for (let s = 0; s < steps; s++) {
+      this.x += cosA * stepDist;
+      this.y += sinA * stepDist;
+      this.distanceTraveled += stepDist;
+
+      if (map && map.isWall(this.x, this.y, this.radius)) {
+        this.isDead = true;
+        return this.isExplosive ? this.createExplosionPayload() : null;
       }
-      return null;
+
+      if (this.distanceTraveled >= this.range) {
+        this.isDead = true;
+        return this.isExplosive ? this.createExplosionPayload() : null;
+      }
     }
 
     return null;
@@ -103,9 +109,19 @@ class Bullet {
   checkHit(targetCircle) {
     if (this.isDead) return false;
     const hitRadius = targetCircle.radius + this.radius;
+    const hitRadiusSq = hitRadius * hitRadius;
+
     const dx = this.x - targetCircle.x;
     const dy = this.y - targetCircle.y;
-    return (dx * dx + dy * dy) <= (hitRadius * hitRadius);
+    if ((dx * dx + dy * dy) <= hitRadiusSq) {
+      return true;
+    }
+
+    if (this.prevX !== this.x || this.prevY !== this.y) {
+      return distToSegmentSquared(targetCircle.x, targetCircle.y, this.prevX, this.prevY, this.x, this.y) <= hitRadiusSq;
+    }
+
+    return false;
   }
 
   serialize() {
@@ -120,4 +136,4 @@ class Bullet {
   }
 }
 
-module.exports = { Bullet };
+module.exports = { Bullet, distToSegmentSquared };

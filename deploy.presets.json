@@ -15,7 +15,9 @@
       "SIMULATION_HZ": "50",
       "SNAPSHOT_HZ": "25",
       "MAX_ROOMS": "20",
-      "CORS_ORIGIN": "*"
+      "CORS_ORIGIN": "*",
+      "AUTO_PING_ENABLED": "true",
+      "KEEP_ALIVE_INTERVAL_MS": "780000"
     },
     "render-split-backend": {
       "DEPLOY_PLATFORM": "split-backend",
@@ -23,7 +25,9 @@
       "SIMULATION_HZ": "50",
       "SNAPSHOT_HZ": "25",
       "MAX_ROOMS": "20",
-      "CORS_ORIGIN": "https://your-game.pages.dev"
+      "CORS_ORIGIN": "https://your-game.pages.dev",
+      "AUTO_PING_ENABLED": "true",
+      "KEEP_ALIVE_INTERVAL_MS": "780000"
     },
     "cloudflare-pages-client": {
       "buildCommand": "npm run build:client",

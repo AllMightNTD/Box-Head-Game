@@ -22,3 +22,7 @@ services:
         value: "20"
       - key: CORS_ORIGIN
         value: "*"
+      - key: AUTO_PING_ENABLED
+        value: "true"
+      - key: KEEP_ALIVE_INTERVAL_MS
+        value: "780000"

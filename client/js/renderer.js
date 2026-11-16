@@ -25,6 +25,9 @@ class Renderer {
       this.darknessCtx = this.darknessCanvas.getContext('2d');
     }
 
+    // Cached off-screen canvases for radial light gradient stamps
+    this.radialLightCache = new Map();
+
     // Progressive wave darkness
     this.currentDarknessAlpha = 0.18;
     this.targetDarknessAlpha = 0.18;
@@ -2778,18 +2781,50 @@ class Renderer {
     }
   }
 
+  getRadialLightCanvas(innerRatio) {
+    if (typeof document === 'undefined') return null;
+    const ratio = Math.max(0, Math.min(0.95, Math.round(innerRatio * 20) / 20));
+    if (this.radialLightCache.has(ratio)) {
+      return this.radialLightCache.get(ratio);
+    }
+    const off = document.createElement('canvas');
+    off.width = 256;
+    off.height = 256;
+    const c = off.getContext('2d');
+    if (!c || typeof c.createRadialGradient !== 'function') return null;
+    const grad = c.createRadialGradient(128, 128, 128 * ratio, 128, 128, 128);
+    grad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    c.fillStyle = grad;
+    c.beginPath();
+    c.arc(128, 128, 128, 0, Math.PI * 2);
+    c.fill();
+    this.radialLightCache.set(ratio, off);
+    return off;
+  }
+
   cutoutRadialLight(ctx, x, y, innerR = 0, outerR = 100, alpha = 1.0) {
     if (outerR <= 0 || alpha <= 0) return;
     const safeInnerR = Math.max(0, Math.min(innerR, outerR - 0.001));
-    ctx.save();
-    const grad = ctx.createRadialGradient(x, y, safeInnerR, x, y, outerR);
-    grad.addColorStop(0, `rgba(0, 0, 0, ${alpha})`);
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(x, y, outerR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    const lightCanvas = this.getRadialLightCanvas(safeInnerR / outerR);
+    if (lightCanvas && typeof ctx.drawImage === 'function') {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx.drawImage(lightCanvas, x - outerR, y - outerR, outerR * 2, outerR * 2);
+      ctx.restore();
+      return;
+    }
+    if (typeof ctx.createRadialGradient === 'function') {
+      ctx.save();
+      const grad = ctx.createRadialGradient(x, y, safeInnerR, x, y, outerR);
+      grad.addColorStop(0, `rgba(0, 0, 0, ${alpha})`);
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, outerR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   cutoutFlashlightCone(ctx, p) {

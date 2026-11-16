@@ -161,3 +161,10 @@ docker run -p 3000:3000 -e DEPLOY_PLATFORM=docker boxhead-game
 | `MAX_ROOMS` | `50` (LAN) / `20` (Render) | Giới hạn số phòng tạo tối đa để bảo vệ RAM server |
 | `BACKEND_URL` | rỗng | URL máy chủ backend (dùng khi build static client `dist/`) |
 | `HEALTHCHECK_PATH` | `/healthz` | Đường dẫn kiểm tra trạng thái sức khỏe máy chủ |
+| `AUTO_PING_ENABLED` | `true` (Render) / `false` (LAN) | Bật/tắt cơ chế tự động ping public URL giữ server không bị ngủ sau 15p |
+| `KEEP_ALIVE_URL` | tự lấy từ `RENDER_EXTERNAL_URL` + `/healthz` | URL đích cho cơ chế auto-ping (tự động nhận diện trên Render) |
+| `KEEP_ALIVE_INTERVAL_MS` | `780000` (13 phút) | Chu kỳ gửi ping giữ kết nối (mili-giây) |
+
+### ⏰ Giữ Render Free Luôn Active 24/7 (Chống Ngủ 15 Phút)
+1. **Lớp 1 (Tích hợp sẵn):** Khi chạy trên Render (`AUTO_PING_ENABLED=true`), server tự động đọc `RENDER_EXTERNAL_URL` và ping `/healthz` mỗi 13 phút (`server/services/keepAlive.js`).
+2. **Lớp 2 (External Watchdog dự phòng):** Để đánh thức server ngay cả khi bị restart/ngủ hẳn, hãy cấu hình **Cron-job.org / UptimeRobot** (miễn phí) trỏ đến `https://ten-game.onrender.com/healthz` mỗi 10-12 phút, hoặc bật Repository Variable `RENDER_HEALTHCHECK_URL` trên GitHub để kích hoạt workflow `.github/workflows/keep-alive.yml`. Xem chi tiết tại `docs/render-deployment-guide.html`.

@@ -377,7 +377,8 @@
         <li><a href="#section-3">3. Cách 2: Deploy Thủ Công (Manual Web Service)</a></li>
         <li><a href="#section-4">4. Cách 3: Mô hình Hybrid (Cloudflare Pages + Render)</a></li>
         <li><a href="#section-5">5. Cơ chế tối ưu Render Free Tier đã tích hợp</a></li>
-        <li><a href="#section-6">6. Kiểm tra & Khắc phục sự cố (Troubleshooting)</a></li>
+        <li><a href="#section-6">6. Cơ chế Ping Tự Động giữ Render luôn Active (24/7)</a></li>
+        <li><a href="#section-7">7. Kiểm tra &amp; Khắc phục sự cố (Troubleshooting)</a></li>
       </ul>
     </nav>
 
@@ -722,14 +723,97 @@ CORS_ORIGIN=https://ten-client-cua-ban.pages.dev</code></pre>
               Để tránh tràn bộ nhớ RAM 512MB khi có nhiều người tạo phòng rác, server áp đặt ngưỡng tối đa 20 phòng cùng lúc. Khi Render cập nhật bản build mới hoặc restart container, tín hiệu <code>SIGTERM</code> sẽ kích hoạt dọn dẹp các timer phòng game sạch sẽ trước khi thoát.
             </p>
           </div>
+
+          <div style="background: var(--bg-card); padding: 16px; border-radius: 8px; border-left: 4px solid #a371f7;">
+            <strong style="color: #a371f7; font-size: 1.05rem;">5. Auto-Ping Keep-Alive mỗi 13 phút (Ngăn Spin Down)</strong>
+            <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px;">
+              Module [server/services/keepAlive.js] tự động đọc biến hệ thống <code>RENDER_EXTERNAL_URL</code> do Render cung cấp và gửi request HTTP <code>GET /healthz</code> ra public URL mỗi <strong>13 phút</strong> (dưới ngưỡng 15 phút) khi <code>AUTO_PING_ENABLED=true</code>. Timer được đánh dấu <code>.unref()</code> và dọn dẹp sạch khi tắt server.
+            </p>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- SECTION 6 -->
+    <!-- SECTION 6: KEEP ALIVE -->
     <section id="section-6">
       <div class="section-header">
         <span class="section-number">6</span>
+        <h2>Cơ Chế Ping Tự Động Giữ Render Luôn Active (24/7)</h2>
+      </div>
+
+      <div class="card">
+        <div class="callout info">
+          <div class="callout-title">💡 Lưu ý quan trọng về Quota 750 giờ/tháng</div>
+          Render Free cấp <strong>750 giờ compute miễn phí/tháng</strong> (1 tháng có 744 giờ = 31 &times; 24h). Vì vậy <strong>một (1) web service duy nhất</strong> có thể giữ thức 24/7 cả tháng miễn phí. Nếu bạn chạy nhiều web service trên cùng tài khoản Render, hãy đặt <code>AUTO_PING_ENABLED=false</code> ở các service phụ để tránh vượt quá 750 giờ.
+        </div>
+
+        <h3 style="color: #fff; margin: 18px 0 10px;">Kiến trúc 2 Lớp Chống Ngủ Toàn Diện</h3>
+
+        <div class="compare-grid">
+          <div class="compare-card highlight">
+            <div>
+              <div class="compare-header">
+                <span>Lớp 1: Built-in Auto-Ping</span>
+                <span class="pill pill-green">Đã bật sẵn</span>
+              </div>
+              <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px;">
+                Tự động chạy ngay bên trong server Node.js sau khi khởi động:
+              </p>
+              <ul style="padding-left: 20px; font-size: 0.9rem; color: #c9d1d9;">
+                <li>Tự nhận diện biến <code>RENDER_EXTERNAL_URL</code> (Render tự cấp).</li>
+                <li>Gọi ra public URL <code>https://ten-game.onrender.com/healthz</code> mỗi <strong>13 phút</strong> (780.000 ms).</li>
+                <li>Không ping <code>localhost</code> vì Render Proxy chỉ reset timer 15 phút khi có traffic từ Internet.</li>
+                <li>Tắt/bật nhanh bằng biến <code>AUTO_PING_ENABLED=true|false</code>.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="compare-card">
+            <div>
+              <div class="compare-header">
+                <span>Lớp 2: External Watchdog</span>
+                <span class="pill pill-blue">Khuyên dùng kèm</span>
+              </div>
+              <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px;">
+                Đánh thức server ngay lập tức nếu server lỡ bị restart hoặc tắt:
+              </p>
+              <ul style="padding-left: 20px; font-size: 0.9rem; color: #c9d1d9;">
+                <li><strong>Cron-job.org / UptimeRobot:</strong> Miễn phí trọn đời, chạy cho cả repo Private &amp; Public.</li>
+                <li><strong>GitHub Actions Workflow:</strong> Đã cài sẵn tại <code>.github/workflows/keep-alive.yml</code>.</li>
+                <li>Giúp đảm bảo 100% uptime kể cả khi Render bảo trì container.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h4 style="margin: 22px 0 10px; color: #fff;">Hướng dẫn bật Lớp 2 (Chọn 1 trong 2 cách):</h4>
+        <ol class="step-list">
+          <li class="step-item">
+            <div class="step-title">Cách A (Khuyên dùng - Không tốn quota GitHub): Dùng Cron-job.org hoặc UptimeRobot</div>
+            <p>
+              1. Đăng ký tài khoản miễn phí tại <a href="https://cron-job.org/" target="_blank" style="color: var(--info);">cron-job.org</a> (hoặc <a href="https://uptimerobot.com/" target="_blank" style="color: var(--info);">uptimerobot.com</a>).<br>
+              2. Tạo Cronjob / Monitor mới với HTTP Method <code>GET</code>.<br>
+              3. Nhập URL: <code>https://ten-game-cua-ban.onrender.com/healthz</code><br>
+              4. Đặt lịch chạy: <strong>Every 10 minutes</strong> (hoặc 12 phút) -&gt; Bấm <strong>Create</strong>.
+            </p>
+          </li>
+          <li class="step-item">
+            <div class="step-title">Cách B (Hoàn toàn tự động trên GitHub - Phù hợp Repo Public): Kích hoạt GitHub Actions</div>
+            <p>
+              Dự án đã có sẵn file <code>.github/workflows/keep-alive.yml</code> chạy mỗi 12 phút. Để bật, bạn chỉ cần:<br>
+              1. Vào GitHub Repository -&gt; <strong>Settings</strong> -&gt; <strong>Secrets and variables</strong> -&gt; <strong>Actions</strong> -&gt; tab <strong>Variables</strong>.<br>
+              2. Bấm <strong>New repository variable</strong>.<br>
+              3. Name: <code>RENDER_HEALTHCHECK_URL</code> | Value: <code>https://ten-game-cua-ban.onrender.com/healthz</code>
+            </p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- SECTION 7 -->
+    <section id="section-7">
+      <div class="section-header">
+        <span class="section-number">7</span>
         <h2>Kiểm Tra &amp; Khắc Phục Sự Cố (Troubleshooting)</h2>
       </div>
 
@@ -737,8 +821,8 @@ CORS_ORIGIN=https://ten-client-cua-ban.pages.dev</code></pre>
         <h3 style="color: #fff; margin-bottom: 12px;">Các bước kiểm tra sức khỏe sau khi Deploy</h3>
         <ul style="padding-left: 20px; margin-bottom: 20px; font-size: 0.95rem;">
           <li>
-            <strong>Kiểm tra Health Check:</strong> Truy cập trình duyệt vào <code>https://ten-game.onrender.com/healthz</code>.<br>
-            Kết quả mong đợi: <code>{"status":"ok","platform":"render","mode":"monolith","uptimeSec":...,"rooms":0}</code>
+            <strong>Kiểm tra Health Check &amp; Auto-Ping:</strong> Truy cập trình duyệt vào <code>https://ten-game.onrender.com/healthz</code>.<br>
+            Kết quả mong đợi: <code>{"status":"ok","platform":"render","mode":"monolith","uptimeSec":...,"rooms":0,"keepAlive":true}</code>
           </li>
           <li style="margin-top: 8px;">
             <strong>Kiểm tra API Info:</strong> Truy cập <code>https://ten-game.onrender.com/api/info</code>.<br>

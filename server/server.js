@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const { socketHandler } = require('./socketHandler.js');
 const { getMapList } = require('./game/MapConfig.js');
 const { resolveDeployConfig, renderClientConfigScript } = require('./config/deployConfig.js');
+const { startKeepAlive } = require('./services/keepAlive.js');
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -114,13 +115,17 @@ function startServer(portOrOptions = 3000, extraOptions = {}) {
       }
     });
 
+    let isShuttingDown = false;
+    let keepAlive = null;
+
     app.get(config.healthCheckPath, (req, res) => {
       res.status(200).json({
         status: 'ok',
         platform: config.platform,
         mode: config.mode,
         uptimeSec: Math.floor(process.uptime()),
-        rooms: roomRegistry.rooms.size
+        rooms: roomRegistry.rooms.size,
+        keepAlive: Boolean(keepAlive && keepAlive.active)
       });
     });
 
@@ -174,10 +179,13 @@ function startServer(portOrOptions = 3000, extraOptions = {}) {
       });
     }
 
-    let isShuttingDown = false;
     function shutdown() {
       if (isShuttingDown) return Promise.resolve();
       isShuttingDown = true;
+
+      if (keepAlive && typeof keepAlive.stop === 'function') {
+        keepAlive.stop();
+      }
 
       for (const room of roomRegistry.rooms.values()) {
         if (room.gameRoom && typeof room.gameRoom.stop === 'function') {
@@ -200,7 +208,8 @@ function startServer(portOrOptions = 3000, extraOptions = {}) {
     server.listen(config.port, config.host, () => {
       const address = server.address();
       const actualPort = typeof address === 'object' && address ? address.port : config.port;
-      resolve({ app, server, io, port: actualPort, getLanIp, config, shutdown });
+      keepAlive = startKeepAlive(config);
+      resolve({ app, server, io, port: actualPort, getLanIp, config, shutdown, keepAlive });
     });
 
     server.on('error', reject);
@@ -208,8 +217,7 @@ function startServer(portOrOptions = 3000, extraOptions = {}) {
 }
 
 if (require.main === module) {
-  const bootConfig = resolveDeployConfig(process.env);
-  startServer({ env: process.env }).then(({ port, getLanIp: resolveLanIp, config, shutdown }) => {
+  startServer({ env: process.env }).then(({ port, getLanIp: resolveLanIp, config, shutdown, keepAlive }) => {
     const lanIp = resolveLanIp();
     console.log('====================================================');
     console.log(`   BOXHEAD MULTIPLAYER SERVER (${config.platform.toUpperCase()} / ${config.mode})`);
@@ -220,6 +228,12 @@ if (require.main === module) {
     }
     console.log(`[Config] Sim ${config.simulationHz}Hz | Snap ${config.snapshotHz}Hz | MaxRooms ${config.maxRooms}`);
     console.log(`[Health] Endpoint:        ${config.healthCheckPath}`);
+    if (keepAlive && keepAlive.active) {
+      const intervalMinutes = Math.round(keepAlive.intervalMs / 60000);
+      console.log(`[KeepAlive] Auto-ping ON: ${keepAlive.url} (every ${intervalMinutes}m)`);
+    } else if (config.keepAliveEnabled && keepAlive && keepAlive.reason === 'missing_url') {
+      console.log('[KeepAlive] Auto-ping IDLE: waiting for RENDER_EXTERNAL_URL / KEEP_ALIVE_URL / PUBLIC_URL');
+    }
     console.log('====================================================');
 
     const handleSignal = (signal) => {

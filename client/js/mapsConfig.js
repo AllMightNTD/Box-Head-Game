@@ -32,6 +32,22 @@ const MAPS_CONFIG = {
       { x: 1040, y: 740, w: 140, h: 140, type: 'pillar' },
       { x: 730, y: 220, w: 140, h: 50, type: 'pillar' },
       { x: 730, y: 930, w: 140, h: 50, type: 'pillar' }
+    ],
+    playerSpawns: [
+      { x: 740, y: 550 },
+      { x: 860, y: 550 },
+      { x: 740, y: 650 },
+      { x: 860, y: 650 }
+    ],
+    zombieSpawns: [
+      { x: 100, y: 80 },
+      { x: 800, y: 80 },
+      { x: 1500, y: 80 },
+      { x: 1520, y: 600 },
+      { x: 1500, y: 1120 },
+      { x: 800, y: 1120 },
+      { x: 100, y: 1120 },
+      { x: 80, y: 600 }
     ]
   },
 
@@ -73,6 +89,22 @@ const MAPS_CONFIG = {
       { x: 1130, y: 280, w: 130, h: 130, type: 'pillar' },
       { x: 740, y: 140, w: 120, h: 70, type: 'pillar' },
       { x: 740, y: 990, w: 120, h: 70, type: 'pillar' }
+    ],
+    playerSpawns: [
+      { x: 770, y: 570 },
+      { x: 830, y: 570 },
+      { x: 770, y: 630 },
+      { x: 830, y: 630 }
+    ],
+    zombieSpawns: [
+      { x: 120, y: 100 },
+      { x: 800, y: 80 },
+      { x: 1480, y: 100 },
+      { x: 1510, y: 600 },
+      { x: 1480, y: 1100 },
+      { x: 800, y: 1120 },
+      { x: 120, y: 1100 },
+      { x: 90, y: 600 }
     ]
   },
 
@@ -112,6 +144,22 @@ const MAPS_CONFIG = {
       { x: 1030, y: 570, w: 70, h: 70, type: 'pillar' },
       { x: 160, y: 530, w: 80, h: 140, type: 'pillar' },
       { x: 1360, y: 530, w: 80, h: 140, type: 'pillar' }
+    ],
+    playerSpawns: [
+      { x: 760, y: 560 },
+      { x: 840, y: 560 },
+      { x: 760, y: 640 },
+      { x: 840, y: 640 }
+    ],
+    zombieSpawns: [
+      { x: 100, y: 80 },
+      { x: 800, y: 80 },
+      { x: 1500, y: 80 },
+      { x: 1520, y: 600 },
+      { x: 1500, y: 1120 },
+      { x: 800, y: 1120 },
+      { x: 100, y: 1120 },
+      { x: 80, y: 600 }
     ]
   },
 
@@ -150,9 +198,30 @@ const MAPS_CONFIG = {
       { x: 1010, y: 570, w: 90, h: 60, type: 'pillar' },
       { x: 740, y: 160, w: 120, h: 80, type: 'pillar' },
       { x: 740, y: 960, w: 120, h: 80, type: 'pillar' }
+    ],
+    playerSpawns: [
+      { x: 620, y: 600 },
+      { x: 980, y: 600 },
+      { x: 800, y: 410 },
+      { x: 800, y: 790 }
+    ],
+    zombieSpawns: [
+      { x: 100, y: 80 },
+      { x: 800, y: 80 },
+      { x: 1500, y: 80 },
+      { x: 1520, y: 600 },
+      { x: 1500, y: 1120 },
+      { x: 800, y: 1120 },
+      { x: 100, y: 1120 },
+      { x: 80, y: 600 }
     ]
   }
 };
 
-window.MAPS_CONFIG = MAPS_CONFIG;
-window.DEFAULT_MAP_ID = 'THE_ROOMS';
+if (typeof window !== 'undefined') {
+  window.MAPS_CONFIG = MAPS_CONFIG;
+  window.DEFAULT_MAP_ID = 'THE_ROOMS';
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { MAPS_CONFIG, DEFAULT_MAP_ID: 'THE_ROOMS' };
+}

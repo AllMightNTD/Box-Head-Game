@@ -106,3 +106,27 @@ test('split-backend mode disables static HTML serving and shuts down active room
   client.disconnect();
   await srv.shutdown();
 });
+
+test('startServer exposes keepAlive controller and stops it during graceful shutdown', async (t) => {
+  // Arrange
+  const srv = await startServer({
+    port: 0,
+    env: {
+      DEPLOY_PLATFORM: 'render',
+      KEEP_ALIVE_URL: 'https://example.onrender.com/healthz',
+      AUTO_PING_ENABLED: 'true'
+    }
+  });
+  t.after(() => srv.shutdown());
+
+  // Assert active while running
+  assert.ok(srv.keepAlive);
+  assert.strictEqual(srv.keepAlive.active, true);
+
+  // Act: shutdown
+  await srv.shutdown();
+
+  // Assert stopped cleanly
+  assert.strictEqual(srv.keepAlive.getStats().active, false);
+  assert.strictEqual(srv.keepAlive.getStats().stopped, true);
+});

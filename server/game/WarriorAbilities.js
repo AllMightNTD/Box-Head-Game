@@ -12,6 +12,10 @@ const {
 } = require('./WarriorSkillsConfig.js');
 const { Bullet } = require('./Bullet.js');
 const { ULT_CHARGE_CONFIG } = require('./UltimateConfig.js');
+const {
+  normalizeAngleDiff,
+  damageAndCreditZombie: sharedDamageAndCreditZombie
+} = require('./CombatUtils.js');
 
 /**
  * Steps an entity forward incrementally along angle, clamping against map
@@ -64,18 +68,6 @@ function stepClamped(entity, angle, totalDistance, map, barricades = []) {
 }
 
 /**
- * Normalizes an angle difference to the range [-Math.PI, Math.PI].
- * @param {number} diff
- * @returns {number}
- */
-function normalizeAngleDiff(diff) {
-  let d = diff;
-  while (d > Math.PI) d -= 2 * Math.PI;
-  while (d < -Math.PI) d += 2 * Math.PI;
-  return d;
-}
-
-/**
  * Deals damage to zombie, applying warrior multipliers, knockback, stun, slow,
  * awarding ult charge, and recording kills with unlocked events and pickup drops.
  * @param {object} warrior
@@ -86,32 +78,12 @@ function normalizeAngleDiff(diff) {
  * @param {object} [options={}]
  */
 function damageAndCreditZombie(warrior, zombie, baseDmg, sourceType, room, options = {}) {
-  if (!zombie || zombie.isDead) return;
+  if (!zombie || zombie.isDead) return false;
 
   const mult = warrior && typeof warrior.getWarriorDamageMultiplier === 'function'
     ? warrior.getWarriorDamageMultiplier()
     : ((warrior?.warriorState?.avatarTimer > 0 ? 1.5 : 1.0) * (warrior?.hasWarCryBuff ? 1.15 : 1.0));
   const finalDamage = Math.max(1, Math.round(baseDmg * mult));
-
-  zombie.takeDamage(finalDamage, sourceType);
-
-  if (options.knockback && options.knockAngle !== undefined) {
-    zombie.applyKnockback(options.knockAngle, options.knockback);
-  }
-
-  if (options.stun) {
-    const isBoss = zombie.type === 'TANK' || zombie.type === 'DEVIL';
-    const stunDur = isBoss
-      ? (options.bossStun !== undefined ? options.bossStun : options.stun)
-      : options.stun;
-    if (stunDur > 0) {
-      zombie.applyStun(stunDur);
-    }
-  }
-
-  if (options.slowFactor && options.slowDuration) {
-    zombie.applySlow(options.slowDuration, options.slowFactor);
-  }
 
   // Ult charge on hit when not in Avatar of War
   const isAvatarActive = Boolean(warrior?.warriorState?.avatarActive || warrior?.warriorState?.avatarTimer > 0);
@@ -119,46 +91,14 @@ function damageAndCreditZombie(warrior, zombie, baseDmg, sourceType, room, optio
     warrior.addUltCharge(ULT_CHARGE_CONFIG.HIT_BASE);
   }
 
-  // Zombie death
-  if (zombie.isDead && warrior) {
-    const awardKillUlt = options.awardKillCharge !== undefined
-      ? Boolean(options.awardKillCharge)
-      : !isAvatarActive;
-    const scoreVal = zombie.scoreValue || zombie.score || 10;
-    const newlyUnlocked = warrior.recordKill(scoreVal, { awardUltCharge: awardKillUlt });
+  const awardKillUlt = options.awardKillCharge !== undefined
+    ? Boolean(options.awardKillCharge)
+    : !isAvatarActive;
 
-    if (room && Array.isArray(room.eventsBuffer)) {
-      room.eventsBuffer.push({
-        type: 'ZOMBIE_DIE',
-        x: Math.round(zombie.x),
-        y: Math.round(zombie.y),
-        zType: zombie.type,
-        angle: Number(zombie.angle.toFixed(2))
-      });
-      if (Array.isArray(newlyUnlocked) && newlyUnlocked.length > 0) {
-        for (let i = 0; i < newlyUnlocked.length; i++) {
-          const u = newlyUnlocked[i];
-          room.eventsBuffer.push({
-            type: 'UNLOCKED',
-            weapon: u.name || u.id,
-            playerId: warrior.id,
-            slot: u.slot
-          });
-        }
-      }
-    }
-
-    // 15% pickup drop chance
-    if (room && Array.isArray(room.pickups) && options.dropPickup !== false && Math.random() < 0.15) {
-      room.pickups.push({
-        id: 'pk_' + Math.random().toString(36).substring(2, 7),
-        type: Math.random() < 0.4 ? 'MEDKIT' : 'AMMO',
-        x: Math.round(zombie.x),
-        y: Math.round(zombie.y),
-        life: 25
-      });
-    }
-  }
+  return sharedDamageAndCreditZombie(warrior, zombie, finalDamage, sourceType, room, {
+    ...options,
+    awardUltCharge: awardKillUlt
+  });
 }
 
 /**
