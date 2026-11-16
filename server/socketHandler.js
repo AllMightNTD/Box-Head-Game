@@ -241,6 +241,15 @@ function socketHandler(io) {
       }
     });
 
+    socket.on('player:skill', (payload) => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room && room.gameRoom) {
+        const safePayload = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+        room.gameRoom.handleSkill(socket.id, safePayload);
+      }
+    });
+
     function handleLeave() {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);

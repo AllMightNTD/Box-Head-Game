@@ -1,5 +1,6 @@
 const { TacticalDrone } = require('./TacticalDrone.js');
 const { getUltimateConfigForClass } = require('./UltimateConfig.js');
+const { activateAvatarOfWar } = require('./WarriorAbilities.js');
 
 function isPositionBlocked(x, y, radius, map, barricades) {
   if (map && map.isWall(x, y, radius)) {
@@ -69,25 +70,6 @@ function resolveBlinkDestination(startX, startY, angle, distance, radius, map, b
   return polishResolution(startX, startY, radius, map, barricades);
 }
 
-function applyFrostNovaAt(cx, cy, conf, player, room) {
-  for (let i = 0; i < room.zombies.length; i++) {
-    const z = room.zombies[i];
-    if (!z || z.isDead) continue;
-    const dist = Math.hypot(z.x - cx, z.y - cy);
-    if (dist <= conf.novaRadius + z.radius) {
-      z.takeDamage(conf.damage, 'MAGIC');
-      if (z.isDead) {
-        player.recordKill(z.score, { awardUltCharge: false });
-        room.eventsBuffer.push({ type: 'ZOMBIE_DIE', x: z.x, y: z.y, zType: z.type, angle: z.angle });
-      } else if (z.type === 'TANK' || z.type === 'DEVIL') {
-        z.applyFreeze(conf.bossFreezeDuration, conf.bossSlowDuration, conf.bossSlowFactor);
-      } else {
-        z.applyFreeze(conf.freezeDuration);
-      }
-    }
-  }
-}
-
 function executeSeismicSlam(player, conf, room) {
   // Stun, knockback, and damage zombies in 360-degree radius (never damage barricades/barrels)
   for (let i = 0; i < room.zombies.length; i++) {
@@ -129,40 +111,6 @@ function executeSeismicSlam(player, conf, room) {
   };
 }
 
-function executeBlinkFrostNova(player, angle, conf, room) {
-  const fromX = player.x;
-  const fromY = player.y;
-  const blinkAngle = (typeof angle === 'number' && Number.isFinite(angle)) ? angle : player.angle;
-  const dest = resolveBlinkDestination(
-    fromX,
-    fromY,
-    blinkAngle,
-    conf.blinkDistance,
-    player.radius,
-    room.map,
-    room.barricades
-  );
-
-  // Trigger Frost Nova at BOTH origin and destination
-  applyFrostNovaAt(fromX, fromY, conf, player, room);
-  player.x = dest.x;
-  player.y = dest.y;
-  player.angle = blinkAngle;
-  applyFrostNovaAt(dest.x, dest.y, conf, player, room);
-
-  return {
-    type: 'ULTIMATE',
-    ultId: conf.id,
-    playerId: player.id,
-    character: player.character,
-    fromX: Math.round(fromX),
-    fromY: Math.round(fromY),
-    toX: Math.round(dest.x),
-    toY: Math.round(dest.y),
-    radius: conf.novaRadius
-  };
-}
-
 function executeTacticalDrone(player, conf, room) {
   const droneId = 'dr_' + Math.random().toString(36).substring(2, 8);
   const drone = new TacticalDrone(droneId, player.id, player.x, player.y, conf);
@@ -180,24 +128,41 @@ function executeTacticalDrone(player, conf, room) {
   };
 }
 
-function triggerPlayerUltimate(player, angle, room) {
+function triggerPlayerUltimate(player, angle, room, targetPos = null) {
   if (!player || player.isDead || player.isDowned) return { activated: false };
-  if (room.state !== 'PLAYING' && room.state !== 'INTERMISSION') return { activated: false };
+  if (!room || (room.state !== 'PLAYING' && room.state !== 'INTERMISSION')) return { activated: false };
+
+  if (player.character === 'MAGE') {
+    const { triggerMageSkill } = require('./MageAbilities.js');
+    return triggerMageSkill(player, 8, angle, room, targetPos);
+  }
   if (player.ultCharge < player.ultMaxCharge) return { activated: false };
 
   const conf = getUltimateConfigForClass(player.character);
+
+  if (conf.id === 'AVATAR_OF_WAR') {
+    const event = activateAvatarOfWar(player, room);
+    if (!event) {
+      return { activated: false, reason: 'WARRIOR_ULT_UNAVAILABLE' };
+    }
+    if (room && Array.isArray(room.eventsBuffer)) {
+      room.eventsBuffer.push(event);
+    }
+    return { activated: true, event };
+  }
+
   player.ultCharge = 0;
 
   let event = null;
   if (conf.id === 'SEISMIC_SLAM') {
     event = executeSeismicSlam(player, conf, room);
-  } else if (conf.id === 'BLINK_FROST_NOVA') {
-    event = executeBlinkFrostNova(player, angle, conf, room);
   } else {
     event = executeTacticalDrone(player, conf, room);
   }
 
-  room.eventsBuffer.push(event);
+  if (event && room && Array.isArray(room.eventsBuffer)) {
+    room.eventsBuffer.push(event);
+  }
   return { activated: true, event };
 }
 
@@ -205,4 +170,3 @@ module.exports = {
   resolveBlinkDestination,
   triggerPlayerUltimate
 };
-

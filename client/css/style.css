@@ -481,6 +481,36 @@ body, html {
   transition: width 0.2s;
 }
 
+.teammate-armor-bar {
+  width: 100%;
+  height: 4px;
+  background: #1e293b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.teammate-armor-fill {
+  height: 100%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+  transition: width 0.2s;
+}
+
+.teammate-mana-bar {
+  width: 100%;
+  height: 4px;
+  background: #171a2b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.teammate-mana-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #a855f7);
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.5);
+  transition: width 0.2s;
+}
+
 /* Top Center: Wave Announcement */
 .hud-wave {
   position: absolute;
@@ -605,6 +635,73 @@ body, html {
   font-weight: bold;
   text-align: right;
   color: var(--accent);
+}
+
+/* Mage Skill Bar, Mana Gauge & Cooldown Overlays */
+.weapon-slot.mage-slot {
+  background: #141728;
+  border-color: #323c69;
+}
+
+.weapon-slot.mage-slot.active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.65);
+  transform: translateY(-4px);
+}
+
+.weapon-slot.mage-slot.no-mana:not(.locked) {
+  border-color: #7e22ce;
+  opacity: 0.65;
+}
+
+/* Warrior ARPG Skill Slots & Overlays */
+.weapon-slot.warrior-slot {
+  background: #14181f;
+  border-color: #2e3846;
+}
+
+.weapon-slot.warrior-slot.active {
+  border-color: #ff3d00;
+  box-shadow: 0 0 16px rgba(255, 61, 0, 0.7);
+  transform: translateY(-4px);
+}
+
+.skill-cooldown-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(10, 12, 16, 0.82);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Impact, monospace, sans-serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+  color: #ffb74d;
+  text-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+  pointer-events: none;
+  z-index: 5;
+  backdrop-filter: blur(1px);
+}
+
+.skill-cooldown-overlay.hidden {
+  display: none !important;
+}
+
+.skill-cd-text {
+  pointer-events: none;
+}
+
+.hud-ultimate.mana-mode {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+}
+
+.hud-ultimate.mana-mode .hud-ult-fill {
+  background: linear-gradient(90deg, #2563eb, #a855f7);
 }
 
 /* Game Over Modal */
