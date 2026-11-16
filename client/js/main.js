@@ -43,6 +43,7 @@
   let myPlayerId = null;
   let isInGame = false;
   let lastFrameTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  let lastEmptySoundTime = -Infinity;
 
   // Active Map Configuration
   let currentMapId = (typeof window !== 'undefined' && window.DEFAULT_MAP_ID) || 'THE_ROOMS';
@@ -382,6 +383,7 @@
       input.setWeaponSlot(1, true);
     }
     pendingWeapon = null;
+    lastEmptySoundTime = -Infinity;
     if (ui && ui.modalGameOver) ui.modalGameOver.classList.add('hidden');
     if (ui && ui.modalPause) ui.modalPause.classList.add('hidden');
   }
@@ -400,7 +402,7 @@
     } else if (ev.type === 'HIT') {
       if (snd) {
         snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
-        if (ev.weapon === 'railgun' && typeof snd.playRailgunImpact === 'function') {
+        if (String(ev.weapon).toLowerCase() === 'railgun' && typeof snd.playRailgunImpact === 'function') {
           snd.playRailgunImpact(ev.x, listenerX);
         }
       }
@@ -490,8 +492,14 @@
         sm.updateRocketFlight(rockets, listenerX);
       }
       if (activeInput && typeof activeInput.isShooting === 'function' && activeInput.isShooting() && localPlayer && localPlayer.weapons?.[localPlayer.selectedWeapon]?.ammo === 0) {
-        if (sm && typeof sm.playWeaponEmpty === 'function') {
-          sm.playWeaponEmpty(localPlayer.selectedWeapon, localPlayer.x, listenerX);
+        const frameTime = (typeof now === 'number' && Number.isFinite(now))
+          ? now
+          : (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (frameTime - lastEmptySoundTime >= 300) {
+          lastEmptySoundTime = frameTime;
+          if (sm && typeof sm.playWeaponEmpty === 'function') {
+            sm.playWeaponEmpty(localPlayer.selectedWeapon, localPlayer.x, listenerX);
+          }
         }
       }
       if (rnd) rnd.render(state, myId, activeMap);

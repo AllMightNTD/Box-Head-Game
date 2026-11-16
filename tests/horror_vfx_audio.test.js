@@ -574,22 +574,27 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.addDirectionalBlood[0].isKill, false);
   assert.strictEqual(calls.playRailgunImpact.length, 0);
 
-  // HIT with railgun triggers playRailgunImpact
+  // HIT with railgun triggers playRailgunImpact (case-insensitive: 'railgun' and 'RAILGUN')
   handleGameEvent({ type: 'HIT', zType: 'NORMAL', weapon: 'railgun', x: 880, y: 600, angle: 0 }, snapshot, context);
   assert.strictEqual(calls.playRailgunImpact.length, 1);
   assert.strictEqual(calls.playRailgunImpact[0].x, 880);
   assert.strictEqual(calls.playRailgunImpact[0].lx, 800);
 
+  handleGameEvent({ type: 'HIT', zType: 'DEVIL', weapon: 'RAILGUN', x: 920, y: 600, angle: 0 }, snapshot, context);
+  assert.strictEqual(calls.playRailgunImpact.length, 2);
+  assert.strictEqual(calls.playRailgunImpact[1].x, 920);
+  assert.strictEqual(calls.playRailgunImpact[1].lx, 800);
+
   // 3. ZOMBIE_DIE: Normal zombie -> visceral dark red #7f0000
   handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'NORMAL', x: 850, y: 600, killAngle: 1.2 }, snapshot, context);
   assert.strictEqual(calls.playZombieDie.length, 1);
-  assert.strictEqual(calls.addDirectionalBlood[2].color, '#7f0000');
-  assert.strictEqual(calls.addDirectionalBlood[2].isKill, true);
+  assert.strictEqual(calls.addDirectionalBlood[3].color, '#7f0000');
+  assert.strictEqual(calls.addDirectionalBlood[3].isKill, true);
   assert.strictEqual(calls.addZombieCorpse.length, 1);
 
   // ZOMBIE_DIE: Devil zombie -> crimson red #c62828
   handleGameEvent({ type: 'ZOMBIE_DIE', zType: 'DEVIL', x: 850, y: 600, killAngle: 0.8 }, snapshot, context);
-  assert.strictEqual(calls.addDirectionalBlood[3].color, '#c62828');
+  assert.strictEqual(calls.addDirectionalBlood[4].color, '#c62828');
 
   // 4. EXPLOSION: large radius -> scale 1.4 with source forwarding
   handleGameEvent({ type: 'EXPLOSION', x: 900, y: 600, radius: 150, source: 'ROCKET' }, snapshot, context);
@@ -661,13 +666,21 @@ test('Integration: handleGameEvent and gameLoop route spatial audio, directional
   assert.strictEqual(calls.render.length, 1);
   assert.strictEqual(calls.updateHUD.length, 1);
 
+  // gameLoop debounces playWeaponEmpty: calling within 300ms cooldown suppresses voice spam
+  gameLoop(2100, loopContext); // 100ms later -> debounced
+  assert.strictEqual(calls.playWeaponEmpty.length, 1, 'playWeaponEmpty should be debounced within 300ms');
+
+  // gameLoop triggers playWeaponEmpty again after >= 300ms cooldown
+  gameLoop(2350, loopContext); // 350ms later -> should fire
+  assert.strictEqual(calls.playWeaponEmpty.length, 2, 'playWeaponEmpty should fire again after 300ms cooldown');
+
   // gameLoop when not in game
   loopContext.isInGame = false;
   gameLoop(2050, loopContext);
-  assert.strictEqual(calls.updateVisuals.length, 2);
-  assert.strictEqual(calls.updateVisuals[1].wave, 1, 'updateVisuals when out of game defaults wave to 1');
-  assert.strictEqual(calls.render.length, 1, 'No render calls when not in game');
-  assert.strictEqual(calls.updateHorrorAmbience.length, 1, 'No ambience updates when not in game');
+  assert.strictEqual(calls.updateVisuals.length, 4);
+  assert.strictEqual(calls.updateVisuals[3].wave, 1, 'updateVisuals when out of game defaults wave to 1');
+  assert.strictEqual(calls.render.length, 3, 'No render calls when not in game');
+  assert.strictEqual(calls.updateHorrorAmbience.length, 3, 'No ambience updates when not in game');
 });
 
 
