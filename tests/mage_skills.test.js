@@ -257,3 +257,246 @@ test('Non-Mage characters preserve legacy gun, weapon switch, and ult charge beh
   assert.strictEqual(snap.mageState, null);
 });
 
+
+const { Barricade, Barrel } = require('../server/game/Barricade.js');
+const {
+  maybeDropPickup,
+  executeMageArcaneBolt,
+  triggerMageSkill,
+  explodeMageFireball,
+  updateMageRoomSystems
+} = require('../server/game/MageAbilities.js');
+
+function createMockRoom() {
+  return {
+    map: new GameMap('THE_ROOMS'),
+    players: new Map(),
+    zombies: [],
+    bullets: [],
+    barricades: [],
+    pickups: [],
+    drones: [],
+    groundZones: [],
+    pendingMeteors: [],
+    state: 'PLAYING',
+    eventsBuffer: []
+  };
+}
+
+test('Mage [1] ARCANE_BOLT and [2] FROST_NOVA execute with exact mana, range, damage, and freeze durations', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 500, 500);
+  mage.angle = 0;
+  mage.mageState.skills.FROST_NOVA.unlocked = true;
+  room.players.set('m1', mage);
+
+  // Act [1]: Arcane Bolt
+  const fired = executeMageArcaneBolt(mage, room);
+  assert.strictEqual(fired, true);
+  assert.strictEqual(mage.mana, 95);
+  assert.strictEqual(room.bullets.length, 1);
+  assert.strictEqual(room.bullets[0].type, 'arcane_bolt');
+  assert.strictEqual(room.bullets[0].speed, 900);
+  assert.strictEqual(room.bullets[0].range, 400);
+  assert.strictEqual(room.bullets[0].damage, 35);
+
+  // Act [2]: Frost Nova
+  const zNormal = new Zombie('zn', 'NORMAL', 590, 500);
+  const zTank = new Zombie('zt', 'TANK', 580, 500);
+  const zFar = new Zombie('zf', 'NORMAL', 700, 500);
+  room.zombies.push(zNormal, zTank, zFar);
+
+  const res = triggerMageSkill(mage, 2, 0, room);
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(mage.mana, 75);
+  assert.strictEqual(mage.mageState.skills.FROST_NOVA.cooldown, 5.0);
+  assert.strictEqual(zNormal.hp, 35);
+  assert.strictEqual(zNormal.freezeTimer, 2.0);
+  assert.strictEqual(zTank.hp, 355);
+  assert.strictEqual(zTank.freezeTimer, 1.0);
+  assert.strictEqual(zFar.hp, 80);
+});
+
+test('Mage [3] CHAIN_LIGHTNING chains up to 4 bounces with -15% damage decay and 0.5s stun, aborting cleanly if no target', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 500);
+  mage.mageState.skills.CHAIN_LIGHTNING.unlocked = true;
+  room.players.set('m1', mage);
+
+  // Unhappy path: no zombies -> no mana spent, no cooldown
+  const emptyRes = triggerMageSkill(mage, 3, 0, room, { x: 450, y: 500 });
+  assert.strictEqual(emptyRes.activated, false);
+  assert.strictEqual(emptyRes.reason, 'NO_TARGET');
+  assert.strictEqual(mage.mana, 100);
+  assert.strictEqual(mage.mageState.skills.CHAIN_LIGHTNING.cooldown, 0);
+
+  // Happy path: 6 zombies along chain (1 primary + 4 bounces = 5 hit, 6th untouched)
+  const zombies = [];
+  for (let i = 0; i < 6; i++) {
+    const z = new Zombie(`z${i}`, 'TANK', 450 + i * 100, 500); // TANK has 400 HP
+    zombies.push(z);
+    room.zombies.push(z);
+  }
+
+  const res = triggerMageSkill(mage, 3, 0, room, { x: 450, y: 500 });
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(mage.mana, 70);
+  assert.strictEqual(mage.mageState.skills.CHAIN_LIGHTNING.cooldown, 4.5);
+
+  const expectedDmgs = [70, 60, 51, 43, 37];
+  for (let i = 0; i < 5; i++) {
+    assert.strictEqual(zombies[i].hp, 400 - expectedDmgs[i], `Bounce ${i} dmg mismatch`);
+    assert.strictEqual(zombies[i].stunTimer, 0.5);
+  }
+  assert.strictEqual(zombies[5].hp, 400, 'Max 4 bounces -> 6th zombie must not be hit');
+});
+
+test('Mage [4] FIREBALL spawns explosive fireball that spares Barricades/allies and leaves 3s burn_pool', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 400, 500);
+  const ally = new Player('h1', 'Ally', 'HUMAN', 620, 500);
+  const barricade = new Barricade('bar1', 610, 500, 'h1');
+  const zTank = new Zombie('zt', 'TANK', 630, 500);
+  const zMummy = new Zombie('zm', 'MUMMY', 640, 500);
+  mage.mageState.skills.FIREBALL.unlocked = true;
+  room.players.set('m1', mage);
+  room.players.set('h1', ally);
+  room.barricades.push(barricade);
+  room.zombies.push(zTank, zMummy);
+
+  // Act: cast Fireball and detonate at (620, 500)
+  const castRes = triggerMageSkill(mage, 4, 0, room);
+  assert.strictEqual(castRes.activated, true);
+  assert.strictEqual(mage.mana, 65);
+  assert.strictEqual(mage.mageState.skills.FIREBALL.cooldown, 6.0);
+  const fb = room.bullets.find(b => b.type === 'mage_fireball');
+  assert.ok(fb);
+  assert.strictEqual(fb.speed, 550);
+  assert.strictEqual(fb.range, 500);
+
+  explodeMageFireball(620, 500, 140, 130, 'm1', room);
+
+  // Assert impact safety & burn pool creation
+  assert.strictEqual(ally.hp, ally.maxHp, 'Fireball must not harm teammates');
+  assert.strictEqual(barricade.hp, 300, 'Fireball must spare friendly Barricade');
+  assert.strictEqual(zTank.hp, 270); // 400 - 130
+  assert.strictEqual(zMummy.isDead, true); // 130 * 1.5 FIRE = 195 > 140 HP
+  assert.strictEqual(room.groundZones.length, 1);
+  assert.strictEqual(room.groundZones[0].type, 'burn_pool');
+
+  // Tick burn_pool for 3.0s (6 ticks * 7.5 = 45 FIRE dmg)
+  for (let i = 0; i < 60; i++) {
+    updateMageRoomSystems(0.05, room);
+  }
+  assert.strictEqual(zTank.hp, 225); // 270 - 45
+  assert.strictEqual(room.groundZones.length, 0);
+});
+
+test('Mage [5] ARCANE_TELEPORT blinks safely to cursor (<=250px) and blasts origin without hitting Barricades', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 500);
+  mage.mageState.skills.ARCANE_TELEPORT.unlocked = true;
+  const zOrigin = new Zombie('zo', 'NORMAL', 360, 500);
+  const bar = new Barricade('bar1', 340, 500, 'm1');
+  room.players.set('m1', mage);
+  room.zombies.push(zOrigin);
+  room.barricades.push(bar);
+
+  // Act: request target 400px east -> clamped to 250px
+  const res = triggerMageSkill(mage, 5, 0, room, { x: 700, y: 500 });
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(mage.mana, 75);
+  assert.strictEqual(mage.mageState.skills.ARCANE_TELEPORT.cooldown, 7.0);
+  assert.strictEqual(mage.x, 550);
+  assert.strictEqual(zOrigin.hp, 30); // 80 - 50
+  assert.ok(zOrigin.knockbackX > 0);
+  assert.strictEqual(bar.hp, 300);
+});
+
+test('Mage [6] SANCTUARY_HEAL heals allies 25 HP/s, buffs CD speed, and slows zombies 40%', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 400, 500);
+  const ally = new Player('h1', 'Soldier', 'HUMAN', 600, 500);
+  ally.hp = 50;
+  const downedAlly = new Player('h2', 'Down', 'HUMAN', 600, 510);
+  downedAlly.isDowned = true;
+  downedAlly.hp = 0;
+  const zIn = new Zombie('zi', 'NORMAL', 620, 500);
+
+  mage.mageState.skills.SANCTUARY_HEAL.unlocked = true;
+  room.players.set('m1', mage);
+  room.players.set('h1', ally);
+  room.players.set('h2', downedAlly);
+  room.zombies.push(zIn);
+
+  // Act: cast Sanctuary at (600, 500)
+  const res = triggerMageSkill(mage, 6, 0, room, { x: 600, y: 500 });
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(mage.mana, 65);
+  assert.strictEqual(room.groundZones.length, 1);
+  assert.strictEqual(room.groundZones[0].type, 'sanctuary');
+
+  // Tick 1.0s (20 steps of 0.05s)
+  for (let i = 0; i < 20; i++) {
+    updateMageRoomSystems(0.05, room);
+  }
+
+  assert.strictEqual(ally.hp, 75); // +25 HP in 1.0s
+  assert.strictEqual(ally.hasSanctuaryBuff, true);
+  assert.strictEqual(downedAlly.hp, 0, 'Downed ally must not be healed');
+  assert.strictEqual(zIn.slowFactor, 0.6, 'Zombie inside sanctuary slowed by 40%');
+});
+
+test('Mage [8] METEOR_STORM drops 5 meteors over 3.0s and maintains 240px lava_pool', () => {
+  // Arrange
+  const room = createMockRoom();
+  const mage = new Player('m1', 'Merlin', 'MAGE', 400, 500);
+  mage.mageState.skills.METEOR_STORM.unlocked = true;
+  const zBoss = new Zombie('zb', 'TANK', 700, 500); // at cursor
+  zBoss.hp = 2000;
+  room.players.set('m1', mage);
+  room.zombies.push(zBoss);
+
+  // Act: cast at (700, 500)
+  const res = triggerMageSkill(mage, 8, 0, room, { x: 700, y: 500 });
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(mage.mana, 0);
+  assert.strictEqual(mage.mageState.skills.METEOR_STORM.cooldown, 50.0);
+  assert.strictEqual(room.pendingMeteors.length, 1);
+
+  // Advance 1 tick -> meteor #1 impacts immediately near (700, 500) and spawns lava_pool
+  updateMageRoomSystems(0.05, room);
+  assert.ok(zBoss.hp <= 1850, 'First meteor must deal 150 FIRE damage');
+  assert.ok(room.groundZones.some(gz => gz.type === 'lava_pool' && gz.radius === 240));
+
+  // Advance full 3.05s -> all 5 meteors complete
+  for (let i = 0; i < 61; i++) {
+    updateMageRoomSystems(0.05, room);
+  }
+  assert.strictEqual(room.pendingMeteors.length, 0);
+});
+
+test('maybeDropPickup respects 18% AMMO and 7% MEDKIT distribution', () => {
+  const room = createMockRoom();
+  const z = new Zombie('z1', 'NORMAL', 200, 200);
+  const origRandom = Math.random;
+  try {
+    Math.random = () => 0.10; // < 0.18 -> AMMO
+    maybeDropPickup(room, z);
+    Math.random = () => 0.20; // [0.18, 0.25) -> MEDKIT
+    maybeDropPickup(room, z);
+    Math.random = () => 0.30; // >= 0.25 -> none
+    maybeDropPickup(room, z);
+  } finally {
+    Math.random = origRandom;
+  }
+
+  assert.strictEqual(room.pickups.length, 2);
+  assert.strictEqual(room.pickups[0].type, 'AMMO');
+  assert.strictEqual(room.pickups[1].type, 'MEDKIT');
+});
