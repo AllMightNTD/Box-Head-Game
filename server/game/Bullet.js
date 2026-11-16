@@ -12,19 +12,21 @@ class Bullet {
     this.distanceTraveled = 0;
     this.isDead = false;
 
-    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball
+    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball | arcane_bolt | mage_fireball
     this.isFireball = Boolean(options.isFireball);
-    this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball;
-    this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : 160);
+    this.isMageFireball = Boolean(options.isMageFireball || options.type === 'mage_fireball');
+    this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball || this.isMageFireball;
+    this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : (this.isMageFireball ? 140 : 160));
     this.explosionDamage = options.explosionDamage || this.damage;
+    this.damageType = options.damageType || (this.isMageFireball ? 'FIRE' : (this.type === 'arcane_bolt' ? 'MAGIC' : 'BULLET'));
     this.penetration = Boolean(options.penetration);
-    this.knockback = options.knockback || (options.type === 'shotgun' ? 180 : 50);
+    this.knockback = options.knockback !== undefined ? options.knockback : (options.type === 'shotgun' ? 180 : 50);
     this.fromUlt = Boolean(options.fromUlt);
 
     // Fuse time for grenades
     this.fuseTime = options.fuseTime || 0;
     this.life = 0;
-    this.radius = this.isFireball ? 12 : (options.type === 'rocket' ? 8 : 4);
+    this.radius = options.radius || (this.isMageFireball ? 14 : (this.isFireball ? 12 : (options.type === 'rocket' ? 8 : (options.type === 'arcane_bolt' ? 7 : 4))));
   }
 
   update(dt, map) {

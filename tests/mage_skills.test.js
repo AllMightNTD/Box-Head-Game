@@ -61,3 +61,68 @@ test('MageSkillsConfig defines exact 8-skill progression, mana costs, cooldowns,
   ]);
   assert.deepStrictEqual(getUnlockedMageSkills(NaN), []);
 });
+
+const { Zombie } = require('../server/game/Zombie.js');
+const { Bullet } = require('../server/game/Bullet.js');
+const { GameMap } = require('../server/game/Map.js');
+const { getUltimateConfigForClass } = require('../server/game/UltimateConfig.js');
+
+test('Zombie.applySlow reduces speed without diluting stronger slows and ignores invalid inputs', () => {
+  // Arrange
+  const map = new GameMap('THE_ROOMS');
+  const z = new Zombie('z1', 'NORMAL', 400, 400);
+  const target = { x: 800, y: 400, radius: 16, isDead: false };
+
+  // Act: apply 40% slow (0.6x) then weaker 10% slow (0.9x)
+  z.applySlow(1.0, 0.6);
+  z.applySlow(0.5, 0.9);
+  z.applySlow(-1, 0.5);
+  z.applySlow(1.0, 0);
+
+  // Assert
+  assert.strictEqual(z.slowFactor, 0.6);
+  assert.strictEqual(z.slowTimer, 1.0);
+  assert.strictEqual(z.serialize().isChilled, true);
+
+  z.update(0.5, [target], [], map, []);
+  const moved = z.x - 400;
+  // Normal speed 110 * 0.6 * 0.5s = 33px
+  assert.ok(Math.abs(moved - 33) < 0.5, `Expected ~33px movement, got ${moved}`);
+});
+
+test('Bullet supports arcane_bolt and mage_fireball properties cleanly', () => {
+  // Arrange & Act
+  const bolt = new Bullet('b1', 'm1', 100, 100, 0, {
+    type: 'arcane_bolt',
+    speed: 900,
+    damage: 35,
+    range: 400,
+    radius: 7,
+    damageType: 'MAGIC'
+  });
+  const fb = new Bullet('b2', 'm1', 100, 100, 0, {
+    type: 'mage_fireball',
+    isMageFireball: true,
+    speed: 550,
+    range: 500,
+    radius: 14,
+    explosionRadius: 140,
+    explosionDamage: 130,
+    damageType: 'FIRE'
+  });
+
+  // Assert
+  assert.strictEqual(bolt.radius, 7);
+  assert.strictEqual(bolt.damageType, 'MAGIC');
+  assert.strictEqual(bolt.isExplosive, false);
+  assert.strictEqual(fb.radius, 14);
+  assert.strictEqual(fb.isMageFireball, true);
+  assert.strictEqual(fb.isExplosive, true);
+  assert.strictEqual(fb.damageType, 'FIRE');
+  assert.strictEqual(fb.serialize().type, 'mage_fireball');
+});
+
+test('UltimateConfig maps MAGE to METEOR_STORM', () => {
+  const mageUlt = getUltimateConfigForClass('MAGE');
+  assert.strictEqual(mageUlt.id, 'METEOR_STORM');
+});

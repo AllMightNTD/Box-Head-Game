@@ -98,6 +98,24 @@ class Zombie {
     this.isHit = false;
   }
 
+  /**
+   * Applies movement slowdown to zombie without letting weaker slows dilute stronger ones.
+   * @param {number} duration - Duration in seconds
+   * @param {number} slowFactor - Speed multiplier in (0, 1]
+   */
+  applySlow(duration, slowFactor) {
+    if (this.isDead || typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return;
+    if (typeof slowFactor !== 'number' || !Number.isFinite(slowFactor) || slowFactor <= 0 || slowFactor > 1) return;
+
+    if (this.slowTimer <= 0) {
+      this.slowTimer = duration;
+      this.slowFactor = slowFactor;
+    } else {
+      this.slowTimer = Math.max(this.slowTimer, duration);
+      this.slowFactor = Math.min(this.slowFactor, slowFactor);
+    }
+  }
+
   applyStun(duration) {
     if (this.isDead || typeof duration !== 'number' || duration <= 0) return;
     this.stunTimer = Math.max(this.stunTimer, duration);
