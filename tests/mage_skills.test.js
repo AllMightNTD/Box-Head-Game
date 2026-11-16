@@ -21,14 +21,14 @@ const {
 test('MageSkillsConfig defines exact 8-skill progression, mana costs, cooldowns, and AMMO drop constants', () => {
   // Arrange & Act
   const expectedOrder = [
-    ['ARCANE_BOLT', 1, 1, 5, 0],
-    ['FROST_NOVA', 2, 5, 20, 5.0],
+    ['ARCANE_BOLT', 1, 1, 0, 0],
+    ['FROST_NOVA', 2, 5, 10, 5.0],
     ['CHAIN_LIGHTNING', 3, 10, 30, 4.5],
     ['FIREBALL', 4, 15, 35, 6.0],
     ['ARCANE_TELEPORT', 5, 20, 25, 7.0],
     ['SANCTUARY_HEAL', 6, 30, 35, 12.0],
     ['MANA_SHIELD', 7, 40, 15, 10.0],
-    ['METEOR_STORM', 8, 50, 100, 50.0]
+    ['METEOR_STORM', 8, 1, 100, 50.0]
   ];
 
   // Assert
@@ -53,6 +53,8 @@ test('MageSkillsConfig defines exact 8-skill progression, mana costs, cooldowns,
     assert.strictEqual(skill.cooldown, cooldown);
   }
 
+  assert.strictEqual(MAGE_SKILLS.FROST_NOVA.radius, 180);
+
   // Invalid lookups & unlock filtering
   assert.strictEqual(getMageSkillBySlot(0), null);
   assert.strictEqual(getMageSkillBySlot(9), null);
@@ -61,7 +63,8 @@ test('MageSkillsConfig defines exact 8-skill progression, mana costs, cooldowns,
   assert.deepStrictEqual(getUnlockedMageSkills(10).map(s => s.id), [
     'ARCANE_BOLT',
     'FROST_NOVA',
-    'CHAIN_LIGHTNING'
+    'CHAIN_LIGHTNING',
+    'METEOR_STORM'
   ]);
   assert.deepStrictEqual(getUnlockedMageSkills(NaN), []);
 });
@@ -147,7 +150,7 @@ test('Player initializes Mage Mana state, regenerates +5/s, and respects Sanctua
   assert.ok(mage.mageState);
   assert.strictEqual(mage.mageState.skills.ARCANE_BOLT.unlocked, true);
   assert.strictEqual(mage.mageState.skills.FROST_NOVA.unlocked, false);
-  assert.strictEqual(mage.mageState.skills.METEOR_STORM.unlocked, false);
+  assert.strictEqual(mage.mageState.skills.METEOR_STORM.unlocked, true);
 
   // Act: spend mana and put skill on CD
   assert.strictEqual(mage.consumeMana(40), true);
@@ -235,6 +238,31 @@ test('Mage Mana Shield absorbs 1:1 into Mana, overflows remainder to HP, and bre
   assert.strictEqual(mage.mana, 50);
 });
 
+test('Mage can shoot Arcane Bolt even with 0 Mana, consuming 0 Mana', () => {
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 300);
+  mage.mana = 0;
+  assert.strictEqual(mage.canShoot(), true, 'Arcane Bolt must be shootable with 0 mana');
+  mage.consumeAmmo();
+  assert.strictEqual(mage.mana, 0, 'Mana should remain 0 after free shot');
+});
+
+test('Mage can cast Meteor Storm at combo 1 with 100 Mana, placing on 50s cooldown', () => {
+  const { triggerMageSkill } = require('../server/game/MageAbilities.js');
+  const mage = new Player('m1', 'Merlin', 'MAGE', 300, 300);
+  const room = { state: 'PLAYING', pendingMeteors: [], eventsBuffer: [], zombies: [], bullets: [] };
+
+  assert.strictEqual(mage.combo, 1);
+  assert.strictEqual(mage.mana, 100);
+  assert.strictEqual(mage.mageState.skills.METEOR_STORM.unlocked, true);
+
+  const res = triggerMageSkill(mage, 8, 0, room, { x: 400, y: 300 });
+  assert.strictEqual(res.activated, true);
+  assert.strictEqual(res.skillId, 'METEOR_STORM');
+  assert.strictEqual(mage.mana, 0);
+  assert.strictEqual(mage.mageState.skills.METEOR_STORM.cooldown, 50.0);
+  assert.strictEqual(room.pendingMeteors.length, 1);
+});
+
 test('Non-Mage characters preserve legacy gun, weapon switch, and ult charge behavior', () => {
   const human = new Player('h1', 'Hero', 'HUMAN', 300, 300);
   assert.strictEqual(human.mana, 0);
@@ -295,30 +323,33 @@ test('Mage [1] ARCANE_BOLT and [2] FROST_NOVA execute with exact mana, range, da
   mage.mageState.skills.FROST_NOVA.unlocked = true;
   room.players.set('m1', mage);
 
-  // Act [1]: Arcane Bolt
+  // Act [1]: Arcane Bolt (0 Mana cost)
   const fired = executeMageArcaneBolt(mage, room);
   assert.strictEqual(fired, true);
-  assert.strictEqual(mage.mana, 95);
+  assert.strictEqual(mage.mana, 100);
   assert.strictEqual(room.bullets.length, 1);
   assert.strictEqual(room.bullets[0].type, 'arcane_bolt');
   assert.strictEqual(room.bullets[0].speed, 900);
   assert.strictEqual(room.bullets[0].range, 400);
   assert.strictEqual(room.bullets[0].damage, 35);
 
-  // Act [2]: Frost Nova
+  // Act [2]: Frost Nova (10 Mana cost, 180px radius)
   const zNormal = new Zombie('zn', 'NORMAL', 590, 500);
   const zTank = new Zombie('zt', 'TANK', 580, 500);
-  const zFar = new Zombie('zf', 'NORMAL', 700, 500);
-  room.zombies.push(zNormal, zTank, zFar);
+  const zMid = new Zombie('zm', 'NORMAL', 660, 500); // 160px away (within 180px radius, outside old 120px)
+  const zFar = new Zombie('zf', 'NORMAL', 720, 500); // 220px away (outside 180px + 16px radius)
+  room.zombies.push(zNormal, zTank, zMid, zFar);
 
   const res = triggerMageSkill(mage, 2, 0, room);
   assert.strictEqual(res.activated, true);
-  assert.strictEqual(mage.mana, 75);
+  assert.strictEqual(mage.mana, 90);
   assert.strictEqual(mage.mageState.skills.FROST_NOVA.cooldown, 5.0);
   assert.strictEqual(zNormal.hp, 35);
   assert.strictEqual(zNormal.freezeTimer, 2.0);
   assert.strictEqual(zTank.hp, 355);
   assert.strictEqual(zTank.freezeTimer, 1.0);
+  assert.strictEqual(zMid.hp, 35);
+  assert.strictEqual(zMid.freezeTimer, 2.0);
   assert.strictEqual(zFar.hp, 80);
 });
 
@@ -521,9 +552,9 @@ test('GameRoom: Mage shoot spawns arcane_bolt, mage_fireball spawns burn_pool, A
   mage.y = 500;
   mage.angle = 0;
 
-  // 1. Handle shoot spawns arcane_bolt
+  // 1. Handle shoot spawns arcane_bolt (0 Mana cost)
   room.handleShoot('m1');
-  assert.strictEqual(mage.mana, 95);
+  assert.strictEqual(mage.mana, 100);
   assert.strictEqual(room.bullets.length, 1);
   assert.strictEqual(room.bullets[0].type, 'arcane_bolt');
 
