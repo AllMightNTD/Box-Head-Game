@@ -40,6 +40,7 @@ class Renderer {
     this.shellCasings = [];
     this.gunSmoke = [];
     this.railgunBeams = [];
+    this.lightningArcs = [];
 
     // Zombie corpses array (blood pools & held death frames, capped at 60)
     this.corpses = [];
@@ -73,6 +74,7 @@ class Renderer {
     this.shellCasings = [];
     this.gunSmoke = [];
     this.railgunBeams = [];
+    this.lightningArcs = [];
     this.camera.shake = 0;
     this.camera.shakeX = 0;
     this.camera.shakeY = 0;
@@ -739,12 +741,22 @@ class Renderer {
       }
     }
 
+    // Lightning arcs (Mage Chain Lightning)
+    if (this.lightningArcs) {
+      for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
+        this.lightningArcs[i].life -= dt;
+        if (this.lightningArcs[i].life <= 0) this.lightningArcs.splice(i, 1);
+      }
+    }
+
     // Melee Sword Trails (Warrior slashes & whirlwind)
-    for (let i = this.swordTrails.length - 1; i >= 0; i--) {
-      const st = this.swordTrails[i];
-      st.life -= dt;
-      if (st.life <= 0) {
-        this.swordTrails.splice(i, 1);
+    if (this.swordTrails) {
+      for (let i = this.swordTrails.length - 1; i >= 0; i--) {
+        const st = this.swordTrails[i];
+        st.life -= dt;
+        if (st.life <= 0) {
+          this.swordTrails.splice(i, 1);
+        }
       }
     }
   }
@@ -844,10 +856,11 @@ class Renderer {
     // 2.5 Draw Zombie Corpses (Blood pools and decaying remains)
     this.drawCorpses(ctx, 0.016);
 
-    // 2.6 Draw Ground Zones (Seismic fissures & Slash marks)
+    // 2.55 Draw Ground Zones (Warrior seismic fissures, whirlwind & Mage burn/sanctuary/lava)
     this.drawGroundZones(ctx, gameState.groundZones || []);
+    this.drawPendingMeteors(ctx, gameState.pendingMeteors || []);
 
-    // 2.7 Draw Ejected Shell Casings on Floor
+    // 2.6 Draw Ejected Shell Casings on Floor
     this.drawShellCasings(ctx);
 
     // 3. Draw Ambient Weather Particles (Behind actors for depth)
@@ -888,6 +901,9 @@ class Renderer {
 
     // 9.6 Draw Gun Smoke
     this.drawGunSmoke(ctx);
+
+    // 9.6 Draw Lightning Arcs
+    this.drawLightningArcs(ctx);
 
     // 10. Draw Map Walls & Pillars (Over entities for 2.5D depth)
     this.drawMapStructures(ctx, map);
@@ -1135,6 +1151,17 @@ class Renderer {
     // 1. Draw Player Ring on ground
     this.drawPlayerRing(ctx, player);
 
+    // 1.4 Sanctuary Buff Ground Ring (Mage)
+    if (player.hasSanctuaryBuff) {
+      ctx.save();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(Math.round(player.x), Math.round(player.y + 24), 24, 12, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // 1.5 Warrior Ground Auras (War Cry Foot Aura)
     if (isWarrior && (player.warriorState.warCryAuraActive || player.hasWarCryBuff)) {
       ctx.save();
@@ -1183,7 +1210,6 @@ class Renderer {
       ctx.stroke();
       ctx.restore();
     }
-
     // 3. Shadow under player (fitted cleanly inside the 18x9 player ring at y + 24)
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
@@ -1221,6 +1247,19 @@ class Renderer {
     if (!drawnWithSprite) {
       this.drawBoxyPlayerFallback(ctx, player);
       this.drawWeapon360(ctx, player);
+    }
+
+    // Mana Shield visual aura (Mage)
+    if (player.character === 'MAGE' && player.mageState && player.mageState.manaShieldActive) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(Math.round(player.x), Math.round(player.y), 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
 
     // Warrior Overlays (Counter Shield frontal arc & Whirlwind ring)
@@ -1365,11 +1404,21 @@ class Renderer {
       ctx.fillRect(-barW / 2, 5, barW * hpRatio, barH);
     }
 
+    // Mana bar under HP
+    const hasMana = (player.maxMana || 0) > 0;
+    if (hasMana) {
+      const manaRatio = Math.max(0, Math.min(1, (player.mana || 0) / player.maxMana));
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(-barW / 2 - 1, 11, barW + 2, 4);
+      ctx.fillStyle = '#a855f7';
+      ctx.fillRect(-barW / 2, 12, barW * manaRatio, 2);
+    }
+
     // Revive progress bar if active
     if (player.reviving) {
       const revRatio = player.reviveProgress / 2.0;
       ctx.fillStyle = '#00e5ff';
-      ctx.fillRect(-barW / 2, hasArmor ? 16 : 12, barW * revRatio, 4);
+      ctx.fillRect(-barW / 2, (hasArmor || hasMana) ? 17 : 12, barW * revRatio, 4);
     }
 
     ctx.restore();
@@ -1875,6 +1924,29 @@ class Renderer {
 
       if (b.isFireball) {
         this.drawFireballBullet(ctx);
+      } else if (b.type === 'arcane_bolt') {
+        ctx.rotate(b.angle || 0);
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = '#a855f7';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e0f2fe';
+        ctx.beginPath();
+        ctx.arc(2, 0, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (b.type === 'mage_fireball') {
+        ctx.fillStyle = '#ff5722';
+        ctx.shadowColor = '#ff9800';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(0, 0, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffeb3b';
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
       } else if (b.type === 'rocket') {
         this.drawRocketBullet(ctx, b.angle || 0);
       } else if (b.type === 'railgun') {
@@ -2416,18 +2488,35 @@ class Renderer {
       const gz = groundZones[i];
       ctx.save();
       ctx.translate(gz.x, gz.y);
+      const rad = gz.radius || 140;
 
-      if (gz.type === 'seismic_fissure') {
-        const rad = gz.radius || 160;
+      if (gz.type === 'sanctuary') {
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.14)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (gz.type === 'burn_pool' || gz.type === 'lava_pool') {
+        ctx.fillStyle = gz.type === 'lava_pool' ? 'rgba(255, 61, 0, 0.24)' : 'rgba(255, 145, 0, 0.2)';
+        ctx.strokeStyle = gz.type === 'lava_pool' ? 'rgba(255, 214, 0, 0.75)' : 'rgba(255, 87, 34, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, rad, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (gz.type === 'seismic_fissure') {
+        const fRad = gz.radius || 160;
         const pulse = 0.8 + 0.2 * Math.sin(Date.now() / 150);
 
         // Outer glow circle
         ctx.fillStyle = `rgba(255, 87, 34, ${0.15 * pulse})`;
         ctx.beginPath();
         if (typeof ctx.ellipse === 'function') {
-          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+          ctx.ellipse(0, 0, fRad, fRad, 0, 0, Math.PI * 2);
         } else if (typeof ctx.arc === 'function') {
-          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+          ctx.arc(0, 0, fRad, 0, Math.PI * 2);
         }
         ctx.fill();
 
@@ -2440,8 +2529,8 @@ class Renderer {
         ctx.beginPath();
         for (let a = 0; a < 6; a++) {
           const baseAngle = (a * Math.PI) / 3;
-          const r1 = rad * 0.35;
-          const r2 = rad * 0.85;
+          const r1 = fRad * 0.35;
+          const r2 = fRad * 0.85;
           ctx.moveTo(0, 0);
           ctx.lineTo(Math.cos(baseAngle) * r1, Math.sin(baseAngle) * r1);
           ctx.lineTo(Math.cos(baseAngle + 0.2) * r2, Math.sin(baseAngle + 0.2) * r2);
@@ -2453,23 +2542,23 @@ class Renderer {
         ctx.lineWidth = 2;
         ctx.beginPath();
         if (typeof ctx.ellipse === 'function') {
-          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+          ctx.ellipse(0, 0, fRad, fRad, 0, 0, Math.PI * 2);
         } else if (typeof ctx.arc === 'function') {
-          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+          ctx.arc(0, 0, fRad, 0, Math.PI * 2);
         }
         ctx.stroke();
 
       } else if (gz.type === 'slash_mark') {
-        const rad = gz.radius || 120;
+        const sRad = gz.radius || 120;
         const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 100);
 
         // Warning pull circle
         ctx.fillStyle = `rgba(213, 0, 0, ${0.18 * pulse})`;
         ctx.beginPath();
         if (typeof ctx.ellipse === 'function') {
-          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+          ctx.ellipse(0, 0, sRad, sRad, 0, 0, Math.PI * 2);
         } else if (typeof ctx.arc === 'function') {
-          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+          ctx.arc(0, 0, sRad, 0, Math.PI * 2);
         }
         ctx.fill();
 
@@ -2491,9 +2580,9 @@ class Renderer {
         ctx.lineWidth = 2;
         ctx.beginPath();
         if (typeof ctx.ellipse === 'function') {
-          ctx.ellipse(0, 0, rad, rad, 0, 0, Math.PI * 2);
+          ctx.ellipse(0, 0, sRad, sRad, 0, 0, Math.PI * 2);
         } else if (typeof ctx.arc === 'function') {
-          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+          ctx.arc(0, 0, sRad, 0, Math.PI * 2);
         }
         ctx.stroke();
       }
@@ -2502,6 +2591,70 @@ class Renderer {
     }
   }
 
+  drawPendingMeteors(ctx, pendingMeteors) {
+    if (!Array.isArray(pendingMeteors) || pendingMeteors.length === 0) return;
+    for (let i = 0; i < pendingMeteors.length; i++) {
+      const storm = pendingMeteors[i];
+      const meteors = storm.meteors || [];
+      for (let m = 0; m < meteors.length; m++) {
+        const met = meteors[m];
+        if (met.fired) continue;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 87, 34, 0.75)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.arc(met.x, met.y, storm.impactRadius || 120, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  drawLightningArcs(ctx) {
+    if (!this.lightningArcs || this.lightningArcs.length === 0) return;
+    for (let i = 0; i < this.lightningArcs.length; i++) {
+      const arc = this.lightningArcs[i];
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, arc.life / arc.maxLife);
+      ctx.strokeStyle = '#80d8ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let l = 0; l < arc.links.length; l++) {
+        const lnk = arc.links[l];
+        const midX = (lnk.fromX + lnk.toX) / 2 + (Math.random() - 0.5) * 18;
+        const midY = (lnk.fromY + lnk.toY) / 2 + (Math.random() - 0.5) * 18;
+        ctx.moveTo(lnk.fromX, lnk.fromY);
+        ctx.lineTo(midX, midY);
+        ctx.lineTo(lnk.toX, lnk.toY);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  spawnMageVfx(ev) {
+    if (!ev) return;
+    const id = ev.skillId || ev.ultId;
+    if (id === 'FROST_NOVA') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 120, '#00e5ff');
+    } else if (id === 'CHAIN_LIGHTNING' && Array.isArray(ev.links)) {
+      if (!this.lightningArcs) this.lightningArcs = [];
+      this.lightningArcs.push({ links: ev.links, life: 0.25, maxLife: 0.25 });
+    } else if (id === 'ARCANE_TELEPORT') {
+      this.addBlinkTrail(ev.fromX, ev.fromY, ev.toX, ev.toY, '#a855f7');
+      this.addShockwave(ev.fromX, ev.fromY, ev.radius || 110, '#c084fc');
+    } else if (id === 'SANCTUARY_HEAL') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 180, '#38bdf8');
+    } else if (id === 'MANA_SHIELD' || ev.type === 'MAGE_SHIELD_BREAK') {
+      this.addShockwave(ev.x, ev.y, 65, '#a855f7');
+    } else if (id === 'METEOR_STORM') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 300, '#ff6d00');
+    } else if (id === 'METEOR_IMPACT') {
+      this.addShockwave(ev.x, ev.y, ev.radius || 120, '#ff3d00');
+      this.addExplosionParticles(ev.x, ev.y, ev.radius || 120);
+    }
+  }
   drawDarknessAndLights(ctx, gameState, localPlayerId, map) {
     if (!this.darknessCanvas || !this.darknessCtx) {
       this.drawFlashlightWarmSheen(ctx, (gameState && gameState.players) || []);
@@ -2576,9 +2729,15 @@ class Renderer {
     const bullets = gameState.bullets || [];
     for (let i = 0; i < bullets.length; i++) {
       const b = bullets[i];
-      if (b.isFireball) this.cutoutRadialLight(dCtx, b.x, b.y, 15, 135, 0.85);
+      if (b.isFireball || b.type === 'mage_fireball') this.cutoutRadialLight(dCtx, b.x, b.y, 15, 135, 0.85);
+      else if (b.type === 'arcane_bolt') this.cutoutRadialLight(dCtx, b.x, b.y, 10, 80, 0.75);
       else if (b.type === 'rocket') this.cutoutRadialLight(dCtx, b.x, b.y, 15, 120, 0.85);
       else this.cutoutRadialLight(dCtx, b.x, b.y, 5, 45, 0.45);
+    }
+
+    const zones = gameState.groundZones || [];
+    for (let i = 0; i < zones.length; i++) {
+      this.cutoutRadialLight(dCtx, zones[i].x, zones[i].y, 20, zones[i].radius || 140, 0.7);
     }
 
     const barricades = gameState.barricades || [];

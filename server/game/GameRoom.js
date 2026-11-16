@@ -6,6 +6,14 @@ const { GameMap } = require('./Map.js');
 const { WEAPONS } = require('./WeaponsConfig.js');
 const { ULT_CHARGE_CONFIG } = require('./UltimateConfig.js');
 const { triggerPlayerUltimate } = require('./UltimateAbilities.js');
+const { MAGE_MANA_CONFIG } = require('./MageSkillsConfig.js');
+const {
+  executeMageArcaneBolt,
+  triggerMageSkill,
+  explodeMageFireball,
+  updateMageRoomSystems,
+  maybeDropPickup
+} = require('./MageAbilities.js');
 const { WARRIOR_ARMOR_CONFIG } = require('./WarriorSkillsConfig.js');
 const {
   executeWarriorBasicAttack,
@@ -30,6 +38,7 @@ class GameRoom {
     this.pickups = [];
     this.drones = [];
     this.groundZones = [];
+    this.pendingMeteors = [];
     this.pendingSlams = [];
 
     this.state = 'LOBBY'; // LOBBY | PLAYING | INTERMISSION | GAMEOVER
@@ -82,6 +91,7 @@ class GameRoom {
     this.pickups = [];
     this.drones = [];
     this.groundZones = [];
+    this.pendingMeteors = [];
     this.pendingSlams = [];
     this.eventsBuffer = [{ type: 'SESSION_RESET' }];
 
@@ -112,11 +122,14 @@ class GameRoom {
           maxAmmo: w.maxAmmo
         };
       }
-      if (p.character === 'WARRIOR') {
+      if (p.character === 'MAGE') {
+        p.resetMageState();
+      } else if (p.character === 'WARRIOR') {
         p.resetWarriorState();
       } else {
         p.armor = 0;
         p.hasWarCryBuff = false;
+        p.hasSanctuaryBuff = false;
         p.selectedWeapon = 'PISTOL';
       }
       idx++;
@@ -175,6 +188,10 @@ class GameRoom {
     const player = this.players.get(socketId);
     if (!player) return;
 
+    if (player.character === 'MAGE') {
+      executeMageArcaneBolt(player, this);
+      return;
+    }
     if (player.character === 'WARRIOR') {
       executeWarriorBasicAttack(player, this);
       return;
@@ -311,31 +328,50 @@ class GameRoom {
   handleUltimate(socketId, payload = {}) {
     const player = this.players.get(socketId);
     if (!player) return { activated: false };
-    const angle = payload && typeof payload.angle === 'number' && Number.isFinite(payload.angle)
-      ? payload.angle
+    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const angle = typeof safePayload.angle === 'number' && Number.isFinite(safePayload.angle)
+      ? safePayload.angle
       : player.angle;
-    return triggerPlayerUltimate(player, angle, this);
+    const targetPos = (typeof safePayload.targetX === 'number' && Number.isFinite(safePayload.targetX) &&
+      typeof safePayload.targetY === 'number' && Number.isFinite(safePayload.targetY))
+      ? { x: safePayload.targetX, y: safePayload.targetY }
+      : null;
+    return triggerPlayerUltimate(player, angle, this, targetPos);
   }
 
+  /**
+   * Handles active skill cast request for Mage (slots 1..8).
+   * @param {string} socketId
+   * @param {object} [payload={}]
+   * @returns {object}
+   */
   handleSkill(socketId, payload = {}) {
     const player = this.players.get(socketId);
-    if (!player || player.character !== 'WARRIOR') {
+    if (!player) {
       return { activated: false };
     }
     if (this.state !== 'PLAYING' && this.state !== 'INTERMISSION') {
       return { activated: false };
     }
-
-    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload))
-      ? payload
-      : {};
-
+    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
     const slot = safePayload.slot;
-    const angle = (safePayload.angle !== undefined)
+    const angle = (typeof safePayload.angle === 'number' && Number.isFinite(safePayload.angle))
       ? safePayload.angle
       : player.angle;
 
-    return triggerWarriorSkill(player, slot, angle, this);
+    if (player.character === 'MAGE') {
+      const targetPos = (typeof safePayload.targetX === 'number' && Number.isFinite(safePayload.targetX) &&
+        typeof safePayload.targetY === 'number' && Number.isFinite(safePayload.targetY))
+        ? { x: safePayload.targetX, y: safePayload.targetY }
+        : null;
+      return triggerMageSkill(player, slot, angle, this, targetPos);
+    }
+
+    if (player.character === 'WARRIOR') {
+      return triggerWarriorSkill(player, slot, angle, this);
+    }
+
+    return { activated: false };
   }
 
   triggerExplosion(x, y, radius, damage, ownerId) {
@@ -371,6 +407,7 @@ class GameRoom {
             angle: z.angle,
             killAngle: Number(knockAngle.toFixed(2))
           });
+          maybeDropPickup(this, z);
         }
       }
     }
@@ -493,6 +530,9 @@ class GameRoom {
             p.isDowned = false;
             p.hp = 50;
           }
+          if (!p.isDead && p.character === 'MAGE') {
+            p.restoreMana(p.maxMana * MAGE_MANA_CONFIG.WAVE_CLEAR_RESTORE_RATIO);
+          }
           if (!p.isDead && p.character === 'WARRIOR') {
             p.restoreArmor(Math.ceil(p.maxArmor * WARRIOR_ARMOR_CONFIG.WAVE_CLEAR_RESTORE_RATIO));
           }
@@ -511,7 +551,11 @@ class GameRoom {
       const b = this.bullets[i];
       const explosion = b.update(dt, this.map);
       if (explosion) {
-        this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId);
+        if (b.isMageFireball) {
+          explodeMageFireball(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId, this);
+        } else {
+          this.triggerExplosion(explosion.x, explosion.y, explosion.radius, explosion.damage, explosion.ownerId);
+        }
       }
 
       if (b.isDead) {
@@ -541,10 +585,16 @@ class GameRoom {
           const z = this.zombies[j];
           if (z.isDead) continue;
           if (b.checkHit(z)) {
+            if (b.isMageFireball) {
+              b.isDead = true;
+              explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
+              break;
+            }
+
             const shooter = this.players.get(b.ownerId);
             const warCryMultiplier = (shooter && shooter.hasWarCryBuff) ? 1.15 : 1.0;
             const effectiveDamage = Math.round(b.damage * warCryMultiplier);
-            z.takeDamage(effectiveDamage, 'BULLET');
+            z.takeDamage(effectiveDamage, b.damageType || 'BULLET');
             z.applyKnockback(b.angle, b.knockback);
             this.eventsBuffer.push({
               type: 'HIT',
@@ -555,7 +605,7 @@ class GameRoom {
               zType: z.type
             });
 
-            if (shooter && !b.fromUlt) {
+            if (shooter && !b.fromUlt && shooter.character !== 'MAGE') {
               const hitCharge = b.type === 'shotgun'
                 ? ULT_CHARGE_CONFIG.SHOTGUN_PELLET_HIT
                 : ULT_CHARGE_CONFIG.HIT_BASE;
@@ -564,10 +614,10 @@ class GameRoom {
 
             if (z.isDead) {
               if (shooter) {
-                const unlocks = shooter.recordKill(z.score, { awardUltCharge: !b.fromUlt });
+                const unlocks = shooter.recordKill(z.score, { awardUltCharge: !b.fromUlt && shooter.character !== 'MAGE' });
                 if (unlocks.length > 0) {
                   for (const u of unlocks) {
-                    this.eventsBuffer.push({ type: 'UNLOCKED', weapon: u.id, playerId: shooter.id });
+                    this.eventsBuffer.push({ type: 'UNLOCKED', weapon: u.name || u.id, playerId: shooter.id });
                   }
                 }
               }
@@ -580,16 +630,7 @@ class GameRoom {
                 killAngle: Number((b.angle || 0).toFixed(2))
               });
 
-              // 15% chance to drop ammo or medkit
-              if (Math.random() < 0.15) {
-                this.pickups.push({
-                  id: 'pk_' + Math.random().toString(36).substring(2, 7),
-                  type: Math.random() < 0.4 ? 'MEDKIT' : 'AMMO',
-                  x: Math.round(z.x),
-                  y: Math.round(z.y),
-                  life: 25 // 25s decay
-                });
-              }
+              maybeDropPickup(this, z);
             }
 
             if (!b.penetration) {
@@ -606,6 +647,11 @@ class GameRoom {
           if (bar.type === 'barrel') {
             const hit = (Math.hypot(b.x - bar.x, b.y - bar.y) <= (b.radius + bar.radius));
             if (hit) {
+              if (b.isMageFireball) {
+                b.isDead = true;
+                explodeMageFireball(b.x, b.y, b.explosionRadius, b.explosionDamage, b.ownerId, this);
+                break;
+              }
               const barrels = this.barricades.filter(x => x.type === 'barrel');
               bar.takeDamage(b.damage, barrels, (bx, by, br, bd, bo) => {
                 this.triggerExplosion(bx, by, br, bd, b.ownerId);
@@ -666,6 +712,9 @@ class GameRoom {
     // 4.6. Update Authoritative Warrior Room Systems
     updateWarriorRoomSystems(dt, this);
 
+    // 4.8. Update Mage groundZones & pendingMeteors
+    updateMageRoomSystems(dt, this);
+
     // 5. Update Pickups & Check collection
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
@@ -682,8 +731,9 @@ class GameRoom {
           if (p.type === 'MEDKIT') {
             player.heal(40);
           } else {
-            // Restore ammo to current weapon & others
-            if (player.character === 'WARRIOR') {
+            if (player.character === 'MAGE') {
+              player.applyMageAmmoPickup();
+            } else if (player.character === 'WARRIOR') {
               applyWarriorAmmoPickup(player);
             } else {
               for (const key of Object.keys(player.weapons)) {
@@ -730,6 +780,15 @@ class GameRoom {
         y: Math.round(gz.y),
         radius: gz.radius,
         timer: Number(gz.timer.toFixed(2))
+      })),
+      pendingMeteors: (this.pendingMeteors || []).map(pm => ({
+        id: pm.id,
+        x: pm.x,
+        y: pm.y,
+        stormRadius: pm.stormRadius,
+        impactRadius: pm.impactRadius,
+        timer: Number(pm.timer.toFixed(2)),
+        meteors: pm.meteors.map(m => ({ delay: m.delay, x: m.x, y: m.y, fired: m.fired }))
       })),
       events: [...this.eventsBuffer]
     };

@@ -991,6 +991,8 @@ class SoundManager {
         osc.start(noteTime);
         osc.stop(noteTime + 0.1);
       });
+    } else if (ultId === 'METEOR_STORM') {
+      this.playMageSkill({ skillId: 'METEOR_STORM' });
     } else if (ultId === 'AVATAR_OF_WAR') {
       this.playWarriorSkill('AVATAR_OF_WAR');
     }
@@ -1186,6 +1188,44 @@ class SoundManager {
         osc.stop(t + 0.5);
       });
     }
+  }
+
+  playMageSkill(ev, listenerX, listenerY) {
+    if (this.muted) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime || 0;
+    const skillId = (ev && (ev.skillId || ev.ultId)) || (ev && ev.type === 'MAGE_SHIELD_BREAK' ? 'MAGE_SHIELD_BREAK' : 'ARCANE_BOLT');
+    const bus = (typeof this.createSpatialBus === 'function' && ev && typeof ev.x === 'number')
+      ? this.createSpatialBus(ev.x, listenerX, 0.2)
+      : null;
+    const destNode = (bus && bus.input) ? bus.input : (bus || this.masterGain);
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const profiles = {
+      ARCANE_BOLT: { type: 'sine', f0: 780, f1: 360, dur: 0.1, vol: 0.22 },
+      FROST_NOVA: { type: 'triangle', f0: 1200, f1: 320, dur: 0.3, vol: 0.35 },
+      CHAIN_LIGHTNING: { type: 'sawtooth', f0: 960, f1: 240, dur: 0.22, vol: 0.32 },
+      FIREBALL: { type: 'sawtooth', f0: 320, f1: 110, dur: 0.25, vol: 0.35 },
+      ARCANE_TELEPORT: { type: 'sine', f0: 260, f1: 920, dur: 0.2, vol: 0.35 },
+      SANCTUARY_HEAL: { type: 'sine', f0: 523, f1: 784, dur: 0.35, vol: 0.3 },
+      MANA_SHIELD: { type: 'triangle', f0: 440, f1: 660, dur: 0.25, vol: 0.3 },
+      MAGE_SHIELD_BREAK: { type: 'sawtooth', f0: 600, f1: 140, dur: 0.28, vol: 0.38 },
+      METEOR_STORM: { type: 'triangle', f0: 180, f1: 45, dur: 0.5, vol: 0.5 },
+      METEOR_IMPACT: { type: 'sawtooth', f0: 140, f1: 32, dur: 0.38, vol: 0.55 }
+    };
+    const p = profiles[skillId] || profiles.ARCANE_BOLT;
+    osc.type = p.type;
+    osc.frequency.setValueAtTime(p.f0, t);
+    osc.frequency.exponentialRampToValueAtTime(p.f1, t + p.dur);
+    gain.gain.setValueAtTime(p.vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + p.dur);
+    osc.connect(gain);
+    gain.connect(destNode || this.masterGain);
+    osc.start(t);
+    osc.stop(t + p.dur);
   }
 }
 

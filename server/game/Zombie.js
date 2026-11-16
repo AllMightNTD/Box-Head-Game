@@ -153,7 +153,6 @@ class Zombie {
     this.fearSourceY = sourceY;
     this.fearTimer = Math.max(this.fearTimer, duration);
   }
-
   applyStun(duration) {
     if (this.isDead || typeof duration !== 'number' || duration <= 0) return;
     this.stunTimer = Math.max(this.stunTimer, duration);

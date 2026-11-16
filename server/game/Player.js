@@ -15,6 +15,13 @@ const {
   WARRIOR_SKILL_KEYS,
   getUnlockedWarriorSkills
 } = require('./WarriorSkillsConfig.js');
+const {
+  MAGE_MANA_CONFIG,
+  MAGE_AMMO_PICKUP,
+  MAGE_SKILLS,
+  MAGE_SKILL_KEYS,
+  getUnlockedMageSkills
+} = require('./MageSkillsConfig.js');
 
 /**
  * Class-specific base stats and modifiers.
@@ -97,11 +104,13 @@ class Player {
         maxAmmo: w.maxAmmo
       };
     }
-
-    // Mirror warrior active stance into selectedWeapon if WARRIOR
-    this.selectedWeapon = (this.character === 'WARRIOR' && this.warriorState)
-      ? this.warriorState.activeStance
-      : 'PISTOL';
+    if (this.character === 'MAGE') {
+      this.selectedWeapon = 'ARCANE_BOLT';
+    } else if (this.character === 'WARRIOR' && this.warriorState) {
+      this.selectedWeapon = this.warriorState.activeStance;
+    } else {
+      this.selectedWeapon = 'PISTOL';
+    }
     this.fireCooldown = 0;
 
     // Movement input state
@@ -143,7 +152,7 @@ class Player {
       if (input.weaponId === 'BERSERKER_STANCE' || input.weaponId === 'JUGGERNAUT_STANCE') {
         this.setWarriorStance(input.weaponId);
       }
-    } else {
+    } else if (this.character !== 'MAGE') {
       if (input.weaponId && this.weapons[input.weaponId] && this.weapons[input.weaponId].unlocked) {
         this.selectedWeapon = input.weaponId;
       }
@@ -177,6 +186,18 @@ class Player {
       this.resetWarriorState();
     } else {
       this.warriorState = null;
+    }
+
+    this.hasSanctuaryBuff = false;
+    if (this.character === 'MAGE') {
+      this.resetMageState();
+    } else {
+      this.mageState = null;
+      this.mana = 0;
+      this.maxMana = 0;
+      if (this.character !== 'WARRIOR') {
+        this.selectedWeapon = 'PISTOL';
+      }
     }
   }
 
@@ -380,10 +401,13 @@ class Player {
         this.isDead = true;
         this.isDowned = false;
         this.hp = 0;
+        this.clearMageChannels();
         this.clearWarriorActiveChannels();
       }
       return;
     }
+
+    const sanctuaryMult = this.hasSanctuaryBuff ? MAGE_SKILLS.SANCTUARY_HEAL.cooldownSpeedMultiplier : 1.0;
 
     // Warrior-specific timer updates and passive ult regen
     if (this.character === 'WARRIOR' && this.warriorState) {
@@ -401,7 +425,7 @@ class Player {
 
       for (const skill of Object.values(this.warriorState.skills)) {
         if (skill.cooldown > 0) {
-          skill.cooldown = Math.max(0, Number((skill.cooldown - dt).toFixed(2)));
+          skill.cooldown = Math.max(0, Number((skill.cooldown - dt * sanctuaryMult).toFixed(2)));
         }
       }
 
@@ -417,11 +441,27 @@ class Player {
       }
 
       if (this.fireCooldown > 0) {
-        this.fireCooldown = Math.max(0, this.fireCooldown - dt * this.getWarriorAttackSpeedMultiplier());
+        this.fireCooldown = Math.max(0, this.fireCooldown - dt * this.getWarriorAttackSpeedMultiplier() * sanctuaryMult);
+      }
+    } else if (this.character === 'MAGE' && this.mageState) {
+      if (this.fireCooldown > 0) {
+        this.fireCooldown = Math.max(0, this.fireCooldown - dt * (this.reloadSpeedMultiplier || 1.0) * sanctuaryMult);
+      }
+      this.restoreMana(MAGE_MANA_CONFIG.REGEN_PER_SEC * dt);
+      for (const sk of Object.values(this.mageState.skills)) {
+        if (sk.cooldown > 0) {
+          sk.cooldown = Math.max(0, Number((sk.cooldown - dt * sanctuaryMult).toFixed(2)));
+        }
+      }
+      if (this.mageState.manaShieldTimer > 0) {
+        this.mageState.manaShieldTimer = Math.max(0, this.mageState.manaShieldTimer - dt);
+        if (this.mageState.manaShieldTimer === 0) {
+          this.mageState.manaShieldActive = false;
+        }
       }
     } else {
       if (this.fireCooldown > 0) {
-        this.fireCooldown -= dt * (this.reloadSpeedMultiplier || 1.0);
+        this.fireCooldown -= dt * (this.reloadSpeedMultiplier || 1.0) * sanctuaryMult;
       }
     }
 
@@ -497,11 +537,97 @@ class Player {
   }
 
   /**
+   * Resets Mage Mana pool, skill cooldowns, unlock state, and Mana Shield timers.
+   */
+  resetMageState() {
+    const skills = {};
+    for (const key of MAGE_SKILL_KEYS) {
+      const cfg = MAGE_SKILLS[key];
+      skills[key] = {
+        id: cfg.id,
+        slot: cfg.slot,
+        unlocked: cfg.unlockCombo === 1,
+        manaCost: cfg.manaCost,
+        cooldown: 0,
+        maxCooldown: cfg.cooldown || 0
+      };
+    }
+    this.maxMana = MAGE_MANA_CONFIG.MAX_MANA;
+    this.mana = MAGE_MANA_CONFIG.STARTING_MANA;
+    this.hasSanctuaryBuff = false;
+    this.selectedWeapon = 'ARCANE_BOLT';
+    this.mageState = {
+      skills,
+      manaShieldTimer: 0,
+      manaShieldActive: false,
+      shieldJustBroken: false
+    };
+  }
+
+  /**
+   * Restores Mage Mana up to maxMana.
+   * @param {number} amount
+   * @returns {number}
+   */
+  restoreMana(amount) {
+    if (this.character !== 'MAGE' || this.isDead || this.isDowned) {
+      return this.mana || 0;
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      return this.mana;
+    }
+    this.mana = Math.min(this.maxMana, Number((this.mana + amount).toFixed(2)));
+    return this.mana;
+  }
+
+  /**
+   * Consumes Mana if Mage has sufficient pool.
+   * @param {number} amount
+   * @returns {boolean}
+   */
+  consumeMana(amount) {
+    if (this.character !== 'MAGE' || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+      return false;
+    }
+    if (this.mana + 1e-6 < amount) {
+      return false;
+    }
+    this.mana = Math.max(0, Number((this.mana - amount).toFixed(2)));
+    return true;
+  }
+
+  /**
+   * Applies AMMO pickup bonus (+30 Mana and -1.5s CD on Mage skills 2..8).
+   */
+  applyMageAmmoPickup() {
+    if (this.character !== 'MAGE' || !this.mageState) return;
+    this.restoreMana(MAGE_AMMO_PICKUP.MANA_RESTORE);
+    for (const key of MAGE_SKILL_KEYS) {
+      const sk = this.mageState.skills[key];
+      if (sk && sk.slot >= 2 && sk.cooldown > 0) {
+        sk.cooldown = Math.max(0, Number((sk.cooldown - MAGE_AMMO_PICKUP.COOLDOWN_REDUCTION_SEC).toFixed(2)));
+      }
+    }
+  }
+
+  /**
+   * Clears active Mage channeling/shield effects on death or downed.
+   */
+  clearMageChannels() {
+    if (this.character !== 'MAGE' || !this.mageState) return;
+    this.mageState.manaShieldTimer = 0;
+    this.mageState.manaShieldActive = false;
+    this.mageState.shieldJustBroken = false;
+    this.hasSanctuaryBuff = false;
+  }
+
+  /**
    * Adds ultimate charge to player pool.
    * @param {number} amount
    * @returns {number}
    */
   addUltCharge(amount) {
+    if (this.character === 'MAGE') return 0;
     if (this.isDead || this.isDowned || typeof amount !== 'number' || amount <= 0) {
       return this.ultCharge;
     }
@@ -518,7 +644,7 @@ class Player {
    */
   recordKill(points = 10, options = {}) {
     const { awardUltCharge = true } = options;
-    if (awardUltCharge) {
+    if (awardUltCharge && this.character !== 'MAGE') {
       const comboMult = Math.min(
         ULT_CHARGE_CONFIG.MAX_COMBO_MULTIPLIER,
         1 + Math.max(0, this.combo - 1) * ULT_CHARGE_CONFIG.COMBO_STEP_BONUS
@@ -536,7 +662,6 @@ class Player {
     this.comboMaxTime = Math.max(1.5, 3.8 - (this.combo * 0.04));
     this.comboTimer = this.comboMaxTime;
 
-    // Check newly unlocked weapons or warrior skills
     const newlyUnlocked = [];
     const maxProgression = Math.max(this.combo, this.maxCombo);
 
@@ -557,6 +682,20 @@ class Player {
       return newlyUnlocked;
     }
 
+    if (this.character === 'MAGE' && this.mageState) {
+      const unlockedSkills = getUnlockedMageSkills(maxProgression);
+      for (let i = 0; i < unlockedSkills.length; i++) {
+        const s = unlockedSkills[i];
+        const stateSkill = this.mageState.skills[s.id];
+        if (stateSkill && !stateSkill.unlocked) {
+          stateSkill.unlocked = true;
+          newlyUnlocked.push(s);
+        }
+      }
+      return newlyUnlocked;
+    }
+
+    // Check newly unlocked weapons (for standard gun classes)
     const unlocked = getUnlockedWeapons(maxProgression);
     for (let i = 0; i < unlocked.length; i++) {
       const w = unlocked[i];
@@ -573,26 +712,26 @@ class Player {
 
   /**
    * Deals damage to player, handling Counter Shield parry, Juggernaut frontal reduction,
-   * Armor absorption before HP, and state clearing on downed.
+   * Mana Shield absorption (Mage), Armor absorption before HP (Warrior), and state clearing on downed.
    * @param {number} amount
    * @param {string} [sourceType='MELEE']
    * @param {object} [options={}]
    * @param {number} [options.sourceX]
    * @param {number} [options.sourceY]
    * @param {boolean} [options.bypassShield=false]
-   * @returns {{ blocked: boolean, parried: boolean, damage: number }}
+   * @returns {{ blocked: boolean, parried: boolean, absorbedMana: number, damage: number, shieldBroken: boolean }}
    */
   takeDamage(amount, sourceType = 'MELEE', options = {}) {
     if (this.isDead || this.isDowned) {
-      return { blocked: false, parried: false, damage: 0 };
+      return { blocked: false, parried: false, absorbedMana: 0, damage: 0, shieldBroken: false };
     }
     if (typeof amount !== 'number' || amount <= 0 || !Number.isFinite(amount)) {
-      return { blocked: false, parried: false, damage: 0 };
+      return { blocked: false, parried: false, absorbedMana: 0, damage: 0, shieldBroken: false };
     }
 
     const opts = (options && typeof options === 'object') ? options : {};
 
-    // 1. Counter Shield Parry Check
+    // 1. Counter Shield Parry Check (Warrior)
     if (
       this.character === 'WARRIOR' &&
       this.warriorState &&
@@ -612,7 +751,7 @@ class Player {
           sourceY: opts.sourceY,
           sourceType
         };
-        return { blocked: true, parried: true, damage: 0 };
+        return { blocked: true, parried: true, absorbedMana: 0, damage: 0, shieldBroken: false };
       }
     }
 
@@ -637,9 +776,32 @@ class Player {
     }
 
     reduction = Math.min(0.9, Math.max(0, reduction));
-    const finalAmount = Math.max(1, Math.round(amount * (1 - reduction)));
+    let finalAmount = Math.max(1, Math.round(amount * (1 - reduction)));
 
-    // 3. Armor absorbs before HP
+    // 3. Mana Shield Absorption (Mage: 1 damage = 1 Mana, absorbs 100% until Mana depleted)
+    let absorbedMana = 0;
+    let shieldBroken = false;
+    if (
+      this.character === 'MAGE' &&
+      this.mageState &&
+      (this.mageState.manaShieldActive || this.mageState.manaShieldTimer > 0)
+    ) {
+      absorbedMana = Math.min(this.mana, finalAmount);
+      this.mana = Number((this.mana - absorbedMana).toFixed(2));
+      finalAmount = Math.max(0, finalAmount - absorbedMana);
+      if (this.mana <= 0) {
+        this.mana = 0;
+        this.mageState.manaShieldActive = false;
+        this.mageState.manaShieldTimer = 0;
+        this.mageState.shieldJustBroken = true;
+        shieldBroken = true;
+      }
+      if (finalAmount === 0) {
+        return { blocked: true, parried: false, absorbedMana, damage: 0, shieldBroken };
+      }
+    }
+
+    // 4. Armor absorbs before HP (Warrior & others)
     if (this.armor > 0) {
       if (this.armor >= finalAmount) {
         this.armor -= finalAmount;
@@ -652,17 +814,18 @@ class Player {
       this.hp -= finalAmount;
     }
 
-    // 4. Downed & Active State Cleanup
+    // 5. Downed & Active State Cleanup
     if (this.hp <= 0) {
       this.hp = 0;
       if (!this.isDowned) {
         this.isDowned = true;
         this.bleedoutTimer = 15;
       }
+      this.clearMageChannels();
       this.clearWarriorActiveChannels();
     }
 
-    return { blocked: false, parried: false, damage: finalAmount };
+    return { blocked: false, parried: false, absorbedMana, damage: finalAmount, shieldBroken };
   }
 
   /**
@@ -690,7 +853,7 @@ class Player {
   }
 
   /**
-   * Revives a downed player, restoring HP and Armor (for Warrior).
+   * Revives a downed player, restoring HP and Armor (for Warrior) or Mana (for Mage).
    */
   revive() {
     this.isDowned = false;
@@ -700,6 +863,9 @@ class Player {
     if (this.character === 'WARRIOR') {
       const restoreAmount = Math.round(this.maxArmor * WARRIOR_ARMOR_CONFIG.REVIVE_RESTORE_RATIO);
       this.armor = Math.min(this.maxArmor, restoreAmount);
+    }
+    if (this.character === 'MAGE') {
+      this.restoreMana(Math.round(this.maxMana * MAGE_MANA_CONFIG.REVIVE_RESTORE_RATIO));
     }
   }
 
@@ -738,8 +904,8 @@ class Player {
 
     this.reviveProgress += dt;
     if (this.reviveProgress >= this.reviveDuration) {
-      this.revivingTarget.revive();
       const target = this.revivingTarget;
+      target.revive();
       this.revivingTarget = null;
       this.reviveProgress = 0;
       return target;
@@ -758,6 +924,9 @@ class Player {
     if (this.character === 'WARRIOR') {
       return true;
     }
+    if (this.character === 'MAGE') {
+      return this.mana + 1e-6 >= MAGE_SKILLS.ARCANE_BOLT.manaCost;
+    }
     const w = this.weapons[this.selectedWeapon];
     if (!w || !w.unlocked) return false;
     const def = WEAPONS[this.selectedWeapon];
@@ -768,11 +937,11 @@ class Player {
   }
 
   /**
-   * Consumes ammo on weapon fire. No-op for WARRIOR.
+   * Consumes ammo on weapon fire. No-op for WARRIOR and MAGE.
    * @param {string|null} [weaponType=null]
    */
   consumeAmmo(weaponType = null) {
-    if (this.character === 'WARRIOR') return;
+    if (this.character === 'WARRIOR' || this.character === 'MAGE') return;
     const w = this.weapons[this.selectedWeapon];
     const def = WEAPONS[this.selectedWeapon];
     const resolvedType = weaponType || (def ? def.type : null);
@@ -822,6 +991,26 @@ class Player {
       };
     }
 
+    let mageStateSummary = null;
+    if (this.character === 'MAGE' && this.mageState) {
+      const skillsSummary = {};
+      for (const key of Object.keys(this.mageState.skills)) {
+        const sk = this.mageState.skills[key];
+        skillsSummary[key] = {
+          id: sk.id,
+          slot: sk.slot,
+          unlocked: sk.unlocked,
+          manaCost: sk.manaCost,
+          cooldown: Number(sk.cooldown.toFixed(1))
+        };
+      }
+      mageStateSummary = {
+        skills: skillsSummary,
+        manaShieldActive: Boolean(this.mageState.manaShieldActive || this.mageState.manaShieldTimer > 0),
+        manaShieldTimer: Number(this.mageState.manaShieldTimer.toFixed(1))
+      };
+    }
+
     return {
       id: this.id,
       name: this.name,
@@ -833,8 +1022,12 @@ class Player {
       maxHp: this.maxHp,
       armor: Math.round(this.armor || 0),
       maxArmor: this.maxArmor || 0,
+      mana: Math.floor(this.mana || 0),
+      maxMana: this.maxMana || 0,
       hasWarCryBuff: Boolean(this.hasWarCryBuff),
+      hasSanctuaryBuff: Boolean(this.hasSanctuaryBuff),
       warriorState: warriorStateSummary,
+      mageState: mageStateSummary,
       isDowned: this.isDowned,
       isDead: this.isDead,
       bleedoutTimer: Math.ceil(this.bleedoutTimer),

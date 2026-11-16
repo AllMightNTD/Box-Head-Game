@@ -496,6 +496,21 @@ body, html {
   transition: width 0.2s;
 }
 
+.teammate-mana-bar {
+  width: 100%;
+  height: 4px;
+  background: #171a2b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.teammate-mana-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #a855f7);
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.5);
+  transition: width 0.2s;
+}
+
 /* Top Center: Wave Announcement */
 .hud-wave {
   position: absolute;
@@ -622,6 +637,23 @@ body, html {
   color: var(--accent);
 }
 
+/* Mage Skill Bar, Mana Gauge & Cooldown Overlays */
+.weapon-slot.mage-slot {
+  background: #141728;
+  border-color: #323c69;
+}
+
+.weapon-slot.mage-slot.active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.65);
+  transform: translateY(-4px);
+}
+
+.weapon-slot.mage-slot.no-mana:not(.locked) {
+  border-color: #7e22ce;
+  opacity: 0.65;
+}
+
 /* Warrior ARPG Skill Slots & Overlays */
 .weapon-slot.warrior-slot {
   background: #14181f;
@@ -661,6 +693,15 @@ body, html {
 
 .skill-cd-text {
   pointer-events: none;
+}
+
+.hud-ultimate.mana-mode {
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+}
+
+.hud-ultimate.mana-mode .hud-ult-fill {
+  background: linear-gradient(90deg, #2563eb, #a855f7);
 }
 
 /* Game Over Modal */

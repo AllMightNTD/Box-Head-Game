@@ -13,9 +13,10 @@ class InputHandler {
       revive: false
     };
 
+    const hasWin = typeof window !== 'undefined';
     this.mouse = {
-      screenX: typeof window !== 'undefined' ? window.innerWidth / 2 : 800,
-      screenY: typeof window !== 'undefined' ? window.innerHeight / 2 : 450,
+      screenX: hasWin ? window.innerWidth / 2 : 800,
+      screenY: hasWin ? window.innerHeight / 2 : 450,
       worldX: 800,
       worldY: 600,
       angle: 0,
@@ -25,10 +26,12 @@ class InputHandler {
     this.selectedWeaponSlot = 1;
     this.selectedWeaponId = 'PISTOL';
     this.isWarriorMode = false;
+    this.isMageMode = false;
     this.onWeaponChange = null;
     this.onSkillCast = null;
     this.onTogglePause = null;
     this.onUltimate = null;
+    this.onSkillCast = null;
     this.setupListeners();
   }
 
@@ -42,7 +45,22 @@ class InputHandler {
     this.mouse.isDown = false;
   }
 
+  updateWorldMouse(cameraX, cameraY, zoom = 1.15) {
+    if (typeof window === 'undefined') return;
+    if (typeof cameraX !== 'number' || typeof cameraY !== 'number') return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const scale = zoom > 0 ? zoom : 1;
+    this.mouse.worldX = cameraX + (this.mouse.screenX - cx) / scale;
+    this.mouse.worldY = cameraY + (this.mouse.screenY - cy) / scale;
+  }
+
   setWeaponSlot(slot, silent = false) {
+    if (this.isMageMode) {
+      this.selectedWeaponSlot = 1;
+      this.selectedWeaponId = 'ARCANE_BOLT';
+      return;
+    }
     if (this.isWarriorMode) {
       const num = slot === 2 ? 2 : 1;
       const wid = WARRIOR_STANCES[num - 1] || 'BERSERKER_STANCE';
@@ -53,7 +71,6 @@ class InputHandler {
       }
       return;
     }
-
     const num = Math.max(1, Math.min(8, slot));
     const wid = WEAPON_KEYS[num - 1] || 'PISTOL';
     this.selectedWeaponSlot = num;
@@ -85,7 +102,7 @@ class InputHandler {
       // Ultimate key (F)
       if (k === 'f' && !e.repeat) {
         if (typeof this.onUltimate === 'function') {
-          this.onUltimate(this.mouse.angle);
+          this.onUltimate(this.mouse.angle, this.mouse.worldX, this.mouse.worldY);
         }
       }
 
@@ -96,10 +113,16 @@ class InputHandler {
         }
       }
 
-      // Weapon slots 1-8 / Warrior skills 1-8
+      // Weapon slots 1-8 / Warrior skills 1-8 / Mage skills 1-8
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= 8) {
-        if (this.isWarriorMode) {
+        if (this.isMageMode) {
+          if (num === 1) {
+            this.keys.shoot = true;
+          } else if (!e.repeat && typeof this.onSkillCast === 'function') {
+            this.onSkillCast(num, this.mouse.angle, this.mouse.worldX, this.mouse.worldY);
+          }
+        } else if (this.isWarriorMode) {
           if (num === 1 || num === 2) {
             const stance = WARRIOR_STANCES[num - 1];
             if (typeof this.onWeaponChange === 'function') {
@@ -130,6 +153,7 @@ class InputHandler {
       if (k === 'd' || e.key === 'ArrowRight') this.keys.right = false;
       if (k === 'e') this.keys.revive = false;
       if (e.code === 'Space') this.keys.shoot = false;
+      if (this.isMageMode && e.key === '1') this.keys.shoot = false;
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -147,7 +171,7 @@ class InputHandler {
         // Right-Click for Ultimate
         if (window.soundManager) window.soundManager.ensureContext();
         if (typeof this.onUltimate === 'function') {
-          this.onUltimate(this.mouse.angle);
+          this.onUltimate(this.mouse.angle, this.mouse.worldX, this.mouse.worldY);
         }
       }
     });
@@ -160,6 +184,7 @@ class InputHandler {
     });
 
     window.addEventListener('wheel', (e) => {
+      if (this.isMageMode) return;
       if (this.isWarriorMode) {
         const nextSlot = this.selectedWeaponSlot === 1 ? 2 : 1;
         const stance = WARRIOR_STANCES[nextSlot - 1];
@@ -203,7 +228,7 @@ class InputHandler {
       angle: Number(this.mouse.angle.toFixed(3)),
       shoot: this.keys.shoot,
       revive: this.keys.revive,
-      weaponId: this.selectedWeaponId
+      weaponId: this.isMageMode ? 'ARCANE_BOLT' : this.selectedWeaponId
     };
   }
 }

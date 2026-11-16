@@ -1,3 +1,5 @@
+const { MAGE_SKILLS } = require('./MageSkillsConfig.js');
+
 const ULT_CHARGE_CONFIG = {
   MAX_CHARGE: 100,
   HIT_BASE: 0.8,
@@ -35,15 +37,15 @@ const ULTIMATE_CONFIGS = {
     endExplosionKnockback: 350
   },
   MAGE: {
-    id: 'BLINK_FROST_NOVA',
-    name: 'Blink & Frost Nova',
-    blinkDistance: 240,
-    novaRadius: 140,
-    damage: 75,
-    freezeDuration: 3.0,
-    bossFreezeDuration: 1.5,
-    bossSlowDuration: 1.5,
-    bossSlowFactor: 0.5
+    id: 'METEOR_STORM',
+    name: MAGE_SKILLS.METEOR_STORM.name,
+    stormRadius: MAGE_SKILLS.METEOR_STORM.stormRadius,
+    duration: MAGE_SKILLS.METEOR_STORM.duration,
+    meteorCount: MAGE_SKILLS.METEOR_STORM.meteorCount,
+    meteorImpactRadius: MAGE_SKILLS.METEOR_STORM.meteorImpactRadius,
+    meteorDamage: MAGE_SKILLS.METEOR_STORM.meteorDamage,
+    manaCost: MAGE_SKILLS.METEOR_STORM.manaCost,
+    cooldown: MAGE_SKILLS.METEOR_STORM.cooldown
   }
 };
 

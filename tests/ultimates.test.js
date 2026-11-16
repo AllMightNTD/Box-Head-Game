@@ -13,7 +13,7 @@ test('UltimateConfig maps classes and legacy skins to valid ultimate specs', () 
   // Assert
   assert.strictEqual(humanUlt.id, 'TACTICAL_DRONE');
   assert.strictEqual(warriorUlt.id, 'AVATAR_OF_WAR');
-  assert.strictEqual(mageUlt.id, 'BLINK_FROST_NOVA');
+  assert.strictEqual(mageUlt.id, 'METEOR_STORM');
   assert.strictEqual(legacyUlt.id, 'TACTICAL_DRONE');
 });
 
@@ -258,7 +258,7 @@ test('GameRoom: Human Tactical Drone shoots zombies and grants Infinite Ammo ins
   assert.strictEqual(human.ultCharge, 0, 'Drone shots must not recharge ultCharge');
 });
 
-test('GameRoom: Mage Blink & Frost Nova freezes at both origin and destination', (t) => {
+test('GameRoom: Mage Meteor Storm ultimate casts at cursor when unlocked (x50) and spawns lava_pool', (t) => {
   const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   const room = new GameRoom('r_mag', 'Mage Test', mockIo);
   t.after(() => room.stop());
@@ -267,17 +267,20 @@ test('GameRoom: Mage Blink & Frost Nova freezes at both origin and destination',
   room.startGame();
   mage.x = 400;
   mage.y = 600;
-  mage.ultCharge = 100;
+  mage.mageState.skills.METEOR_STORM.unlocked = true;
+  mage.mana = 100;
 
-  const zOrigin = new Zombie('zo', 'TANK', 430, 600);
-  const zDest = new Zombie('zd', 'TANK', 650, 600);
-  room.zombies.push(zOrigin, zDest);
+  const zTarget = new Zombie('zt', 'TANK', 700, 600);
+  zTarget.hp = 2000;
+  room.zombies.push(zTarget);
 
-  const res = room.handleUltimate('m1', { angle: 0 });
+  const res = room.handleUltimate('m1', { angle: 0, targetX: 700, targetY: 600 });
   assert.strictEqual(res.activated, true);
-  assert.strictEqual(mage.x, 640);
-  assert.ok(zOrigin.freezeTimer > 0, 'Origin zombie must be frozen');
-  assert.ok(zDest.freezeTimer > 0, 'Destination zombie must be frozen');
+  assert.strictEqual(mage.mana, 0);
+  assert.strictEqual(room.pendingMeteors.length, 1);
+  room.tick(0.05);
+  assert.ok(zTarget.hp <= 1850, 'Meteor deals 150 damage');
+  assert.ok(room.groundZones.some(gz => gz.type === 'lava_pool'));
 });
 
 test('GameRoom: Reviving teammate grants +15 ultCharge and bullet hits grant hit charge', (t) => {
@@ -333,11 +336,12 @@ test('E2E Socket: client emits player:ultimate through socketHandler and updates
   const gamePlayer = createdRoom.gameRoom.players.get('sock_1');
   gamePlayer.x = 500;
   gamePlayer.y = 500;
-  gamePlayer.ultCharge = 100;
+  gamePlayer.mageState.skills.METEOR_STORM.unlocked = true;
+  gamePlayer.mana = 100;
 
-  handlers['player:ultimate']({ angle: 0 });
-  assert.strictEqual(gamePlayer.ultCharge, 0, 'Socket event player:ultimate must trigger ultimate');
-  assert.strictEqual(gamePlayer.x, 740, 'Mage must blink 240px east');
+  handlers['player:ultimate']({ angle: 0, targetX: 740, targetY: 500 });
+  assert.strictEqual(gamePlayer.mana, 0, 'Socket event player:ultimate must trigger ultimate');
+  assert.strictEqual(createdRoom.gameRoom.pendingMeteors.length, 1);
 
   // 2. Real TCP Socket.IO server snapshot structure check
   const { server, port } = await startServer(0);
@@ -360,7 +364,7 @@ test('E2E Socket: client emits player:ultimate through socketHandler and updates
   // Verify snapshot includes ultCharge and drones array
   const firstSnap = await new Promise((resolve) => socket.once('game:snapshot', resolve));
   assert.strictEqual(firstSnap.players[0].ultCharge, 0);
-  assert.strictEqual(firstSnap.players[0].ultimateId, 'BLINK_FROST_NOVA');
+  assert.strictEqual(firstSnap.players[0].ultimateId, 'METEOR_STORM');
   assert.ok(Array.isArray(firstSnap.drones));
 });
 

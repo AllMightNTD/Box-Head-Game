@@ -12,21 +12,29 @@ class Bullet {
     this.distanceTraveled = 0;
     this.isDead = false;
 
-    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball | wind_blade | fire_slash
+    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball | wind_blade | fire_slash | arcane_bolt | mage_fireball
     this.isFireball = Boolean(options.isFireball);
-    this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball;
-    this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : 160);
+    this.isMageFireball = Boolean(options.isMageFireball || options.type === 'mage_fireball');
+    this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball || this.isMageFireball;
+    this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : (this.isMageFireball ? 140 : 160));
     this.explosionDamage = options.explosionDamage || this.damage;
+    this.damageType = options.damageType || (this.isMageFireball || options.type === 'fire_slash' ? 'FIRE' : (this.type === 'arcane_bolt' ? 'MAGIC' : 'BULLET'));
     this.penetration = options.penetration !== undefined
       ? Boolean(options.penetration)
       : (options.type === 'wind_blade' || options.type === 'fire_slash');
-    this.knockback = options.knockback || (options.type === 'shotgun' ? 180 : 50);
+    this.knockback = options.knockback !== undefined ? options.knockback : (options.type === 'shotgun' ? 180 : 50);
     this.fromUlt = Boolean(options.fromUlt);
 
     // Fuse time for grenades
     this.fuseTime = options.fuseTime || 0;
     this.life = 0;
-    this.radius = options.radius || (this.isFireball ? 12 : (options.type === 'wind_blade' || options.type === 'fire_slash' ? 16 : (options.type === 'rocket' ? 8 : 4)));
+    this.radius = options.radius || (
+      this.isMageFireball ? 14 :
+      (this.isFireball ? 12 :
+      (options.type === 'wind_blade' || options.type === 'fire_slash' ? 16 :
+      (options.type === 'rocket' ? 8 :
+      (options.type === 'arcane_bolt' ? 7 : 4))))
+    );
   }
 
   update(dt, map) {
