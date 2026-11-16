@@ -12,8 +12,8 @@ test('UltimateConfig maps classes and legacy skins to valid ultimate specs', () 
 
   // Assert
   assert.strictEqual(humanUlt.id, 'TACTICAL_DRONE');
-  assert.strictEqual(warriorUlt.id, 'SEISMIC_SLAM');
-  assert.strictEqual(mageUlt.id, 'BLINK_FROST_NOVA');
+  assert.strictEqual(warriorUlt.id, 'AVATAR_OF_WAR');
+  assert.strictEqual(mageUlt.id, 'METEOR_STORM');
   assert.strictEqual(legacyUlt.id, 'TACTICAL_DRONE');
 });
 
@@ -178,37 +178,47 @@ const { io: ioClient } = require('socket.io-client');
 const { GameRoom } = require('../server/game/GameRoom.js');
 const { startServer } = require('../server/server.js');
 
-test('GameRoom: Warrior Seismic Slam stuns zombies, clears fireballs, spares barricades', (t) => {
+test('GameRoom: Warrior Avatar of War activates, spawns fire_slash on shoot, and spares barricades', (t) => {
   const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   const room = new GameRoom('r_war', 'Warrior Test', mockIo);
   t.after(() => room.stop());
 
   const warrior = room.addPlayer('w1', 'Tank', 'WARRIOR');
+  const ally = room.addPlayer('h1', 'Builder', 'HUMAN');
   room.startGame();
   warrior.x = 500;
   warrior.y = 500;
   warrior.ultCharge = 100;
 
-  const zNear = new Zombie('zn', 'NORMAL', 620, 500);
-  const zBoss = new Zombie('zb', 'TANK', 650, 500);
-  const fireball = new Bullet('fb1', 'devil_1', 560, 500, Math.PI, { type: 'fireball', isFireball: true });
-  room.zombies.push(zNear, zBoss);
-  room.bullets.push(fireball);
-
-  // Place friendly barricade inside slam radius
-  warrior.weapons.BARRICADE.unlocked = true;
-  warrior.selectedWeapon = 'BARRICADE';
-  warrior.fireCooldown = 0;
-  room.handlePlaceItem('w1');
+  // Human ally places friendly barricade
+  ally.x = 440;
+  ally.y = 500;
+  ally.angle = 0;
+  ally.weapons.BARRICADE.unlocked = true;
+  ally.weapons.BARRICADE.ammo = 5;
+  ally.selectedWeapon = 'BARRICADE';
+  ally.fireCooldown = 0;
+  room.handlePlaceItem('h1');
+  assert.ok(room.barricades.length > 0, 'Barricade should be placed');
   const barHpBefore = room.barricades[0].hp;
 
+  // Warrior activates AVATAR_OF_WAR ultimate
   const res = room.handleUltimate('w1', { angle: 0 });
   assert.strictEqual(res.activated, true);
   assert.strictEqual(warrior.ultCharge, 0);
-  assert.strictEqual(zNear.isDead, true); // 120 dmg kills 80 HP Normal zombie
-  assert.strictEqual(zBoss.stunTimer, 1.5);
-  assert.strictEqual(room.bullets.length, 0); // fireball destroyed
-  assert.strictEqual(room.barricades[0].hp, barHpBefore); // barricade unharmed
+  assert.strictEqual(warrior.warriorState.avatarActive, true);
+  assert.strictEqual(warrior.warriorState.avatarTimer, 10);
+
+  // While in Avatar, handleShoot spawns a piercing fire_slash bullet
+  warrior.fireCooldown = 0;
+  room.handleShoot('w1');
+  const fireSlash = room.bullets.find(b => b.type === 'fire_slash');
+  assert.ok(fireSlash, 'Should spawn fire_slash bullet in Avatar of War');
+  assert.strictEqual(fireSlash.penetration, true);
+  assert.strictEqual(fireSlash.damage, 55);
+
+  // Barricade remains completely unharmed
+  assert.strictEqual(room.barricades[0].hp, barHpBefore);
 });
 
 test('GameRoom: Human Tactical Drone shoots zombies and grants Infinite Ammo inside aura', (t) => {
@@ -248,7 +258,7 @@ test('GameRoom: Human Tactical Drone shoots zombies and grants Infinite Ammo ins
   assert.strictEqual(human.ultCharge, 0, 'Drone shots must not recharge ultCharge');
 });
 
-test('GameRoom: Mage Blink & Frost Nova freezes at both origin and destination', (t) => {
+test('GameRoom: Mage Meteor Storm ultimate casts at cursor when unlocked (x50) and spawns lava_pool', (t) => {
   const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   const room = new GameRoom('r_mag', 'Mage Test', mockIo);
   t.after(() => room.stop());
@@ -257,17 +267,20 @@ test('GameRoom: Mage Blink & Frost Nova freezes at both origin and destination',
   room.startGame();
   mage.x = 400;
   mage.y = 600;
-  mage.ultCharge = 100;
+  mage.mageState.skills.METEOR_STORM.unlocked = true;
+  mage.mana = 100;
 
-  const zOrigin = new Zombie('zo', 'TANK', 430, 600);
-  const zDest = new Zombie('zd', 'TANK', 650, 600);
-  room.zombies.push(zOrigin, zDest);
+  const zTarget = new Zombie('zt', 'TANK', 700, 600);
+  zTarget.hp = 2000;
+  room.zombies.push(zTarget);
 
-  const res = room.handleUltimate('m1', { angle: 0 });
+  const res = room.handleUltimate('m1', { angle: 0, targetX: 700, targetY: 600 });
   assert.strictEqual(res.activated, true);
-  assert.strictEqual(mage.x, 640);
-  assert.ok(zOrigin.freezeTimer > 0, 'Origin zombie must be frozen');
-  assert.ok(zDest.freezeTimer > 0, 'Destination zombie must be frozen');
+  assert.strictEqual(mage.mana, 0);
+  assert.strictEqual(room.pendingMeteors.length, 1);
+  room.tick(0.05);
+  assert.ok(zTarget.hp <= 1850, 'Meteor deals 150 damage');
+  assert.ok(room.groundZones.some(gz => gz.type === 'lava_pool'));
 });
 
 test('GameRoom: Reviving teammate grants +15 ultCharge and bullet hits grant hit charge', (t) => {
@@ -323,11 +336,12 @@ test('E2E Socket: client emits player:ultimate through socketHandler and updates
   const gamePlayer = createdRoom.gameRoom.players.get('sock_1');
   gamePlayer.x = 500;
   gamePlayer.y = 500;
-  gamePlayer.ultCharge = 100;
+  gamePlayer.mageState.skills.METEOR_STORM.unlocked = true;
+  gamePlayer.mana = 100;
 
-  handlers['player:ultimate']({ angle: 0 });
-  assert.strictEqual(gamePlayer.ultCharge, 0, 'Socket event player:ultimate must trigger ultimate');
-  assert.strictEqual(gamePlayer.x, 740, 'Mage must blink 240px east');
+  handlers['player:ultimate']({ angle: 0, targetX: 740, targetY: 500 });
+  assert.strictEqual(gamePlayer.mana, 0, 'Socket event player:ultimate must trigger ultimate');
+  assert.strictEqual(createdRoom.gameRoom.pendingMeteors.length, 1);
 
   // 2. Real TCP Socket.IO server snapshot structure check
   const { server, port } = await startServer(0);
@@ -350,7 +364,7 @@ test('E2E Socket: client emits player:ultimate through socketHandler and updates
   // Verify snapshot includes ultCharge and drones array
   const firstSnap = await new Promise((resolve) => socket.once('game:snapshot', resolve));
   assert.strictEqual(firstSnap.players[0].ultCharge, 0);
-  assert.strictEqual(firstSnap.players[0].ultimateId, 'BLINK_FROST_NOVA');
+  assert.strictEqual(firstSnap.players[0].ultimateId, 'METEOR_STORM');
   assert.ok(Array.isArray(firstSnap.drones));
 });
 

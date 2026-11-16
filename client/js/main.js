@@ -65,12 +65,71 @@
 
   // Weapon slot mapping
   const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
+  const WARRIOR_STANCES = ['BERSERKER_STANCE', 'JUGGERNAUT_STANCE'];
 
   // Pending local weapon switch (guards against stale server snapshots reverting the choice)
   let pendingWeapon = null; // { id, at }
   const PENDING_WEAPON_TIMEOUT_MS = 600;
 
   function trySwitchWeapon(slotIndex, weaponId) {
+    if (input && input.isMageMode) {
+      if (slotIndex >= 2 && slotIndex <= 8) {
+        const isPaused = ui && ui.modalPause && !ui.modalPause.classList.contains('hidden');
+        const isGameOver = ui && ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden');
+        if (isInGame && !isPaused && !isGameOver && socket) {
+          if (renderer && renderer.camera && typeof input.updateWorldMouse === 'function') {
+            input.updateWorldMouse(renderer.camera.x, renderer.camera.y, 1.15);
+          }
+          socket.emit('player:skill', {
+            slot: slotIndex,
+            angle: input.mouse.angle,
+            targetX: input.mouse.worldX,
+            targetY: input.mouse.worldY
+          });
+        }
+      }
+      return;
+    }
+
+    if (input && input.isWarriorMode) {
+      if (slotIndex >= 3 && slotIndex <= 8) {
+        // Direct skill cast click on HUD bar
+        const isPaused = ui && ui.modalPause && !ui.modalPause.classList.contains('hidden');
+        const isGameOver = ui && ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden');
+        if (isInGame && !isPaused && !isGameOver && socket) {
+          socket.emit('player:skill', { slot: slotIndex, angle: input.mouse.angle });
+        }
+        return;
+      }
+
+      // Slots 1 and 2: Stance switch
+      const stanceId = weaponId || WARRIOR_STANCES[slotIndex - 1];
+      if (!stanceId) return;
+
+      const state = interpolator.getInterpolatedState();
+      const localPlayer = state && state.players ? (state.players.find(p => p.id === myPlayerId) || state.players[0]) : null;
+      if (localPlayer && localPlayer.warriorState) {
+        const skillState = localPlayer.warriorState.skills ? localPlayer.warriorState.skills[stanceId] : null;
+        const playerMaxCombo = Math.max(localPlayer.maxCombo || 1, localPlayer.combo || 1);
+        const def = ui.warriorSkillDefinitions ? ui.warriorSkillDefinitions.find(s => s.id === stanceId) : null;
+        const unlockCombo = def ? def.unlockCombo : (slotIndex === 2 ? 5 : 1);
+        const isUnlocked = Boolean((skillState && skillState.unlocked) || (playerMaxCombo >= unlockCombo) || stanceId === 'BERSERKER_STANCE');
+        if (!isUnlocked) {
+          renderer.addFloatingText(`Cần Combo x${unlockCombo} để mở!`, renderer.camera.x, renderer.camera.y + 60, '#ff1744', 22);
+          return;
+        }
+      }
+
+      input.setWeaponSlot(slotIndex, true);
+      pendingWeapon = { id: stanceId, at: performance.now() };
+
+      if (isInGame) {
+        socket.emit('player:input', input.getInputPayload());
+      }
+      return;
+    }
+
+    // Standard Gun Arsenal switch
     const wid = weaponId || WEAPON_KEYS[slotIndex - 1];
     if (!wid) return;
 
@@ -104,6 +163,19 @@
       trySwitchWeapon(slotIndex, weaponId);
     };
 
+    input.onSkillCast = (slot, angle, targetX, targetY) => {
+      const isPaused = ui && ui.modalPause && !ui.modalPause.classList.contains('hidden');
+      const isGameOver = ui && ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden');
+      if (isInGame && !isPaused && !isGameOver && socket) {
+        if (renderer && renderer.camera && typeof input.updateWorldMouse === 'function') {
+          input.updateWorldMouse(renderer.camera.x, renderer.camera.y, 1.15);
+          targetX = input.mouse.worldX;
+          targetY = input.mouse.worldY;
+        }
+        socket.emit('player:skill', { slot, angle, targetX, targetY });
+      }
+    };
+
     // ESC Menu Handling
     input.onTogglePause = () => {
       if (isInGame && ui) {
@@ -115,11 +187,16 @@
     };
 
     // Ultimate Activation (F or Right-Click)
-    input.onUltimate = (angle) => {
+    input.onUltimate = (angle, targetX, targetY) => {
       if (!isInGame) return;
       if (ui && ui.modalPause && !ui.modalPause.classList.contains('hidden')) return;
       if (ui && ui.modalGameOver && !ui.modalGameOver.classList.contains('hidden')) return;
-      socket.emit('player:ultimate', { angle });
+      if (renderer && renderer.camera && typeof input.updateWorldMouse === 'function') {
+        input.updateWorldMouse(renderer.camera.x, renderer.camera.y, 1.15);
+        targetX = input.mouse.worldX;
+        targetY = input.mouse.worldY;
+      }
+      socket.emit('player:ultimate', { angle, targetX, targetY });
     };
   }
 
@@ -306,18 +383,32 @@
     // Sync input handler selected weapon if server changed it (e.g. out of ammo).
     // Ignore stale snapshots while a local switch is still awaiting server confirmation.
     const localPlayer = snapshot && snapshot.players && (snapshot.players.find(p => p.id === myPlayerId) || snapshot.players[0]);
-    if (localPlayer && localPlayer.selectedWeapon && input) {
-      const serverWeapon = localPlayer.selectedWeapon;
-      if (pendingWeapon) {
-        const expired = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
-        if (serverWeapon === pendingWeapon.id || expired) {
-          pendingWeapon = null; // confirmed by server (or gave up waiting)
-        }
+    if (localPlayer) {
+      const isMage = localPlayer.character === 'MAGE';
+      const isWarrior = localPlayer.character === 'WARRIOR';
+      if (input) {
+        input.isMageMode = isMage;
+        input.isWarriorMode = isWarrior;
       }
-      if (!pendingWeapon) {
-        const idx = WEAPON_KEYS.indexOf(serverWeapon);
-        if (idx !== -1 && input.selectedWeaponSlot !== idx + 1) {
-          input.setWeaponSlot(idx + 1, true);
+      if (ui && typeof ui.setWeaponsBarMode === 'function') {
+        const mode = isMage ? 'MAGE' : (isWarrior ? 'WARRIOR' : 'GUN');
+        ui.setWeaponsBarMode(mode);
+      }
+
+      if (!isMage && localPlayer.selectedWeapon && input) {
+        const serverWeapon = localPlayer.selectedWeapon;
+        if (pendingWeapon) {
+          const expired = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - pendingWeapon.at > PENDING_WEAPON_TIMEOUT_MS;
+          if (serverWeapon === pendingWeapon.id || expired) {
+            pendingWeapon = null; // confirmed by server (or gave up waiting)
+          }
+        }
+        if (!pendingWeapon) {
+          const slotKeys = isWarrior ? WARRIOR_STANCES : WEAPON_KEYS;
+          const idx = slotKeys.indexOf(serverWeapon);
+          if (idx !== -1 && input.selectedWeaponSlot !== idx + 1) {
+            input.setWeaponSlot(idx + 1, true);
+          }
         }
       }
     }
@@ -346,7 +437,14 @@
     }
     if (!rnd) return;
 
-    if (ev.ultId === 'SEISMIC_SLAM') {
+    if (ev.ultId === 'AVATAR_OF_WAR') {
+      if (typeof rnd.spawnWarriorVfx === 'function') {
+        rnd.spawnWarriorVfx(ev);
+      }
+      if (typeof rnd.addFloatingText === 'function') {
+        rnd.addFloatingText('AVATAR OF WAR!', ev.x, ev.y - 40, '#ff3d00', 32);
+      }
+    } else if (ev.ultId === 'SEISMIC_SLAM') {
       if (typeof rnd.addShockwave === 'function') {
         rnd.addShockwave(ev.x, ev.y, ev.radius || 220, '#ff9800');
       }
@@ -365,6 +463,37 @@
         rnd.addShockwave(ev.x, ev.y, 80, '#00e676');
       }
       rnd.addFloatingText('TACTICAL DRONE & AURA!', ev.x, ev.y - 30, '#69f0ae', 26);
+    } else if (ev.ultId === 'METEOR_STORM') {
+      if (typeof rnd.spawnMageVfx === 'function') {
+        rnd.spawnMageVfx(ev);
+      }
+      if (typeof rnd.addFloatingText === 'function') {
+        rnd.addFloatingText('METEOR STORM!', ev.x, ev.y - 35, '#ff5722', 30);
+      }
+    }
+  }
+
+  const WARRIOR_EVENT_LABELS = {
+    WARRIOR_COUNTER: { text: 'COUNTER!', yOffset: -35, color: '#00e5ff', size: 28 },
+    WARRIOR_AVATAR_END: { text: 'AVATAR NOVA!', yOffset: -30, color: '#ff3d00', size: 28 }
+  };
+
+  function handleWarriorEvent(ev, rnd, snd) {
+    if (rnd && typeof rnd.spawnWarriorVfx === 'function') {
+      rnd.spawnWarriorVfx(ev);
+    }
+    if (snd && typeof snd.playWarriorSkill === 'function') {
+      snd.playWarriorSkill(ev);
+    }
+    if (!rnd || typeof rnd.addFloatingText !== 'function') return;
+
+    if (ev.type === 'WARRIOR_SKILL' && ev.skillId === 'WAR_CRY') {
+      rnd.addFloatingText('WAR CRY!', ev.x, ev.y - 30, '#ffd600', 26);
+      return;
+    }
+    const label = WARRIOR_EVENT_LABELS[ev.type];
+    if (label) {
+      rnd.addFloatingText(label.text, ev.x, ev.y + label.yOffset, label.color, label.size);
     }
   }
 
@@ -394,11 +523,25 @@
     const myId = context.myPlayerId !== undefined ? context.myPlayerId : myPlayerId;
     const localPlayer = snapshot && snapshot.players ? (snapshot.players.find(p => p.id === myId) || snapshot.players[0]) : null;
     const listenerX = localPlayer ? localPlayer.x : (rnd && rnd.camera ? rnd.camera.x : 0);
+    const listenerY = localPlayer ? localPlayer.y : (rnd && rnd.camera ? rnd.camera.y : 0);
 
     if (ev.type === 'SHOOT') {
       handleShootEvent(ev, rnd, snd, myId, listenerX);
     } else if (ev.type === 'ULTIMATE') {
       handleUltimateEvent(ev, rnd, snd);
+    } else if (ev.type === 'MAGE_SKILL' || ev.type === 'MAGE_SHIELD_BREAK') {
+      if (rnd && typeof rnd.spawnMageVfx === 'function') rnd.spawnMageVfx(ev);
+      if (snd && typeof snd.playMageSkill === 'function') snd.playMageSkill(ev, listenerX, listenerY);
+      if (ev.type === 'MAGE_SHIELD_BREAK' && rnd && typeof rnd.addFloatingText === 'function') {
+        rnd.addFloatingText('SHIELD BROKEN!', ev.x, ev.y - 36, '#80d8ff', 22);
+      }
+    } else if (
+      ev.type === 'WARRIOR_SKILL' ||
+      ev.type === 'WARRIOR_COUNTER' ||
+      ev.type === 'WARRIOR_MARK_EXPLODE' ||
+      ev.type === 'WARRIOR_AVATAR_END'
+    ) {
+      handleWarriorEvent(ev, rnd, snd);
     } else if (ev.type === 'HIT') {
       if (snd) {
         snd.playZombieHit(ev.zType, ev.weapon, ev.x, listenerX);
@@ -449,11 +592,14 @@
 
   // Input sending timer (40Hz = 25ms)
   if (isBrowser) {
-    setInterval(() => {
+    const inputTimer = setInterval(() => {
       if (isInGame && input) {
         socket.emit('player:input', input.getInputPayload());
       }
     }, 25);
+    if (typeof inputTimer.unref === 'function') {
+      inputTimer.unref();
+    }
   }
 
   // --- RENDER GAME LOOP ---
