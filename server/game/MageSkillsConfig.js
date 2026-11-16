@@ -181,11 +181,13 @@ function getMageSkillBySlot(slot) {
  * @returns {object|null}
  */
 function getMageSkillById(id) {
-  if (typeof id !== 'string' || !id) {
+  if (typeof id !== 'string' || !id || !Object.hasOwn(MAGE_SKILLS, id)) {
     return null;
   }
-  return MAGE_SKILLS[id] || null;
+  return MAGE_SKILLS[id];
 }
+
+const MAGE_SKILL_VALUES = Object.freeze(Object.values(MAGE_SKILLS));
 
 /**
  * Retrieves all Mage skills unlocked at or below the given combo count.
@@ -196,7 +198,7 @@ function getUnlockedMageSkills(combo) {
   if (typeof combo !== 'number' || !Number.isFinite(combo)) {
     return [];
   }
-  return Object.values(MAGE_SKILLS).filter(skill => combo >= skill.unlockCombo);
+  return MAGE_SKILL_VALUES.filter(skill => combo >= skill.unlockCombo);
 }
 
 module.exports = {

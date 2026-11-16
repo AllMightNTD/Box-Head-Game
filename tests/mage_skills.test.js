@@ -38,10 +38,14 @@ test('MageSkillsConfig defines exact 8-skill progression, mana costs, cooldowns,
   assert.strictEqual(MAGE_AMMO_PICKUP.MANA_RESTORE, 30);
   assert.strictEqual(MAGE_AMMO_PICKUP.COOLDOWN_REDUCTION_SEC, 1.5);
   assert.strictEqual(MAGE_SKILL_KEYS.length, 8);
+  assert.ok(Object.isFrozen(MAGE_SKILLS));
+  assert.ok(Object.isFrozen(MAGE_MANA_CONFIG));
+  assert.ok(Object.isFrozen(MAGE_AMMO_PICKUP));
 
   for (const [id, slot, unlockCombo, manaCost, cooldown] of expectedOrder) {
     const skill = getMageSkillById(id);
     assert.ok(skill, `Expected skill ${id}`);
+    assert.ok(Object.isFrozen(skill));
     assert.strictEqual(getMageSkillBySlot(slot), skill);
     assert.strictEqual(skill.slot, slot);
     assert.strictEqual(skill.unlockCombo, unlockCombo);
