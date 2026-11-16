@@ -119,28 +119,55 @@ class UIController {
   }
 
   initSoundToggle() {
-    const updateSoundLabels = (isMuted) => {
-      const text = isMuted ? '🔇 Âm thanh: TẮT' : '🔊 Âm thanh: BẬT';
+    const formatSoundLabel = (diag) => {
+      if (!diag) return '🔊 Âm thanh: BẬT';
+      if (!diag.supported) return '⚠ Web Audio không hỗ trợ';
+      if (diag.muted) return '🔇 Âm thanh: TẮT';
+      if (diag.ctxState !== 'running') {
+        return `⏳ Bấm để bật tiếng (${diag.decodedCount}/${diag.totalCount})`;
+      }
+      return `🔊 Âm thanh: BẬT (${diag.decodedCount}/${diag.totalCount})`;
+    };
+
+    const syncLabels = (diagOverride) => {
+      const sm = typeof window !== 'undefined' ? window.soundManager : null;
+      const diag = diagOverride || (sm && typeof sm.getAudioDiagnostics === 'function'
+        ? sm.getAudioDiagnostics()
+        : { supported: true, muted: Boolean(sm && sm.muted), ctxState: 'running', decodedCount: 0, totalCount: 72 });
+      const text = formatSoundLabel(diag);
       if (this.btnSoundToggle) this.btnSoundToggle.textContent = text;
       if (this.btnPauseSound) this.btnPauseSound.textContent = text;
     };
 
-    if (this.btnSoundToggle) {
-      this.btnSoundToggle.addEventListener('click', () => {
-        if (window.soundManager) {
-          const isMuted = window.soundManager.toggleMute();
-          updateSoundLabels(isMuted);
+    const handleSoundButtonClick = async () => {
+      const sm = typeof window !== 'undefined' ? window.soundManager : null;
+      if (!sm) return;
+      const diag = typeof sm.getAudioDiagnostics === 'function' ? sm.getAudioDiagnostics() : null;
+      if (diag && !diag.muted && diag.ctxState !== 'running' && typeof sm.unlockFromGesture === 'function') {
+        const running = await sm.unlockFromGesture();
+        if (running && typeof sm.playUnlockTestChime === 'function') {
+          sm.playUnlockTestChime();
         }
-      });
-    }
+        syncLabels();
+        return;
+      }
+      const isMuted = sm.toggleMute();
+      if (!isMuted && typeof sm.playUnlockTestChime === 'function') {
+        setTimeout(() => sm.playUnlockTestChime(), 20);
+      }
+      syncLabels();
+    };
 
+    if (typeof window !== 'undefined' && window.soundManager && typeof window.soundManager.subscribe === 'function') {
+      window.soundManager.subscribe((diag) => syncLabels(diag));
+    }
+    syncLabels();
+
+    if (this.btnSoundToggle) {
+      this.btnSoundToggle.addEventListener('click', handleSoundButtonClick);
+    }
     if (this.btnPauseSound) {
-      this.btnPauseSound.addEventListener('click', () => {
-        if (window.soundManager) {
-          const isMuted = window.soundManager.toggleMute();
-          updateSoundLabels(isMuted);
-        }
-      });
+      this.btnPauseSound.addEventListener('click', handleSoundButtonClick);
     }
   }
 

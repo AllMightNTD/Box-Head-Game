@@ -6,11 +6,19 @@
     window.spriteManager.preloadAll().catch(err => console.warn('Sprite preload error:', err));
   }
 
-  // Kick off background raw WAV prefetch for zombie audio
-  if (isBrowser && window.soundManager && typeof window.soundManager.preloadZombieAudio === 'function') {
-    const preloadPromise = window.soundManager.preloadZombieAudio();
-    if (preloadPromise && typeof preloadPromise.catch === 'function') {
-      preloadPromise.catch(err => console.warn('Zombie audio preload error:', err));
+  // Kick off background raw WAV prefetch and capture-phase AudioContext unlock
+  if (isBrowser && window.soundManager) {
+    if (typeof window.soundManager.bindGestureUnlock === 'function') {
+      window.soundManager.bindGestureUnlock(window);
+    }
+    if (typeof window.soundManager.init === 'function') {
+      window.soundManager.init();
+    }
+    if (typeof window.soundManager.preloadZombieAudio === 'function') {
+      const preloadPromise = window.soundManager.preloadZombieAudio();
+      if (preloadPromise && typeof preloadPromise.catch === 'function') {
+        preloadPromise.catch(err => console.warn('Zombie audio preload error:', err));
+      }
     }
   }
 
@@ -281,7 +289,13 @@
     if (typeof window !== 'undefined' && window.soundManager) {
       window.soundManager.ensureContext();
       if (typeof window.soundManager.preloadZombieAudio === 'function') {
-        window.soundManager.preloadZombieAudio().catch(err => console.warn('[Audio] Failed to decode zombie audio on game start:', err));
+        window.soundManager.preloadZombieAudio()
+          .then((count) => {
+            if (count === 0 && window.soundManager.zombieBank && !window.soundManager.zombieBank.hasAnyBuffers()) {
+              console.warn('[Audio] Zombie WAV bank decoded 0 buffers:', window.soundManager.getAudioDiagnostics());
+            }
+          })
+          .catch(err => console.warn('[Audio] Failed to decode zombie audio on game start:', err));
       }
     }
   });

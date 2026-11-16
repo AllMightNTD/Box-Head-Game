@@ -48,6 +48,15 @@ class InputHandler {
     }
   }
 
+  unlockAudioFromInput() {
+    if (typeof window === 'undefined' || !window.soundManager) return;
+    if (typeof window.soundManager.unlockFromGesture === 'function') {
+      window.soundManager.unlockFromGesture();
+    } else if (typeof window.soundManager.ensureContext === 'function') {
+      window.soundManager.ensureContext();
+    }
+  }
+
   setupListeners() {
     const WEAPON_KEYS = ['PISTOL', 'UZI', 'SHOTGUN', 'BARRICADE', 'BARREL', 'GRENADE', 'ROCKET', 'RAILGUN'];
 
@@ -57,7 +66,7 @@ class InputHandler {
       }
 
       // Audio resume on first action
-      if (window.soundManager) window.soundManager.ensureContext();
+      this.unlockAudioFromInput();
 
       const k = e.key.toLowerCase();
       if (k === 'w' || e.key === 'ArrowUp') this.keys.up = true;
@@ -110,12 +119,12 @@ class InputHandler {
 
     window.addEventListener('mousedown', (e) => {
       if (e.button === 0) {
-        if (window.soundManager) window.soundManager.ensureContext();
+        this.unlockAudioFromInput();
         this.mouse.isDown = true;
         this.keys.shoot = true;
       } else if (e.button === 2) {
         // Right-Click for Ultimate
-        if (window.soundManager) window.soundManager.ensureContext();
+        this.unlockAudioFromInput();
         if (typeof this.onUltimate === 'function') {
           this.onUltimate(this.mouse.angle);
         }

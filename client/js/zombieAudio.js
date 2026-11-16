@@ -67,7 +67,7 @@ const EVENT_COOLDOWNS_MS = Object.freeze({
 
 class ZombieAudioBank {
   constructor(options = {}) {
-    const rawBasePath = typeof options.basePath === 'string' ? options.basePath : 'assets/audio/zombies';
+    const rawBasePath = typeof options.basePath === 'string' ? options.basePath : '/assets/audio/zombies';
     this.basePath = rawBasePath.replace(/\/+$/, '');
     this.maxVoices = typeof options.maxVoices === 'number' && Number.isFinite(options.maxVoices) ? options.maxVoices : 24;
 
@@ -93,6 +93,7 @@ class ZombieAudioBank {
     this.preloadPromise = null;
     this.decodePromise = null;
     this.decodeCtx = null;
+    this.lastError = null;
   }
 
   resolveProfile(zType) {
@@ -122,6 +123,24 @@ class ZombieAudioBank {
       }
     }
     return entries;
+  }
+
+  getTotalAssetCount() {
+    let perProfile = 0;
+    for (const count of Object.values(ZOMBIE_SFX_COUNTS)) {
+      perProfile += count;
+    }
+    return ZOMBIE_PROFILE_ORDER.length * perProfile;
+  }
+
+  getDecodedCount() {
+    let total = 0;
+    for (const list of this.buffers.values()) {
+      if (Array.isArray(list)) {
+        total += list.length;
+      }
+    }
+    return total;
   }
 
   hasBuffer(zType, event) {
@@ -159,6 +178,13 @@ class ZombieAudioBank {
     return Math.max(0, Math.min(1, gain));
   }
 
+  _getCooldownKey(event, zombieId) {
+    if (zombieId !== undefined && zombieId !== null && zombieId !== '') {
+      return `${event}:${zombieId}`;
+    }
+    return event;
+  }
+
   canPlayEvent(event, zombieId) {
     if (!event || typeof event !== 'string') {
       return false;
@@ -174,7 +200,8 @@ class ZombieAudioBank {
     const cooldown = EVENT_COOLDOWNS_MS[event] || 0;
     if (cooldown > 0) {
       const now = this.nowFn();
-      const lastTime = this.lastEventTimes.has(event) ? this.lastEventTimes.get(event) : -Infinity;
+      const cooldownKey = this._getCooldownKey(event, zombieId);
+      const lastTime = this.lastEventTimes.has(cooldownKey) ? this.lastEventTimes.get(cooldownKey) : -Infinity;
       if (now - lastTime < cooldown) {
         return false;
       }
@@ -206,6 +233,7 @@ class ZombieAudioBank {
           try {
             const res = await this.fetchFn(entry.url);
             if (!res || !res.ok) {
+              this.lastError = `Preload HTTP ${res ? res.status : 'no response'} for ${entry.url}`;
               console.warn(`[ZombieAudioBank] Preload failed (${res ? res.status : 'no response'}): ${entry.url}`);
               continue;
             }
@@ -215,18 +243,22 @@ class ZombieAudioBank {
               loadedCount++;
             }
           } catch (err) {
+            this.lastError = err ? String(err.message || err) : 'Preload fetch error';
             console.warn(`[ZombieAudioBank] Preload error for ${entry.url}:`, err);
           }
         }
       };
 
-      const count = Math.min(poolSize, entries.length);
-      for (let i = 0; i < count; i++) {
-        workers.push(worker());
+      try {
+        const count = Math.min(poolSize, entries.length);
+        for (let i = 0; i < count; i++) {
+          workers.push(worker());
+        }
+        await Promise.all(workers);
+        return loadedCount;
+      } finally {
+        this.preloadPromise = null;
       }
-      await Promise.all(workers);
-      this.preloadPromise = null;
-      return loadedCount;
     })();
 
     return this.preloadPromise;
@@ -245,12 +277,21 @@ class ZombieAudioBank {
       this.decodePromise = null;
     }
 
-    this.decodePromise = (async () => {
+    const activePromise = (async () => {
+      if (this.preloadPromise) {
+        try {
+          await this.preloadPromise;
+        } catch (err) {
+          console.warn('[ZombieAudioBank] Pending preloadRaw error before decodeAll:', err);
+        }
+      }
+
       const entries = this.getAllAssetEntries();
       let decodedCount = 0;
       let idx = 0;
       const poolSize = 6;
       const workers = [];
+      this.lastError = null;
 
       const worker = async () => {
         while (idx < entries.length) {
@@ -263,11 +304,13 @@ class ZombieAudioBank {
             try {
               const res = await this.fetchFn(entry.url);
               if (!res || !res.ok) {
+                this.lastError = `Fetch HTTP ${res ? res.status : 'no response'} for ${entry.url}`;
                 console.warn(`[ZombieAudioBank] Fetch failed (${res ? res.status : 'no response'}): ${entry.url}`);
                 continue;
               }
               raw = await res.arrayBuffer();
             } catch (err) {
+              this.lastError = err ? String(err.message || err) : 'Fetch error';
               console.warn(`[ZombieAudioBank] Fetch error for ${entry.url}:`, err);
               continue;
             }
@@ -292,25 +335,45 @@ class ZombieAudioBank {
               decodedCount++;
             }
           } catch (err) {
+            this.lastError = err ? String(err.message || err) : 'Decode error';
             console.warn(`[ZombieAudioBank] Decode error for ${entry.url}:`, err);
           }
         }
       };
 
-      const count = Math.min(poolSize, entries.length);
-      for (let i = 0; i < count; i++) {
-        workers.push(worker());
+      try {
+        const count = Math.min(poolSize, entries.length);
+        for (let i = 0; i < count; i++) {
+          workers.push(worker());
+        }
+        await Promise.all(workers);
+        if (decodedCount === 0 && this.decodePromise === activePromise) {
+          this.decodePromise = null;
+        }
+        return decodedCount;
+      } catch (err) {
+        if (this.decodePromise === activePromise) {
+          this.decodePromise = null;
+        }
+        this.lastError = err ? String(err.message || err) : 'decodeAll error';
+        throw err;
       }
-      await Promise.all(workers);
-
-      return decodedCount;
     })();
 
+    this.decodePromise = activePromise;
     return this.decodePromise;
   }
 
   playSample(ctx, destNode, zType, event, options = {}) {
     if (!ctx || typeof ctx.createBufferSource !== 'function' || !destNode) {
+      return false;
+    }
+    if (ctx.state && ctx.state !== 'running') {
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+        Promise.resolve(ctx.resume()).catch(err => {
+          console.warn('[ZombieAudioBank] Failed to resume suspended AudioContext:', err);
+        });
+      }
       return false;
     }
     if (!this.hasBuffer(zType, event)) {
@@ -374,7 +437,8 @@ class ZombieAudioBank {
       }
     };
 
-    this.lastEventTimes.set(event, this.nowFn());
+    const cooldownKey = this._getCooldownKey(event, options.zombieId);
+    this.lastEventTimes.set(cooldownKey, this.nowFn());
 
     try {
       src.start(0);
@@ -448,8 +512,10 @@ class ZombieAudioBank {
     const distToPlayer = Math.hypot(z.x - playerX, z.y - playerY);
 
     if (!zs.hasAggroed && !z.isFrozen && !z.isStunned && distToPlayer <= ZOMBIE_EVENT_MAX_DIST.aggro) {
-      zs.hasAggroed = true;
-      onTrigger(z, 'aggro');
+      const triggered = onTrigger(z, 'aggro');
+      if (triggered !== false) {
+        zs.hasAggroed = true;
+      }
     }
 
     if (!isNew) {

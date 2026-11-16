@@ -278,3 +278,141 @@ test('ZombieAudioBank.playSample validates src.start before incrementing activeV
   assert.strictEqual(bank.activeVoices, 0, 'activeVoices must remain 0 when src.start is missing');
 });
 
+test('ZombieAudioBank defaults basePath to /assets/audio/zombies and exposes decoded/total counts', () => {
+  const bank = new ZombieAudioBank();
+  assert.equal(bank.basePath, '/assets/audio/zombies');
+  assert.equal(bank.getTotalAssetCount(), 72);
+  assert.equal(bank.getDecodedCount(), 0);
+
+  bank.buffers.set('rotten/idle', [{ duration: 0.4 }, { duration: 0.5 }]);
+  bank.buffers.set('mutant/hit', [{ duration: 0.2 }]);
+  assert.equal(bank.getDecodedCount(), 3);
+});
+
+test('ZombieAudioBank.decodeAll awaits in-flight preloadRaw without duplicate fetches and allows retry after zero-decode failure', async () => {
+  let fetchCount = 0;
+  let shouldFailFetch = true;
+  const mockFetch = async () => {
+    fetchCount++;
+    if (shouldFailFetch) {
+      return { ok: false, status: 503, arrayBuffer: async () => new ArrayBuffer(0) };
+    }
+    return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(16) };
+  };
+  const mockCtx = {
+    state: 'running',
+    decodeAudioData: async () => ({ duration: 0.4 })
+  };
+
+  // 1. Initial decodeAll fails completely -> must allow retry on same AudioContext
+  const retryBank = new ZombieAudioBank({ fetchFn: mockFetch });
+  const firstCount = await retryBank.decodeAll(mockCtx);
+  assert.equal(firstCount, 0);
+  assert.ok(retryBank.lastError, 'lastError should record fetch failure');
+
+  shouldFailFetch = false;
+  const secondCount = await retryBank.decodeAll(mockCtx);
+  assert.equal(secondCount, 72, 'decodeAll must retry and decode all 72 files after prior 0-count failure');
+
+  // 2. Concurrent preloadRaw + decodeAll must reuse raw buffers without 144 fetches
+  fetchCount = 0;
+  let releaseFirstFetch;
+  const firstFetchGate = new Promise((resolve) => { releaseFirstFetch = resolve; });
+  const gatedFetch = async () => {
+    fetchCount++;
+    await firstFetchGate;
+    return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(16) };
+  };
+  const coordBank = new ZombieAudioBank({ fetchFn: gatedFetch });
+  const pPreload = coordBank.preloadRaw(6);
+  const pDecode = coordBank.decodeAll(mockCtx);
+  releaseFirstFetch();
+  const [rawCount, decCount] = await Promise.all([pPreload, pDecode]);
+  assert.equal(rawCount, 72);
+  assert.equal(decCount, 72);
+  assert.equal(fetchCount, 72, 'decodeAll must await preloadRaw instead of double-fetching');
+  assert.equal(coordBank.rawBuffers.size, 0, 'rawBuffers must remain empty after coordinated decode');
+});
+
+test('ZombieAudioBank.playSample rejects suspended/closed AudioContext without burning activeVoices', () => {
+  let resumeCalls = 0;
+  const suspendedCtx = {
+    state: 'suspended',
+    currentTime: 0,
+    resume: () => { resumeCalls++; },
+    createBufferSource: () => { throw new Error('Should not create source while suspended'); },
+    createGain: () => { throw new Error('Should not create gain while suspended'); }
+  };
+  const bank = new ZombieAudioBank();
+  bank.buffers.set('rotten/hit', [{ duration: 0.3 }]);
+
+  const played = bank.playSample(suspendedCtx, {}, 'NORMAL', 'hit', {
+    x: 800, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z1'
+  });
+  assert.equal(played, false);
+  assert.equal(bank.activeVoices, 0);
+  assert.equal(resumeCalls, 1);
+  assert.equal(bank.lastEventTimes.size, 0, 'Failed suspended trigger must not enter cooldown');
+});
+
+test('ZombieAudioBank isolates per-zombie cooldowns when zombieId is passed and retries aggro if suppressed', () => {
+  let now = 1000;
+  const bank = new ZombieAudioBank({ nowFn: () => now });
+  const mockCtx = {
+    state: 'running',
+    currentTime: 1,
+    createBufferSource: () => ({
+      buffer: null,
+      playbackRate: { value: 1 },
+      onended: null,
+      connect: function () { return this; },
+      start: () => {}
+    }),
+    createGain: () => ({
+      gain: { value: 1, setValueAtTime: () => {} },
+      connect: () => {}
+    })
+  };
+  for (const profile of ['rotten', 'ghoul', 'mutant', 'burned', 'butcher', 'boomer']) {
+    bank.buffers.set(`${profile}/aggro`, [{ duration: 0.4 }]);
+    bank.buffers.set(`${profile}/hit`, [{ duration: 0.2 }]);
+  }
+
+  // Two different zombie types hitting and aggroing simultaneously must both play
+  assert.equal(bank.playSample(mockCtx, {}, 'NORMAL', 'aggro', { x: 800, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z_norm' }), true);
+  assert.equal(bank.playSample(mockCtx, {}, 'TANK', 'aggro', { x: 820, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z_tank' }), true);
+  // Same zombie within cooldown is still throttled
+  assert.equal(bank.playSample(mockCtx, {}, 'NORMAL', 'hit', { x: 800, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z_norm' }), true);
+  assert.equal(bank.playSample(mockCtx, {}, 'NORMAL', 'hit', { x: 800, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z_norm' }), false);
+  assert.equal(bank.playSample(mockCtx, {}, 'DEVIL', 'hit', { x: 820, y: 600, listenerX: 800, listenerY: 600, zombieId: 'z_devil' }), true);
+
+  // If onTrigger returns false on aggro (e.g. voice cap or suspended), zombie must retry on next frame
+  let allowAggro = false;
+  let aggroAttempts = 0;
+  const state = {
+    localPlayer: { x: 500, y: 500 },
+    zombies: [{ id: 'z_retry', type: 'VAMPIRE', x: 600, y: 500, isFrozen: false, isStunned: false }]
+  };
+  bank.updateZombies(0.05, state, (z, ev) => {
+    if (ev === 'aggro') {
+      aggroAttempts++;
+      return allowAggro;
+    }
+    return true;
+  });
+  assert.equal(aggroAttempts, 1);
+  assert.equal(bank.zombieStates.get('z_retry').hasAggroed, false);
+
+  allowAggro = true;
+  bank.updateZombies(0.05, state, (z, ev) => {
+    if (ev === 'aggro') {
+      aggroAttempts++;
+      return allowAggro;
+    }
+    return true;
+  });
+  assert.equal(aggroAttempts, 2);
+  assert.equal(bank.zombieStates.get('z_retry').hasAggroed, true);
+});
+
+

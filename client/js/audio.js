@@ -1,11 +1,11 @@
-let ZombieAudioBank = typeof window !== 'undefined' ? window.ZombieAudioBank : null;
-let ZOMBIE_EVENT_MAX_DIST = typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null;
+let LoadedZombieAudioBank = typeof window !== 'undefined' ? window.ZombieAudioBank : null;
+let LoadedZombieEventMaxDist = typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null;
 
-if (!ZombieAudioBank && typeof require === 'function') {
+if (!LoadedZombieAudioBank && typeof require === 'function') {
   try {
     const za = require('./zombieAudio.js');
-    ZombieAudioBank = za.ZombieAudioBank;
-    ZOMBIE_EVENT_MAX_DIST = za.ZOMBIE_EVENT_MAX_DIST;
+    LoadedZombieAudioBank = za.ZombieAudioBank;
+    LoadedZombieEventMaxDist = za.ZOMBIE_EVENT_MAX_DIST;
   } catch (e) {
     console.warn('[SoundManager] Optional zombieAudio.js CommonJS require failed:', e);
   }
@@ -30,6 +30,12 @@ class SoundManager {
     this.distortionCurve = null;
     this.muted = false;
     this.initialized = false;
+    this.masterGainLevel = 0.55;
+    this.zombieBusGain = null;
+    this.lastAudioError = null;
+    this.stateListeners = new Set();
+    this._gestureUnlockBound = false;
+    this._gestureUnlockCleanup = null;
 
     this.lastShellClinkTime = -Infinity;
     this.lastGrowlTime = -Infinity;
@@ -43,12 +49,54 @@ class SoundManager {
     this.heartbeatTimer = 0;
     this.growlTimer = 0;
 
-    const BankClass = options.ZombieAudioBank || ZombieAudioBank || (typeof window !== 'undefined' ? window.ZombieAudioBank : null);
+    const BankClass = options.ZombieAudioBank || LoadedZombieAudioBank || (typeof window !== 'undefined' ? window.ZombieAudioBank : null);
     const bankOptions = {
       nowFn: () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now()),
       ...options
     };
     this.zombieBank = options.zombieBank || (BankClass ? new BankClass(bankOptions) : null);
+  }
+
+  subscribe(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.stateListeners.add(listener);
+    return () => this.stateListeners.delete(listener);
+  }
+
+  _notifyStateChange() {
+    if (!this.stateListeners || this.stateListeners.size === 0) return;
+    const diag = this.getAudioDiagnostics();
+    for (const listener of this.stateListeners) {
+      try {
+        listener(diag);
+      } catch (err) {
+        console.warn('[SoundManager] State listener error:', err);
+      }
+    }
+  }
+
+  getAudioDiagnostics() {
+    const supported = Boolean(
+      this.ctx ||
+      (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext))
+    );
+    const decodedCount = this.zombieBank && typeof this.zombieBank.getDecodedCount === 'function'
+      ? this.zombieBank.getDecodedCount()
+      : 0;
+    const totalCount = this.zombieBank && typeof this.zombieBank.getTotalAssetCount === 'function'
+      ? this.zombieBank.getTotalAssetCount()
+      : 72;
+    return {
+      supported,
+      initialized: Boolean(this.initialized),
+      muted: Boolean(this.muted),
+      ctxState: this.ctx ? (this.ctx.state || 'running') : 'uninitialized',
+      decodedCount,
+      totalCount,
+      activeVoices: this.zombieBank ? this.zombieBank.activeVoices : 0,
+      maxVoices: this.zombieBank ? this.zombieBank.maxVoices : 24,
+      lastError: this.lastAudioError || (this.zombieBank ? this.zombieBank.lastError : null) || null
+    };
   }
 
   init() {
@@ -59,30 +107,50 @@ class SoundManager {
         : null;
       if (!AudioCtx) return;
       this.ctx = new AudioCtx();
+      this.ctx.onstatechange = () => {
+        this._notifyStateChange();
+      };
       this.setupAudioGraph();
       this.initialized = true;
+      this.lastAudioError = null;
 
-      if (this.ctx.state === 'suspended') {
-        this.ctx.resume();
+      if (this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+        Promise.resolve(this.ctx.resume()).then(() => {
+          this._notifyStateChange();
+        }).catch(err => {
+          this.lastAudioError = err ? String(err.message || err) : 'AudioContext resume blocked';
+          console.warn('[SoundManager] AudioContext resume pending user gesture:', err);
+          this._notifyStateChange();
+        });
       }
 
       this.preloadZombieAudio().catch(e => {
+        this.lastAudioError = e ? String(e.message || e) : 'init preload error';
         console.warn('[SoundManager] init preload error:', e);
       });
+      this._notifyStateChange();
     } catch (e) {
+      this.lastAudioError = e ? String(e.message || e) : 'Web Audio init error';
       console.warn('Web Audio not supported:', e);
+      this._notifyStateChange();
     }
   }
 
   async preloadZombieAudio() {
     if (!this.zombieBank) return 0;
     try {
+      let count = 0;
       if (this.ctx) {
-        return await this.zombieBank.decodeAll(this.ctx);
+        count = await this.zombieBank.decodeAll(this.ctx);
+      } else {
+        count = await this.zombieBank.preloadRaw();
       }
-      return await this.zombieBank.preloadRaw();
+      this._notifyStateChange();
+      return count;
     } catch (err) {
+      this.lastAudioError = err ? String(err.message || err) : 'preloadZombieAudio error';
       console.warn('[SoundManager] preloadZombieAudio error:', err);
+      this._notifyStateChange();
       return 0;
     }
   }
@@ -92,21 +160,35 @@ class SoundManager {
     const t = this.ctx.currentTime || 0;
 
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.35, t);
+    this.masterGain.gain.setValueAtTime(this.muted ? 0 : this.masterGainLevel, t);
     this.masterGain.connect(this.ctx.destination);
 
-    this.compressor = this.ctx.createDynamicsCompressor();
-    if (this.compressor.threshold) this.compressor.threshold.setValueAtTime(-14, t);
-    if (this.compressor.knee) this.compressor.knee.setValueAtTime(10, t);
-    if (this.compressor.ratio) this.compressor.ratio.setValueAtTime(6, t);
-    if (this.compressor.attack) this.compressor.attack.setValueAtTime(0.003, t);
-    if (this.compressor.release) this.compressor.release.setValueAtTime(0.15, t);
-    this.compressor.connect(this.masterGain);
+    if (typeof this.ctx.createDynamicsCompressor === 'function') {
+      this.compressor = this.ctx.createDynamicsCompressor();
+      if (this.compressor.threshold) this.compressor.threshold.setValueAtTime(-10, t);
+      if (this.compressor.knee) this.compressor.knee.setValueAtTime(12, t);
+      if (this.compressor.ratio) this.compressor.ratio.setValueAtTime(4, t);
+      if (this.compressor.attack) this.compressor.attack.setValueAtTime(0.003, t);
+      if (this.compressor.release) this.compressor.release.setValueAtTime(0.15, t);
+      this.compressor.connect(this.masterGain);
+    } else {
+      this.compressor = this.masterGain;
+    }
 
-    this.reverbNode = this.ctx.createConvolver();
-    const impulse = this.createReverbImpulse(1.1, 3.2);
-    if (impulse && this.reverbNode) {
-      this.reverbNode.buffer = impulse;
+    this.zombieBusGain = this.ctx.createGain();
+    if (this.zombieBusGain && this.zombieBusGain.gain) {
+      this.zombieBusGain.gain.setValueAtTime(1.65, t);
+    }
+    this.zombieBusGain.connect(this.compressor || this.masterGain);
+
+    if (typeof this.ctx.createConvolver === 'function') {
+      this.reverbNode = this.ctx.createConvolver();
+      const impulse = this.createReverbImpulse(1.1, 3.2);
+      if (impulse && this.reverbNode) {
+        this.reverbNode.buffer = impulse;
+      }
+    } else {
+      this.reverbNode = null;
     }
 
     this.reverbGain = this.ctx.createGain();
@@ -121,19 +203,105 @@ class SoundManager {
 
   ensureContext() {
     if (!this.initialized) this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+    if (this.ctx && this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+      Promise.resolve(this.ctx.resume()).then(() => {
+        this._notifyStateChange();
+      }).catch(err => {
+        console.warn('[SoundManager] ensureContext resume failed:', err);
+      });
     }
+  }
+
+  async unlockFromGesture() {
+    if (!this.initialized) this.init();
+    if (!this.ctx) return false;
+
+    if (this.ctx.state === 'suspended' && typeof this.ctx.resume === 'function') {
+      try {
+        await this.ctx.resume();
+      } catch (err) {
+        this.lastAudioError = err ? String(err.message || err) : 'Gesture resume failed';
+        console.warn('[SoundManager] Gesture resume error:', err);
+      }
+    }
+
+    if (this.zombieBank && !this.zombieBank.hasAnyBuffers()) {
+      this.preloadZombieAudio().catch(err => {
+        console.warn('[SoundManager] Post-unlock preloadZombieAudio failed:', err);
+      });
+    }
+
+    this._notifyStateChange();
+    return !this.ctx.state || this.ctx.state === 'running';
+  }
+
+  bindGestureUnlock(target) {
+    const evtTarget = target || (typeof window !== 'undefined' ? window : null);
+    if (!evtTarget || typeof evtTarget.addEventListener !== 'function' || this._gestureUnlockBound) {
+      return;
+    }
+    this._gestureUnlockBound = true;
+    const events = ['pointerdown', 'mousedown', 'keydown', 'touchstart', 'click'];
+    const onGesture = () => {
+      this.unlockFromGesture().then((isRunning) => {
+        if (isRunning && this.zombieBank && this.zombieBank.hasAnyBuffers() && this._gestureUnlockCleanup) {
+          this._gestureUnlockCleanup();
+        }
+      }).catch(err => {
+        console.warn('[SoundManager] Gesture unlock error:', err);
+      });
+    };
+    for (const ev of events) {
+      evtTarget.addEventListener(ev, onGesture, { capture: true, passive: true });
+    }
+    this._gestureUnlockCleanup = () => {
+      if (typeof evtTarget.removeEventListener === 'function') {
+        for (const ev of events) {
+          evtTarget.removeEventListener(ev, onGesture, { capture: true });
+        }
+      }
+      this._gestureUnlockBound = false;
+      this._gestureUnlockCleanup = null;
+    };
+  }
+
+  playUnlockTestChime() {
+    if (this.muted) return false;
+    this.ensureContext();
+    if (!this.ctx || (this.ctx.state && this.ctx.state !== 'running')) {
+      return false;
+    }
+    const t = this.ctx.currentTime || 0;
+    const target = this.masterGain || this.ctx.destination;
+    [440, 660].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const start = t + idx * 0.05;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.18, start);
+      gain.gain.exponentialRampToValueAtTime(0.005, start + 0.09);
+      osc.connect(gain);
+      gain.connect(target);
+      osc.start(start);
+      osc.stop(start + 0.09);
+    });
+    return true;
   }
 
   toggleMute() {
     this.muted = !this.muted;
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.35, this.ctx.currentTime || 0);
+      this.masterGain.gain.setValueAtTime(this.muted ? 0 : this.masterGainLevel, this.ctx.currentTime || 0);
     }
-    if (this.muted && this.droneActive) {
+    if (!this.muted) {
+      this.unlockFromGesture().catch(err => {
+        console.warn('[SoundManager] Unmute unlock error:', err);
+      });
+    } else if (this.droneActive) {
       this.stopHorrorAmbience();
     }
+    this._notifyStateChange();
     return this.muted;
   }
 
@@ -190,10 +358,10 @@ class SoundManager {
     return Math.max(0.18, Math.min(1.0, gain));
   }
 
-  createSpatialBus(sourceX, listenerX, reverbSend = 0.2, enableDistanceGain = true) {
+  createSpatialBus(sourceX, listenerX, reverbSend = 0.2, enableDistanceGain = true, targetNode = null) {
     if (!this.ctx) return null;
     const t = this.ctx.currentTime || 0;
-    const target = this.compressor || this.masterGain || this.ctx.destination;
+    const target = targetNode || this.compressor || this.masterGain || this.ctx.destination;
 
     const input = this.ctx.createGain();
     const distGain = enableDistanceGain ? this.computeDistanceGain(sourceX, listenerX) : 1.0;
@@ -421,18 +589,23 @@ class SoundManager {
     if (!this.zombieBank.canPlayEvent(event, extra.zombieId)) {
       return false;
     }
-    this.ensureContext();
+    if (this.ctx && this.ctx.state && this.ctx.state !== 'running') {
+      return false;
+    }
     if (!this.ctx) {
+      this.ensureContext();
+    }
+    if (!this.ctx || (this.ctx.state && this.ctx.state !== 'running')) {
       return false;
     }
 
     const reverbSend = extra.reverbSend !== undefined ? extra.reverbSend : 0.2;
-    const bus = this.createSpatialBus(sourceX, listenerX, reverbSend, false);
+    const bus = this.createSpatialBus(sourceX, listenerX, reverbSend, false, this.zombieBusGain || null);
     if (!bus || !bus.input) {
       return false;
     }
 
-    const distMap = ZOMBIE_EVENT_MAX_DIST || (typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null) || DEFAULT_ZOMBIE_EVENT_MAX_DIST;
+    const distMap = LoadedZombieEventMaxDist || (typeof window !== 'undefined' ? window.ZOMBIE_EVENT_MAX_DIST : null) || DEFAULT_ZOMBIE_EVENT_MAX_DIST;
     const maxDist = (distMap && distMap[event]) || 800;
 
     return this.zombieBank.playSample(this.ctx, bus.input, zType, event, {
@@ -928,12 +1101,13 @@ class SoundManager {
         const py = state && state.localPlayer ? state.localPlayer.y : undefined;
         const zType = (z && z.type) || 'NORMAL';
         if (ev === 'aggro') {
-          this.playZombieAggro(zType, z.x, px, z.y, py, z.id);
+          return this.playZombieAggro(zType, z.x, px, z.y, py, z.id);
         } else if (ev === 'step') {
-          this.playZombieStep(zType, z.x, px, z.y, py, z.id);
+          return this.playZombieStep(zType, z.x, px, z.y, py, z.id);
         } else if (ev === 'idle') {
-          this.playZombieGrowl(zType, z.x, px, z.y, py, z.id);
+          return this.playZombieGrowl(zType, z.x, px, z.y, py, z.id);
         }
+        return false;
       });
       return;
     }

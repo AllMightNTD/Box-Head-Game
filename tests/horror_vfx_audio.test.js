@@ -722,8 +722,227 @@ test('SoundManager.playZombieSample checks canPlayEvent before ensureContext', (
   assert.strictEqual(ensureContextCalled, 0, 'ensureContext must not be called when canPlayEvent returns false');
 });
 
+test('SoundManager setupAudioGraph handles missing compressor/convolver, configures zombieBusGain, and exposes diagnostics', () => {
+  const createdGains = [];
+  const baseCtx = createMockAudioContext();
+  const origCreateGain = baseCtx.createGain.bind(baseCtx);
+  baseCtx.createGain = () => {
+    const g = origCreateGain();
+    createdGains.push(g);
+    return g;
+  };
+  delete baseCtx.createDynamicsCompressor;
+  delete baseCtx.createConvolver;
 
+  const sm = new SoundManager();
+  sm.ctx = baseCtx;
+  assert.doesNotThrow(() => sm.setupAudioGraph());
+  sm.initialized = true;
 
+  assert.strictEqual(sm.masterGain.gain.value, 0.55);
+  assert.strictEqual(sm.compressor, sm.masterGain);
+  assert.strictEqual(sm.reverbNode, null);
+  assert.ok(sm.zombieBusGain, 'zombieBusGain must be created for zombie submix');
+  assert.strictEqual(sm.zombieBusGain.gain.value, 1.65);
 
+  const diag = sm.getAudioDiagnostics();
+  assert.strictEqual(diag.initialized, true);
+  assert.strictEqual(diag.muted, false);
+  assert.strictEqual(diag.ctxState, 'running');
+  assert.strictEqual(diag.totalCount, 72);
+  assert.strictEqual(diag.decodedCount, 0);
+});
 
+test('SoundManager.unlockFromGesture resumes suspended AudioContext, notifies subscribers, and playZombieSample skips suspended ctx', async () => {
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    await Promise.resolve();
+    mockCtx.state = 'running';
+    if (typeof mockCtx.onstatechange === 'function') mockCtx.onstatechange();
+  };
+
+  let decodeCalls = 0;
+  const sm = new SoundManager();
+  sm.zombieBank.decodeAll = async () => {
+    decodeCalls++;
+    sm.zombieBank.buffers.set('rotten/hit', [{ duration: 0.3 }]);
+    return 1;
+  };
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const events = [];
+  const unsub = sm.subscribe((d) => events.push(d.ctxState));
+
+  // While suspended, playZombieSample must NOT schedule or mutate cooldowns
+  sm.zombieBank.buffers.set('rotten/hit', [{ duration: 0.3 }]);
+  assert.strictEqual(sm.playZombieSample('NORMAL', 'hit', 800, 600, 800, 600, { zombieId: 'z_susp' }), false);
+
+  const unlocked = await sm.unlockFromGesture();
+  assert.strictEqual(unlocked, true);
+  assert.strictEqual(mockCtx.state, 'running');
+  assert.ok(events.includes('running'));
+  assert.strictEqual(sm.playUnlockTestChime(), true);
+
+  // When buffer count was 0, unlockFromGesture triggers decodeAll
+  sm.zombieBank.buffers.clear();
+  await sm.unlockFromGesture();
+  assert.strictEqual(decodeCalls, 1);
+
+  unsub();
+});
+
+test('SoundManager capture-phase bindGestureUnlock unlocks on pointerdown/keydown/touchstart/click', async () => {
+  const listeners = {};
+  const mockTarget = {
+    addEventListener: (ev, fn, opts) => {
+      listeners[ev] = { fn, opts };
+    },
+    removeEventListener: (ev) => {
+      delete listeners[ev];
+    }
+  };
+  const sm = new SoundManager();
+  let unlockCount = 0;
+  sm.unlockFromGesture = async () => {
+    unlockCount++;
+    return true;
+  };
+
+  sm.bindGestureUnlock(mockTarget);
+  for (const evName of ['pointerdown', 'mousedown', 'keydown', 'touchstart', 'click']) {
+    assert.ok(listeners[evName], `Expected ${evName} listener`);
+    assert.strictEqual(listeners[evName].opts.capture, true, `${evName} must use capture phase`);
+  }
+
+  listeners.pointerdown.fn();
+  assert.strictEqual(unlockCount, 1);
+});
+
+test('All 6 zombie types play WAV buffers across all 6 events through SoundManager', () => {
+  let startedCount = 0;
+  const ctx = createMockAudioContext();
+  const origBufSrc = ctx.createBufferSource;
+  ctx.createBufferSource = () => {
+    const src = origBufSrc();
+    src.start = () => {
+      startedCount++;
+      if (typeof src.onended === 'function') {
+        src.onended();
+      }
+    };
+    return src;
+  };
+
+  const sm = new SoundManager({ nowFn: () => 5000 });
+  sm.ctx = ctx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+
+  const profiles = ['rotten', 'ghoul', 'mutant', 'burned', 'butcher', 'boomer'];
+  const events = ['idle', 'aggro', 'attack', 'hit', 'die', 'step'];
+  for (const p of profiles) {
+    for (const ev of events) {
+      sm.zombieBank.buffers.set(`${p}/${ev}`, [{ duration: 0.4 }]);
+    }
+  }
+
+  const types = ['NORMAL', 'RUNNER', 'TANK', 'DEVIL', 'MUMMY', 'VAMPIRE'];
+  for (let i = 0; i < types.length; i++) {
+    const t = types[i];
+    const zid = `z_${t}_${i}`;
+    sm.playZombieHit(t, 'PISTOL', 820, 800, 610, 600, zid);
+    sm.playZombieDie(t, 820, 800, 610, 600, zid);
+    assert.strictEqual(sm.playZombieAttack(t, 820, 800, 610, 600, zid, 'melee'), true);
+    assert.strictEqual(sm.playZombieAggro(t, 820, 800, 610, 600, zid), true);
+    assert.strictEqual(sm.playZombieStep(t, 820, 800, 610, 600, zid), true);
+    sm.lastGrowlTime = -Infinity;
+    assert.strictEqual(sm.playZombieGrowl(t, 820, 800, 610, 600, zid), true);
+  }
+  assert.strictEqual(startedCount, 36, 'All 6 zombie types x 6 events must play WAV samples');
+  assert.strictEqual(sm.zombieBank.activeVoices, 0, 'Active voices must return to 0 when buffer playback ends');
+});
+
+test('Sound toggle state handling unlocks suspended AudioContext without muting and syncs WAV counts', async () => {
+  const sm = new SoundManager();
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    mockCtx.state = 'running';
+  };
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+  sm.zombieBank.decodeAll = async () => {
+    sm.zombieBank.buffers.set('rotten/idle', [{ duration: 0.4 }]);
+    return 1;
+  };
+
+  // Before unlock: suspended, unmuted, 0 decoded
+  const before = sm.getAudioDiagnostics();
+  assert.strictEqual(before.ctxState, 'suspended');
+  assert.strictEqual(before.muted, false);
+  assert.strictEqual(before.decodedCount, 0);
+
+  // Explicit unlock action from button click must keep muted=false and decode WAVs
+  const running = await sm.unlockFromGesture();
+  assert.strictEqual(running, true);
+  await sm.preloadZombieAudio();
+  const after = sm.getAudioDiagnostics();
+  assert.strictEqual(after.ctxState, 'running');
+  assert.strictEqual(after.muted, false);
+  assert.strictEqual(after.decodedCount, 1);
+  assert.strictEqual(sm.playUnlockTestChime(), true);
+});
+
+test('SoundManager.updateAmbienceGrowls retries aggro after gesture unlock when initial playback returned false', async () => {
+  let startedCount = 0;
+  const mockCtx = createMockAudioContext();
+  mockCtx.state = 'suspended';
+  mockCtx.resume = async () => {
+    await Promise.resolve();
+    mockCtx.state = 'running';
+  };
+  const origCreateBufSrc = mockCtx.createBufferSource;
+  mockCtx.createBufferSource = () => {
+    const src = origCreateBufSrc();
+    src.start = () => {
+      startedCount++;
+      if (typeof src.onended === 'function') {
+        src.onended();
+      }
+    };
+    return src;
+  };
+
+  const sm = new SoundManager();
+  sm.ctx = mockCtx;
+  sm.setupAudioGraph();
+  sm.initialized = true;
+  sm.zombieBank.buffers.set('rotten/aggro', [{ duration: 0.5 }]);
+
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 1,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_retry_sm', type: 'NORMAL', x: 850, y: 600, isFrozen: false, isStunned: false }]
+  });
+
+  assert.strictEqual(sm.zombieBank.zombieStates.get('z_retry_sm').hasAggroed, false);
+  assert.strictEqual(startedCount, 0);
+
+  await sm.unlockFromGesture();
+
+  sm.updateHorrorAmbience(0.05, {
+    isInGame: true,
+    wave: 1,
+    localPlayer: { x: 800, y: 600, hp: 100, maxHp: 100 },
+    zombies: [{ id: 'z_retry_sm', type: 'NORMAL', x: 850, y: 600, isFrozen: false, isStunned: false }]
+  });
+
+  assert.strictEqual(startedCount, 1);
+  assert.strictEqual(sm.zombieBank.zombieStates.get('z_retry_sm').hasAggroed, true);
+});
 
