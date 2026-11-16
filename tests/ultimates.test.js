@@ -12,7 +12,7 @@ test('UltimateConfig maps classes and legacy skins to valid ultimate specs', () 
 
   // Assert
   assert.strictEqual(humanUlt.id, 'TACTICAL_DRONE');
-  assert.strictEqual(warriorUlt.id, 'SEISMIC_SLAM');
+  assert.strictEqual(warriorUlt.id, 'AVATAR_OF_WAR');
   assert.strictEqual(mageUlt.id, 'BLINK_FROST_NOVA');
   assert.strictEqual(legacyUlt.id, 'TACTICAL_DRONE');
 });
@@ -178,37 +178,47 @@ const { io: ioClient } = require('socket.io-client');
 const { GameRoom } = require('../server/game/GameRoom.js');
 const { startServer } = require('../server/server.js');
 
-test('GameRoom: Warrior Seismic Slam stuns zombies, clears fireballs, spares barricades', (t) => {
+test('GameRoom: Warrior Avatar of War activates, spawns fire_slash on shoot, and spares barricades', (t) => {
   const mockIo = { to: () => ({ emit: () => {} }), emit: () => {} };
   const room = new GameRoom('r_war', 'Warrior Test', mockIo);
   t.after(() => room.stop());
 
   const warrior = room.addPlayer('w1', 'Tank', 'WARRIOR');
+  const ally = room.addPlayer('h1', 'Builder', 'HUMAN');
   room.startGame();
   warrior.x = 500;
   warrior.y = 500;
   warrior.ultCharge = 100;
 
-  const zNear = new Zombie('zn', 'NORMAL', 620, 500);
-  const zBoss = new Zombie('zb', 'TANK', 650, 500);
-  const fireball = new Bullet('fb1', 'devil_1', 560, 500, Math.PI, { type: 'fireball', isFireball: true });
-  room.zombies.push(zNear, zBoss);
-  room.bullets.push(fireball);
-
-  // Place friendly barricade inside slam radius
-  warrior.weapons.BARRICADE.unlocked = true;
-  warrior.selectedWeapon = 'BARRICADE';
-  warrior.fireCooldown = 0;
-  room.handlePlaceItem('w1');
+  // Human ally places friendly barricade
+  ally.x = 440;
+  ally.y = 500;
+  ally.angle = 0;
+  ally.weapons.BARRICADE.unlocked = true;
+  ally.weapons.BARRICADE.ammo = 5;
+  ally.selectedWeapon = 'BARRICADE';
+  ally.fireCooldown = 0;
+  room.handlePlaceItem('h1');
+  assert.ok(room.barricades.length > 0, 'Barricade should be placed');
   const barHpBefore = room.barricades[0].hp;
 
+  // Warrior activates AVATAR_OF_WAR ultimate
   const res = room.handleUltimate('w1', { angle: 0 });
   assert.strictEqual(res.activated, true);
   assert.strictEqual(warrior.ultCharge, 0);
-  assert.strictEqual(zNear.isDead, true); // 120 dmg kills 80 HP Normal zombie
-  assert.strictEqual(zBoss.stunTimer, 1.5);
-  assert.strictEqual(room.bullets.length, 0); // fireball destroyed
-  assert.strictEqual(room.barricades[0].hp, barHpBefore); // barricade unharmed
+  assert.strictEqual(warrior.warriorState.avatarActive, true);
+  assert.strictEqual(warrior.warriorState.avatarTimer, 10);
+
+  // While in Avatar, handleShoot spawns a piercing fire_slash bullet
+  warrior.fireCooldown = 0;
+  room.handleShoot('w1');
+  const fireSlash = room.bullets.find(b => b.type === 'fire_slash');
+  assert.ok(fireSlash, 'Should spawn fire_slash bullet in Avatar of War');
+  assert.strictEqual(fireSlash.penetration, true);
+  assert.strictEqual(fireSlash.damage, 55);
+
+  // Barricade remains completely unharmed
+  assert.strictEqual(room.barricades[0].hp, barHpBefore);
 });
 
 test('GameRoom: Human Tactical Drone shoots zombies and grants Infinite Ammo inside aura', (t) => {

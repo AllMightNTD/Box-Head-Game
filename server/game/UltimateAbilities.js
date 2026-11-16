@@ -1,5 +1,6 @@
 const { TacticalDrone } = require('./TacticalDrone.js');
 const { getUltimateConfigForClass } = require('./UltimateConfig.js');
+const { activateAvatarOfWar } = require('./WarriorAbilities.js');
 
 function isPositionBlocked(x, y, radius, map, barricades) {
   if (map && map.isWall(x, y, radius)) {
@@ -182,10 +183,22 @@ function executeTacticalDrone(player, conf, room) {
 
 function triggerPlayerUltimate(player, angle, room) {
   if (!player || player.isDead || player.isDowned) return { activated: false };
-  if (room.state !== 'PLAYING' && room.state !== 'INTERMISSION') return { activated: false };
+  if (!room || (room.state !== 'PLAYING' && room.state !== 'INTERMISSION')) return { activated: false };
   if (player.ultCharge < player.ultMaxCharge) return { activated: false };
 
   const conf = getUltimateConfigForClass(player.character);
+
+  if (conf.id === 'AVATAR_OF_WAR') {
+    const event = activateAvatarOfWar(player, room);
+    if (!event) {
+      return { activated: false, reason: 'WARRIOR_ULT_UNAVAILABLE' };
+    }
+    if (room && Array.isArray(room.eventsBuffer)) {
+      room.eventsBuffer.push(event);
+    }
+    return { activated: true, event };
+  }
+
   player.ultCharge = 0;
 
   let event = null;
@@ -197,7 +210,9 @@ function triggerPlayerUltimate(player, angle, room) {
     event = executeTacticalDrone(player, conf, room);
   }
 
-  room.eventsBuffer.push(event);
+  if (event && room && Array.isArray(room.eventsBuffer)) {
+    room.eventsBuffer.push(event);
+  }
   return { activated: true, event };
 }
 

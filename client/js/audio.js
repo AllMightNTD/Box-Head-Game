@@ -49,18 +49,26 @@ class SoundManager {
     this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.35, t);
     this.masterGain.connect(this.ctx.destination);
 
-    this.compressor = this.ctx.createDynamicsCompressor();
-    if (this.compressor.threshold) this.compressor.threshold.setValueAtTime(-14, t);
-    if (this.compressor.knee) this.compressor.knee.setValueAtTime(10, t);
-    if (this.compressor.ratio) this.compressor.ratio.setValueAtTime(6, t);
-    if (this.compressor.attack) this.compressor.attack.setValueAtTime(0.003, t);
-    if (this.compressor.release) this.compressor.release.setValueAtTime(0.15, t);
-    this.compressor.connect(this.masterGain);
+    if (typeof this.ctx.createDynamicsCompressor === 'function') {
+      this.compressor = this.ctx.createDynamicsCompressor();
+      if (this.compressor.threshold) this.compressor.threshold.setValueAtTime(-14, t);
+      if (this.compressor.knee) this.compressor.knee.setValueAtTime(10, t);
+      if (this.compressor.ratio) this.compressor.ratio.setValueAtTime(6, t);
+      if (this.compressor.attack) this.compressor.attack.setValueAtTime(0.003, t);
+      if (this.compressor.release) this.compressor.release.setValueAtTime(0.15, t);
+      this.compressor.connect(this.masterGain);
+    } else {
+      this.compressor = this.masterGain;
+    }
 
-    this.reverbNode = this.ctx.createConvolver();
-    const impulse = this.createReverbImpulse(1.1, 3.2);
-    if (impulse && this.reverbNode) {
-      this.reverbNode.buffer = impulse;
+    if (typeof this.ctx.createConvolver === 'function') {
+      this.reverbNode = this.ctx.createConvolver();
+      const impulse = this.createReverbImpulse(1.1, 3.2);
+      if (impulse && this.reverbNode) {
+        this.reverbNode.buffer = impulse;
+      }
+    } else {
+      this.reverbNode = null;
     }
 
     this.reverbGain = this.ctx.createGain();
@@ -983,12 +991,207 @@ class SoundManager {
         osc.start(noteTime);
         osc.stop(noteTime + 0.1);
       });
+    } else if (ultId === 'AVATAR_OF_WAR') {
+      this.playWarriorSkill('AVATAR_OF_WAR');
+    }
+  }
+
+  get isMuted() {
+    return Boolean(this.muted);
+  }
+
+  playWarriorSkill(skillIdOrEvent, subType) {
+    if (this.muted || this.isMuted) return;
+    this.ensureContext();
+    if (!this.ctx) return;
+
+    let skillId = null;
+    let type = null;
+    let sub = subType;
+
+    if (typeof skillIdOrEvent === 'object' && skillIdOrEvent !== null) {
+      type = skillIdOrEvent.type;
+      skillId = skillIdOrEvent.skillId || (type === 'ULTIMATE' && skillIdOrEvent.ultId === 'AVATAR_OF_WAR' ? 'AVATAR_OF_WAR' : null);
+      if (!sub) sub = skillIdOrEvent.subType || type;
+    } else if (typeof skillIdOrEvent === 'string') {
+      skillId = skillIdOrEvent;
+      type = 'WARRIOR_SKILL';
+    }
+
+    const t = this.ctx.currentTime;
+
+    if (type === 'WARRIOR_COUNTER' || skillId === 'WARRIOR_COUNTER') {
+      // Clashing metallic parry clang
+      [1100, 2400].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = idx === 0 ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.5, t);
+        gain.gain.exponentialRampToValueAtTime(0.005, t + 0.28);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.28);
+      });
+      return;
+    }
+
+    if (type === 'WARRIOR_MARK_EXPLODE' || skillId === 'WARRIOR_MARK_EXPLODE') {
+      // Detonation implosion pop
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.25);
+      gain.gain.setValueAtTime(0.6, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.25);
+      return;
+    }
+
+    if (type === 'WARRIOR_AVATAR_END' || skillId === 'WARRIOR_AVATAR_END') {
+      // Final Fire Nova roar and explosion
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, t);
+      osc.frequency.exponentialRampToValueAtTime(25, t + 0.5);
+      gain.gain.setValueAtTime(0.7, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.5);
+      return;
+    }
+
+    if (skillId === 'BERSERKER_STANCE') {
+      // Crisp blade slash whoosh
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(420, t);
+      osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.12);
+
+    } else if (skillId === 'JUGGERNAUT_STANCE') {
+      // Heavy greatsword cleave
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(50, t + 0.2);
+      gain.gain.setValueAtTime(0.6, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.2);
+
+    } else if (skillId === 'BLADE_WHIRLWIND') {
+      // Spinning whirlwind blade slice
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(300, t);
+      osc.frequency.linearRampToValueAtTime(600, t + 0.15);
+      osc.frequency.exponentialRampToValueAtTime(150, t + 0.3);
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.3);
+
+    } else if (skillId === 'SHADOW_DASH_SLASH') {
+      // High-speed shadow slice
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, t);
+      osc.frequency.exponentialRampToValueAtTime(120, t + 0.16);
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.16);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.16);
+
+    } else if (skillId === 'SEISMIC_SLAM') {
+      // Deep ground pound
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(160, t);
+      osc.frequency.exponentialRampToValueAtTime(30, t + 0.4);
+      gain.gain.setValueAtTime(0.85, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.4);
+
+    } else if (skillId === 'WAR_CRY') {
+      // War Cry brass horn / bellowing roar
+      [220, 330].forEach((freq) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.linearRampToValueAtTime(freq * 1.25, t + 0.35);
+        gain.gain.setValueAtTime(0.4, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.35);
+      });
+
+    } else if (skillId === 'COUNTER_SHIELD_BASH') {
+      // Frontal shield guard whoosh
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(350, t);
+      osc.frequency.exponentialRampToValueAtTime(80, t + 0.15);
+      gain.gain.setValueAtTime(0.45, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.15);
+
+    } else if (skillId === 'AVATAR_OF_WAR') {
+      // Avatar of War roar
+      [110, 165, 220].forEach((freq) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.linearRampToValueAtTime(freq * 1.4, t + 0.4);
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.5);
+      });
     }
   }
 }
 
 // Global sound manager instance for browser environments
 if (typeof window !== 'undefined') {
+  window.SoundManager = SoundManager;
   window.soundManager = new SoundManager();
 }
 

@@ -6,6 +6,14 @@ const { GameMap } = require('./Map.js');
 const { WEAPONS } = require('./WeaponsConfig.js');
 const { ULT_CHARGE_CONFIG } = require('./UltimateConfig.js');
 const { triggerPlayerUltimate } = require('./UltimateAbilities.js');
+const { WARRIOR_ARMOR_CONFIG } = require('./WarriorSkillsConfig.js');
+const {
+  executeWarriorBasicAttack,
+  triggerWarriorSkill,
+  updateWarriorRoomSystems,
+  applyWarriorAmmoPickup,
+  isFrontalShieldBlocking
+} = require('./WarriorAbilities.js');
 
 class GameRoom {
   constructor(id, name, io, mapId = 'THE_ROOMS') {
@@ -21,6 +29,8 @@ class GameRoom {
     this.barricades = [];
     this.pickups = [];
     this.drones = [];
+    this.groundZones = [];
+    this.pendingSlams = [];
 
     this.state = 'LOBBY'; // LOBBY | PLAYING | INTERMISSION | GAMEOVER
     this.wave = 1;
@@ -71,6 +81,8 @@ class GameRoom {
     this.barricades = [];
     this.pickups = [];
     this.drones = [];
+    this.groundZones = [];
+    this.pendingSlams = [];
     this.eventsBuffer = [{ type: 'SESSION_RESET' }];
 
     // Reset player positions & health
@@ -100,7 +112,13 @@ class GameRoom {
           maxAmmo: w.maxAmmo
         };
       }
-      p.selectedWeapon = 'PISTOL';
+      if (p.character === 'WARRIOR') {
+        p.resetWarriorState();
+      } else {
+        p.armor = 0;
+        p.hasWarCryBuff = false;
+        p.selectedWeapon = 'PISTOL';
+      }
       idx++;
     }
 
@@ -156,6 +174,11 @@ class GameRoom {
   handleShoot(socketId) {
     const player = this.players.get(socketId);
     if (!player) return;
+
+    if (player.character === 'WARRIOR') {
+      executeWarriorBasicAttack(player, this);
+      return;
+    }
 
     const weapon = WEAPONS[player.selectedWeapon];
     if (!weapon) return;
@@ -294,6 +317,27 @@ class GameRoom {
     return triggerPlayerUltimate(player, angle, this);
   }
 
+  handleSkill(socketId, payload = {}) {
+    const player = this.players.get(socketId);
+    if (!player || player.character !== 'WARRIOR') {
+      return { activated: false };
+    }
+    if (this.state !== 'PLAYING' && this.state !== 'INTERMISSION') {
+      return { activated: false };
+    }
+
+    const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload))
+      ? payload
+      : {};
+
+    const slot = safePayload.slot;
+    const angle = (safePayload.angle !== undefined)
+      ? safePayload.angle
+      : player.angle;
+
+    return triggerWarriorSkill(player, slot, angle, this);
+  }
+
   triggerExplosion(x, y, radius, damage, ownerId) {
     this.eventsBuffer.push({
       type: 'EXPLOSION',
@@ -336,7 +380,7 @@ class GameRoom {
       if (p.isDead) continue;
       const d = Math.hypot(p.x - x, p.y - y);
       if (d <= radius + p.radius) {
-        p.takeDamage(Math.round(damage * 0.25));
+        p.takeDamage(Math.round(damage * 0.25), 'EXPLOSION', { sourceX: x, sourceY: y });
       }
     }
 
@@ -449,6 +493,9 @@ class GameRoom {
             p.isDowned = false;
             p.hp = 50;
           }
+          if (!p.isDead && p.character === 'WARRIOR') {
+            p.restoreArmor(Math.ceil(p.maxArmor * WARRIOR_ARMOR_CONFIG.WAVE_CLEAR_RESTORE_RATIO));
+          }
         }
       }
     } else if (this.state === 'INTERMISSION') {
@@ -478,6 +525,11 @@ class GameRoom {
           const p = playersArr[j];
           if (p.isDead) continue;
           if (b.checkHit(p)) {
+            if (p.character === 'WARRIOR' && isFrontalShieldBlocking(p, b.x, b.y)) {
+              p.takeDamage(b.explosionDamage, 'FIRE', { sourceX: b.x, sourceY: b.y });
+              b.isDead = true;
+              break;
+            }
             b.isDead = true;
             this.triggerExplosion(b.x, b.y, b.explosionRadius, b.explosionDamage, null);
             break;
@@ -489,7 +541,10 @@ class GameRoom {
           const z = this.zombies[j];
           if (z.isDead) continue;
           if (b.checkHit(z)) {
-            z.takeDamage(b.damage, 'BULLET');
+            const shooter = this.players.get(b.ownerId);
+            const warCryMultiplier = (shooter && shooter.hasWarCryBuff) ? 1.15 : 1.0;
+            const effectiveDamage = Math.round(b.damage * warCryMultiplier);
+            z.takeDamage(effectiveDamage, 'BULLET');
             z.applyKnockback(b.angle, b.knockback);
             this.eventsBuffer.push({
               type: 'HIT',
@@ -500,7 +555,6 @@ class GameRoom {
               zType: z.type
             });
 
-            const shooter = this.players.get(b.ownerId);
             if (shooter && !b.fromUlt) {
               const hitCharge = b.type === 'shotgun'
                 ? ULT_CHARGE_CONFIG.SHOTGUN_PELLET_HIT
@@ -609,6 +663,9 @@ class GameRoom {
       }
     }
 
+    // 4.6. Update Authoritative Warrior Room Systems
+    updateWarriorRoomSystems(dt, this);
+
     // 5. Update Pickups & Check collection
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
@@ -626,10 +683,14 @@ class GameRoom {
             player.heal(40);
           } else {
             // Restore ammo to current weapon & others
-            for (const key of Object.keys(player.weapons)) {
-              if (player.weapons[key].unlocked) {
-                const conf = WEAPONS[key];
-                player.addAmmo(key, Math.ceil(conf.startingAmmo * 0.75));
+            if (player.character === 'WARRIOR') {
+              applyWarriorAmmoPickup(player);
+            } else {
+              for (const key of Object.keys(player.weapons)) {
+                if (player.weapons[key].unlocked) {
+                  const conf = WEAPONS[key];
+                  player.addAmmo(key, Math.ceil(conf.startingAmmo * 0.75));
+                }
               }
             }
           }
@@ -661,6 +722,15 @@ class GameRoom {
       barricades: this.barricades.map(b => b.serialize()),
       pickups: this.pickups.map(p => ({ id: p.id, type: p.type, x: p.x, y: p.y })),
       drones: this.drones.map(d => d.serialize()),
+      groundZones: (this.groundZones || []).map(gz => ({
+        id: gz.id,
+        type: gz.type,
+        ownerId: gz.ownerId,
+        x: Math.round(gz.x),
+        y: Math.round(gz.y),
+        radius: gz.radius,
+        timer: Number(gz.timer.toFixed(2))
+      })),
       events: [...this.eventsBuffer]
     };
   }
