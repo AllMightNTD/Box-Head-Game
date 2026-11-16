@@ -12,8 +12,8 @@ class Bullet {
     this.distanceTraveled = 0;
     this.isDead = false;
 
-    this.type = options.type || 'bullet'; // bullet | shotgun | rocket | grenade | railgun | fireball
     this.isFireball = Boolean(options.isFireball);
+    this.type = options.type || (this.isFireball ? 'fireball' : 'bullet'); // bullet | shotgun | rocket | grenade | railgun | fireball
     this.isExplosive = options.type === 'rocket' || options.type === 'grenade' || this.isFireball;
     this.explosionRadius = options.explosionRadius || (this.isFireball ? 90 : 160);
     this.explosionDamage = options.explosionDamage || this.damage;
@@ -42,7 +42,8 @@ class Bullet {
           y: this.y,
           radius: this.explosionRadius,
           damage: this.explosionDamage,
-          ownerId: this.ownerId
+          ownerId: this.ownerId,
+          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
         };
       }
     }
@@ -62,7 +63,8 @@ class Bullet {
           y: this.y,
           radius: this.explosionRadius,
           damage: this.explosionDamage,
-          ownerId: this.ownerId
+          ownerId: this.ownerId,
+          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
         };
       }
       return null;
@@ -78,7 +80,8 @@ class Bullet {
           y: this.y,
           radius: this.explosionRadius,
           damage: this.explosionDamage,
-          ownerId: this.ownerId
+          ownerId: this.ownerId,
+          source: (this.type || (this.isFireball ? 'fireball' : 'generic')).toUpperCase()
         };
       }
       return null;
