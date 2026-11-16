@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: boxhead-multiplayer-game
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DEPLOY_PLATFORM
+        value: render
+      - key: DEPLOY_MODE
+        value: monolith
+      - key: SIMULATION_HZ
+        value: "50"
+      - key: SNAPSHOT_HZ
+        value: "25"
+      - key: MAX_ROOMS
+        value: "20"
+      - key: CORS_ORIGIN
+        value: "*"
