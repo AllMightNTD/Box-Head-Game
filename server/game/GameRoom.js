@@ -24,10 +24,22 @@ const {
 } = require('./WarriorAbilities.js');
 
 class GameRoom {
-  constructor(id, name, io, mapId = 'THE_ROOMS') {
+  constructor(id, name, io, mapId = 'THE_ROOMS', options = {}) {
     this.id = id;
     this.name = name;
     this.io = io;
+
+    const simHz = Number.isFinite(options.simulationHz) && options.simulationHz > 0
+      ? options.simulationHz
+      : 50;
+    const snapHz = Number.isFinite(options.snapshotHz) && options.snapshotHz > 0
+      ? Math.min(simHz, options.snapshotHz)
+      : simHz;
+
+    this.simulationHz = simHz;
+    this.snapshotHz = snapHz;
+    this.snapshotIntervalTicks = Math.max(1, Math.round(simHz / snapHz));
+    this.tickCounter = 0;
 
     this.mapId = mapId;
     this.map = new GameMap(mapId);
@@ -137,10 +149,15 @@ class GameRoom {
 
     this.startWave(1);
 
+    this.tickCounter = 0;
     if (!this.gameLoopInterval) {
+      const tickDt = 1 / this.simulationHz;
+      const intervalMs = Math.max(1, Math.round(tickDt * 1000));
       this.gameLoopInterval = setInterval(() => {
-        this.tick(0.02); // 50 Hz tick rate
-      }, 20);
+        this.tickCounter += 1;
+        const shouldEmitSnapshot = (this.tickCounter % this.snapshotIntervalTicks) === 0;
+        this.tick(tickDt, { emitSnapshot: shouldEmitSnapshot });
+      }, intervalMs);
     }
   }
 
@@ -439,7 +456,8 @@ class GameRoom {
     }
   }
 
-  tick(dt) {
+  tick(dt, options = {}) {
+    const emitSnapshot = options.emitSnapshot !== false;
     if (this.state === 'GAMEOVER') return;
 
     const playersArr = Array.from(this.players.values());
@@ -751,8 +769,10 @@ class GameRoom {
       }
     }
 
-    // 6. Broadcast Snapshot
-    this.broadcastSnapshot();
+    // 6. Broadcast Snapshot (throttled to snapshotHz while events remain buffered until emitted)
+    if (emitSnapshot) {
+      this.broadcastSnapshot();
+    }
   }
 
   getSnapshot() {
