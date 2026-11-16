@@ -92,6 +92,11 @@ class Zombie {
     this.freezeTimer = 0;
     this.slowTimer = 0;
     this.slowFactor = 1.0;
+    this.tauntTimer = 0;
+    this.tauntTargetId = null;
+    this.fearTimer = 0;
+    this.fearSourceX = 0;
+    this.fearSourceY = 0;
 
     // Transient flags for client animations
     this.isAttacking = false;
@@ -99,9 +104,10 @@ class Zombie {
   }
 
   /**
-   * Applies movement slowdown to zombie without letting weaker slows dilute stronger ones.
+   * Applies movement slowdown to zombie.
+   * Preserves stronger slow (smaller slowFactor) without letting weaker slows dilute it.
    * @param {number} duration - Duration in seconds
-   * @param {number} slowFactor - Speed multiplier in (0, 1]
+   * @param {number} slowFactor - Speed multiplier in range (0, 1]
    */
   applySlow(duration, slowFactor) {
     if (this.isDead || typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return;
@@ -116,6 +122,37 @@ class Zombie {
     }
   }
 
+  /**
+   * Forces zombie to target a specific player.
+   * Applies to all living zombie types (including TANK and DEVIL).
+   * @param {string} targetId
+   * @param {number} duration
+   */
+  applyTaunt(targetId, duration) {
+    if (this.isDead || typeof targetId !== 'string' || targetId.trim() === '') return;
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return;
+
+    this.tauntTargetId = targetId;
+    this.tauntTimer = Math.max(this.tauntTimer, duration);
+  }
+
+  /**
+   * Causes non-boss zombie to flee away from source coordinates.
+   * Bosses (TANK, DEVIL) are immune to Fear.
+   * @param {number} sourceX
+   * @param {number} sourceY
+   * @param {number} duration
+   */
+  applyFear(sourceX, sourceY, duration) {
+    if (this.isDead || this.type === 'TANK' || this.type === 'DEVIL') return;
+    if (typeof sourceX !== 'number' || !Number.isFinite(sourceX)) return;
+    if (typeof sourceY !== 'number' || !Number.isFinite(sourceY)) return;
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return;
+
+    this.fearSourceX = sourceX;
+    this.fearSourceY = sourceY;
+    this.fearTimer = Math.max(this.fearTimer, duration);
+  }
   applyStun(duration) {
     if (this.isDead || typeof duration !== 'number' || duration <= 0) return;
     this.stunTimer = Math.max(this.stunTimer, duration);
@@ -177,6 +214,15 @@ class Zombie {
       this.slowTimer = Math.max(0, this.slowTimer - dt);
       if (this.slowTimer === 0) this.slowFactor = 1.0;
     }
+    if (this.tauntTimer > 0) {
+      this.tauntTimer = Math.max(0, this.tauntTimer - dt);
+      if (this.tauntTimer === 0) {
+        this.tauntTargetId = null;
+      }
+    }
+    if (this.fearTimer > 0) {
+      this.fearTimer = Math.max(0, this.fearTimer - dt);
+    }
 
     // Stunned or frozen zombies cannot act, move, or attack
     if (this.stunTimer > 0 || this.freezeTimer > 0) {
@@ -185,16 +231,64 @@ class Zombie {
 
     const speedMult = this.slowTimer > 0 ? this.slowFactor : 1.0;
 
-    // Find nearest alive player
+    // Feared zombies flee away from fear source and return early (skip attacks and abilities)
+    if (this.fearTimer > 0 && this.type !== 'TANK' && this.type !== 'DEVIL') {
+      const dx = this.x - this.fearSourceX;
+      const dy = this.y - this.fearSourceY;
+      let awayAngle = this.angle;
+      if (dx !== 0 || dy !== 0) {
+        awayAngle = Math.atan2(dy, dx);
+      }
+      this.angle = awayAngle;
+      const fearSpeed = this.speed * speedMult * 0.8;
+      const vx = Math.cos(awayAngle) * fearSpeed * dt;
+      const vy = Math.sin(awayAngle) * fearSpeed * dt;
+      this.moveWithCollision(vx, vy, map, barricades);
+      return;
+    }
+
+    // Target selection: Taunt overrides nearest player, with fallback if taunt target is downed/dead
     let target = null;
     let minDist = Infinity;
-    for (let i = 0; i < players.length; i++) {
-      const p = players[i];
-      if (p.isDead) continue;
-      const d = Math.hypot(p.x - this.x, p.y - this.y);
-      if (d < minDist) {
-        minDist = d;
-        target = p;
+
+    if (this.tauntTimer > 0 && this.tauntTargetId) {
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        if (p.id === this.tauntTargetId && !p.isDead && !p.isDowned) {
+          target = p;
+          minDist = Math.hypot(p.x - this.x, p.y - this.y);
+          break;
+        }
+      }
+      // If taunt target died, was downed, or left, immediately clear taunt
+      if (!target) {
+        this.tauntTimer = 0;
+        this.tauntTargetId = null;
+      }
+    }
+
+    if (!target) {
+      // First pass: find nearest alive, non-downed player
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        if (p.isDead || p.isDowned) continue;
+        const d = Math.hypot(p.x - this.x, p.y - this.y);
+        if (d < minDist) {
+          minDist = d;
+          target = p;
+        }
+      }
+      // Fallback: if all alive players are downed, target nearest alive player
+      if (!target) {
+        for (let i = 0; i < players.length; i++) {
+          const p = players[i];
+          if (p.isDead) continue;
+          const d = Math.hypot(p.x - this.x, p.y - this.y);
+          if (d < minDist) {
+            minDist = d;
+            target = p;
+          }
+        }
       }
     }
 
@@ -266,8 +360,8 @@ class Zombie {
     if (minDist <= meleeRange) {
       if (this.attackCooldown <= 0) {
         this.isAttacking = true;
-        target.takeDamage(this.damage, 'MELEE');
-        if (this.type === 'VAMPIRE') {
+        const dmgResult = target.takeDamage(this.damage, 'MELEE', { sourceX: this.x, sourceY: this.y });
+        if (this.type === 'VAMPIRE' && (!dmgResult || !dmgResult.blocked)) {
           this.hp = Math.min(this.maxHp, this.hp + 15); // Lifesteal
         }
         this.attackCooldown = this.attackInterval;
@@ -338,7 +432,9 @@ class Zombie {
       isHit: this.isHit,
       isStunned: this.stunTimer > 0,
       isFrozen: this.freezeTimer > 0,
-      isChilled: this.slowTimer > 0 && this.freezeTimer <= 0
+      isChilled: this.slowTimer > 0 && this.freezeTimer <= 0,
+      isTaunted: this.tauntTimer > 0,
+      isFeared: this.fearTimer > 0
     };
   }
 }
