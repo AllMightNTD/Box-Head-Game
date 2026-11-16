@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Combat Defibrillator (-Revive Time to 1s, Teammate Revived with 60% HP) [CO-OP] -->
+  <!-- Portable Unit Case -->
+  <rect x="10" y="16" width="44" height="38" rx="8" fill="#ffd600" stroke="#111111" stroke-width="4"/>
+  <!-- Handle -->
+  <path d="M24 16 V10 C24 8 26 6 28 6 H36 C38 6 40 8 40 10 V16" fill="none" stroke="#111111" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- ECG Heart Monitor Screen -->
+  <rect x="16" y="24" width="22" height="14" rx="3" fill="#1b5e20" stroke="#111111" stroke-width="2"/>
+  <!-- ECG Vital Line -->
+  <path d="M18 31 H22 L24 26 L27 36 L29 28 L31 31 H36" fill="none" stroke="#00e676" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Defib Shock Paddles -->
+  <rect x="42" y="24" width="8" height="18" rx="2" fill="#d50000" stroke="#111111" stroke-width="2"/>
+  <rect x="44" y="26" width="4" height="14" fill="#ff5252"/>
+  <!-- Electric Shock Zap Spark -->
+  <polygon points="34,42 30,48 35,48 32,54 40,46 36,46" fill="#00e5ff" stroke="#111111" stroke-width="1.5"/>
+</svg>
+

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Fertilizer Bag (+Harvesting) -->
+  <!-- Sack body -->
+  <path d="M16 26 C14 42 12 54 16 56 C20 58 44 58 48 56 C52 54 50 42 48 26 Z" fill="#bcaaa4" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Tied sack neck -->
+  <ellipse cx="32" cy="24" rx="14" ry="4" fill="#a1887f" stroke="#1a1a1a" stroke-width="3"/>
+  <!-- Sack top ruffle -->
+  <path d="M20 22 C24 16 28 18 32 16 C36 18 40 16 44 22 Z" fill="#bcaaa4" stroke="#1a1a1a" stroke-width="3"/>
+  <line x1="22" y1="23" x2="42" y2="23" stroke="#ffd600" stroke-width="3"/>
+  <!-- Golden Dollar / Crop symbol on sack -->
+  <circle cx="32" cy="42" r="10" fill="#ffd600" stroke="#1a1a1a" stroke-width="2.5"/>
+  <text x="32" y="47" font-family="sans-serif" font-weight="900" font-size="14" fill="#1a1a1a" text-anchor="middle">$</text>
+  <!-- Sprouting Green Leaf -->
+  <path d="M32 16 C28 8 32 2 38 4 C38 10 34 14 32 16 Z" fill="#00e676" stroke="#1a1a1a" stroke-width="2"/>
+  <path d="M32 16 C36 8 42 8 44 12 C38 14 34 16 32 16 Z" fill="#76ff03" stroke="#1a1a1a" stroke-width="2"/>
+</svg>
+

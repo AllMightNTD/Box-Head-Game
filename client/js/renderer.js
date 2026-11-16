@@ -32,6 +32,10 @@ class Renderer {
     // Visual particles and floating texts
     this.particles = [];
     this.floatingTexts = [];
+    this.damageNumbers = [];
+    this.zombieFlashTimers = new Map();
+    this.lastZombieHps = new Map();
+    this.lastPlayerHps = new Map();
     this.muzzleFlashes = [];
     this.ambientParticles = [];
     this.shockwaves = [];
@@ -66,6 +70,10 @@ class Renderer {
     this.corpses = [];
     this.particles = [];
     this.floatingTexts = [];
+    this.damageNumbers = [];
+    if (this.zombieFlashTimers) this.zombieFlashTimers.clear();
+    if (this.lastZombieHps) this.lastZombieHps.clear();
+    if (this.lastPlayerHps) this.lastPlayerHps.clear();
     this.muzzleFlashes = [];
     this.ambientParticles = [];
     this.shockwaves = [];
@@ -223,6 +231,127 @@ class Renderer {
       life: 1.2,
       maxLife: 1.2
     });
+  }
+
+  addDamageNumber(x, y, damage, type = 'DEFAULT') {
+    if (!this.damageNumbers) this.damageNumbers = [];
+    const t = String(type || 'DEFAULT').toUpperCase();
+    let color = '#ffffff';
+    let font = 'bold 16px "Impact", "Segoe UI", sans-serif';
+    let text = String(damage);
+    let vx = (Math.random() - 0.5) * 32;
+    let vy = -60;
+    let isCrit = false;
+
+    if (t === 'CRIT') {
+      isCrit = true;
+      color = '#ff9800'; // Large orange/yellow font (22px bold)
+      font = 'bold 22px "Impact", "Segoe UI", sans-serif';
+      text = `${damage}!`; // exclamation mark
+      vx = (Math.random() - 0.5) * 55;
+      vy = -140; // bounce trajectory pop
+    } else if (t === 'PLAYER') {
+      color = '#ff4444'; // Red font (18px bold)
+      font = 'bold 18px "Impact", "Segoe UI", sans-serif';
+      text = `${damage}`;
+      vy = -65;
+    } else if (t === 'HEAL') {
+      color = '#44ff44'; // Green font (18px bold)
+      font = 'bold 18px "Impact", "Segoe UI", sans-serif';
+      text = `+${damage}`; // "+" prefix
+      vy = -55;
+    } else {
+      color = '#ffffff'; // White font (16px bold)
+      font = 'bold 16px "Impact", "Segoe UI", sans-serif';
+      text = `${damage}`;
+      vy = -60;
+    }
+
+    this.damageNumbers.push({
+      x: x + (Math.random() - 0.5) * 8,
+      y: y + (Math.random() - 0.5) * 6,
+      vx,
+      vy,
+      gravity: isCrit ? 260 : 0,
+      color,
+      font,
+      text,
+      type: t,
+      isCrit,
+      life: 0.8,
+      maxLife: 0.8
+    });
+
+    if (this.damageNumbers.length > 150) {
+      this.damageNumbers.shift();
+    }
+  }
+
+  triggerZombieHitFlash(zombieId, duration = 0.08) {
+    if (!this.zombieFlashTimers) this.zombieFlashTimers = new Map();
+    this.zombieFlashTimers.set(zombieId, Date.now() + Math.round(duration * 1000));
+  }
+
+  renderMaterials(param1, param2) {
+    let ctx, materials;
+    if (param1 && typeof param1.beginPath === 'function') {
+      ctx = param1;
+      materials = param2;
+    } else {
+      materials = param1;
+      ctx = this.ctx;
+    }
+    if (!ctx || !materials || !materials.length) return;
+
+    const now = Date.now();
+    const bob = Math.sin(now / 200) * 3;
+    const spinCos = Math.cos(now / 250);
+    const size = 8;
+    const half = size / 2;
+
+    ctx.save();
+    for (let i = 0; i < materials.length; i++) {
+      const mat = materials[i];
+      if (!mat || mat.collected) continue;
+      const mx = mat.x;
+      const my = mat.y + bob;
+
+      // Soft circular shadow on ground
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(mx, mat.y + 6, 5, 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Spinning Glowing Green Diamond / Gem
+      ctx.save();
+      ctx.translate(mx, my);
+      const spinWidth = Math.max(2, Math.abs(spinCos) * half);
+
+      ctx.shadowColor = 'rgba(0, 255, 68, 0.55)'; // #00ff4488
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = '#00ff88';
+
+      // Diamond path
+      ctx.beginPath();
+      ctx.moveTo(0, -half);
+      ctx.lineTo(spinWidth, 0);
+      ctx.lineTo(0, half);
+      ctx.lineTo(-spinWidth, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Inner shiny highlight facet
+      ctx.fillStyle = '#b9f6ca';
+      ctx.beginPath();
+      ctx.moveTo(0, -half * 0.6);
+      ctx.lineTo(spinWidth * 0.5, 0);
+      ctx.lineTo(0, half * 0.6);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   addMuzzleFlash(x, y, angle, weapon = 'PISTOL') {
@@ -714,6 +843,9 @@ class Renderer {
       if (ft.life <= 0) this.floatingTexts.splice(i, 1);
     }
 
+    // Floating combat damage numbers
+    this.updateDamageNumbers(dt);
+
     // Muzzle flashes
     for (let i = this.muzzleFlashes.length - 1; i >= 0; i--) {
       const mf = this.muzzleFlashes[i];
@@ -869,6 +1001,9 @@ class Renderer {
     // 4. Draw Pickups (Ammo & Medkits)
     this.drawPickups(ctx, gameState.pickups || []);
 
+    // 4.1 Draw Materials Gems (Box-Tato currency)
+    this.renderMaterials(ctx, gameState.materials || []);
+
     // 4.5 Draw Tactical Drones & Infinite Ammo Aura
     this.drawDrones(ctx, gameState.drones || []);
 
@@ -919,6 +1054,9 @@ class Renderer {
     this.drawDarknessAndLights(ctx, gameState, localPlayerId, map);
     this.drawZombieEyesInDark(ctx, gameState.zombies || [], gameState.players || []);
 
+    // 11.8 Draw Combat Damage Numbers (Pop over darkness and lighting)
+    this.drawDamageNumbers(ctx);
+
     // 12. Draw Floating Texts
     this.drawFloatingTexts(ctx);
 
@@ -955,53 +1093,374 @@ class Renderer {
     const theme = (map && map.theme) || {
       floorColor: '#22252a',
       gridColor: '#2b2f36',
-      ambient: 'normal'
+      ambient: 'normal',
+      wallBorder: '#181b20',
+      wallTop: '#454d59'
     };
 
-    // Floor base
-    ctx.fillStyle = theme.floorColor;
+    // 1. Dark outer border boundary (outside arena)
+    ctx.fillStyle = theme.wallBorder || '#15171c';
     ctx.fillRect(0, 0, w, h);
 
-    // Checkerboard subtle grid
-    const tileSize = 80;
-    ctx.strokeStyle = theme.gridColor;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= w; x += tileSize) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+    // 2. Octagonal arena floor path with 45° chamfers
+    const chamferPx = 100;
+    const margin = 40; // boundary wall thickness
+    const arenaW = w - margin * 2;
+    const arenaH = h - margin * 2;
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const octagonPath = (cContext, ox, oy, ow, oh, oc) => {
+      const x1 = ox - ow / 2, x2 = ox + ow / 2;
+      const y1 = oy - oh / 2, y2 = oy + oh / 2;
+      cContext.beginPath();
+      cContext.moveTo(x1 + oc, y1);
+      cContext.lineTo(x2 - oc, y1);
+      cContext.lineTo(x2, y1 + oc);
+      cContext.lineTo(x2, y2 - oc);
+      cContext.lineTo(x2 - oc, y2);
+      cContext.lineTo(x1 + oc, y2);
+      cContext.lineTo(x1, y2 - oc);
+      cContext.lineTo(x1, y1 + oc);
+      cContext.closePath();
+    };
+
+    // Arena Floor Gradient
+    ctx.save();
+    octagonPath(ctx, cx, cy, arenaW, arenaH, chamferPx);
+
+    // Radial floor shading for depth
+    const floorGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, w * 0.6);
+    if (theme.ambient === 'sand') {
+      floorGrad.addColorStop(0, '#deb87a');
+      floorGrad.addColorStop(0.5, '#d4a373');
+      floorGrad.addColorStop(1, '#c8924f');
+    } else if (theme.ambient === 'snow') {
+      floorGrad.addColorStop(0, '#f0f8ff');
+      floorGrad.addColorStop(0.5, '#e3eff5');
+      floorGrad.addColorStop(1, '#c8dce8');
+    } else if (theme.ambient === 'embers') {
+      floorGrad.addColorStop(0, '#2c1c20');
+      floorGrad.addColorStop(0.4, '#1e1215');
+      floorGrad.addColorStop(1, '#100508');
+    } else {
+      floorGrad.addColorStop(0, '#2c2f36');
+      floorGrad.addColorStop(0.6, '#22252a');
+      floorGrad.addColorStop(1, '#191c21');
     }
-    for (let y = 0; y <= h; y += tileSize) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
+    ctx.fillStyle = floorGrad;
+    ctx.fill();
+
+    // Octagon boundary border
+    ctx.strokeStyle = theme.wallTop || '#3a4050';
+    ctx.lineWidth = 4;
     ctx.stroke();
 
-    // Map-specific terrain accents
+    // Clip to octagon for floor textures & grid (if supported in context)
+    if (typeof ctx.clip === 'function') {
+      ctx.clip();
+    }
+
+    // Subtle grid
+    const tileSize = 60;
+    ctx.strokeStyle = theme.gridColor || '#2b2f36';
+    ctx.lineWidth = 0.8;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += tileSize) {
+      ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    }
+    for (let y = 0; y <= h; y += tileSize) {
+      ctx.moveTo(0, y); ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+
+    // Thematic floor details
     if (theme.ambient === 'sand') {
-      ctx.strokeStyle = 'rgba(140, 88, 54, 0.2)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let y = 160; y < h; y += 220) {
-        ctx.moveTo(60, y);
-        ctx.bezierCurveTo(450, y - 40, 950, y + 40, w - 60, y - 10);
-      }
-      ctx.stroke();
-    } else if (theme.ambient === 'snow') {
-      ctx.strokeStyle = 'rgba(129, 212, 250, 0.3)';
+      ctx.strokeStyle = 'rgba(140, 88, 54, 0.25)';
       ctx.lineWidth = 2;
+      for (let y = 60; y < h; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        for (let x = 0; x <= w; x += 60) {
+          if (typeof ctx.quadraticCurveTo === 'function') {
+            ctx.quadraticCurveTo(x + 30, y + Math.sin(x / 80 + y / 60) * 8, x + 60, y);
+          } else {
+            ctx.lineTo(x + 60, y);
+          }
+        }
+        ctx.stroke();
+      }
+    } else if (theme.ambient === 'snow') {
+      ctx.strokeStyle = 'rgba(129, 212, 250, 0.35)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(250, 200); ctx.lineTo(290, 240); ctx.lineTo(280, 270);
-      ctx.moveTo(1250, 850); ctx.lineTo(1300, 880); ctx.lineTo(1340, 860);
-      ctx.moveTo(850, 300); ctx.lineTo(890, 340);
+      ctx.moveTo(250, 200); ctx.lineTo(320, 250); ctx.lineTo(300, 300);
+      ctx.moveTo(1250, 850); ctx.lineTo(1320, 900); ctx.lineTo(1380, 870);
+      ctx.moveTo(850, 280); ctx.lineTo(910, 330);
       ctx.stroke();
     } else if (theme.ambient === 'embers') {
       ctx.strokeStyle = 'rgba(255, 61, 0, 0.35)';
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(550, 480); ctx.lineTo(600, 520); ctx.lineTo(580, 560);
-      ctx.moveTo(980, 680); ctx.lineTo(1030, 720); ctx.lineTo(1060, 760);
+      ctx.moveTo(500, 420); ctx.lineTo(580, 480); ctx.lineTo(550, 540);
+      ctx.moveTo(1020, 680); ctx.lineTo(1080, 740); ctx.lineTo(1120, 790);
+      ctx.moveTo(700, 850); ctx.lineTo(760, 900);
       ctx.stroke();
+    }
+    ctx.restore();
+
+    // 3. Draw 4 Corner Chamfer Hazard Zone Markings
+    const chamferCorners = [
+      { x: margin, y: margin, angle: Math.PI / 4 },
+      { x: w - margin, y: margin, angle: -Math.PI / 4 },
+      { x: margin, y: h - margin, angle: -Math.PI / 4 },
+      { x: w - margin, y: h - margin, angle: Math.PI / 4 }
+    ];
+    for (const cc of chamferCorners) {
+      ctx.save();
+      ctx.translate(cc.x, cc.y);
+      ctx.rotate(cc.angle);
+      ctx.strokeStyle = 'rgba(255, 214, 0, 0.35)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(-60, 0); ctx.lineTo(60, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 4. Draw Central Lava Caldera if present (Volcano map)
+    const calderas = map && map.lavaCalderas ? map.lavaCalderas : (map && map.id === 'VOLCANO' ? [{ x: 710, y: 490, w: 180, h: 220 }] : []);
+    if (calderas.length > 0) {
+      this.drawLavaCalderas(ctx, calderas);
+    }
+
+    // 5. Draw 8 Glowing Zombie Spawn Grates
+    if (map && map.zombieSpawns) {
+      this.drawSpawnGrates(ctx, map.zombieSpawns, theme.ambient);
+    }
+
+    // 6. Draw 4 Supply Cysts
+    if (map && map.supplyCysts) {
+      this.drawSupplyCysts(ctx, map.supplyCysts, theme.ambient);
+    }
+  }
+
+  drawLavaCalderas(ctx, calderas) {
+    const time = Date.now() * 0.003;
+    for (const c of calderas) {
+      const cx = c.x + c.w / 2;
+      const cy = c.y + c.h / 2;
+      const r = Math.max(c.w, c.h) * 0.75;
+
+      ctx.save();
+      // Outer heat aura glow
+      const heatGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.5);
+      heatGrad.addColorStop(0, 'rgba(255, 102, 0, 0.55)');
+      heatGrad.addColorStop(0.35, 'rgba(255, 61, 0, 0.4)');
+      heatGrad.addColorStop(0.7, 'rgba(204, 34, 0, 0.2)');
+      heatGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = heatGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Octagonal caldera body
+      const x1 = c.x, x2 = c.x + c.w;
+      const y1 = c.y, y2 = c.y + c.h;
+      const ch = 28;
+      ctx.beginPath();
+      ctx.moveTo(x1 + ch, y1);
+      ctx.lineTo(x2 - ch, y1);
+      ctx.lineTo(x2, y1 + ch);
+      ctx.lineTo(x2, y2 - ch);
+      ctx.lineTo(x2 - ch, y2);
+      ctx.lineTo(x1 + ch, y2);
+      ctx.lineTo(x1, y2 - ch);
+      ctx.lineTo(x1, y1 + ch);
+      ctx.closePath();
+
+      const lavaFill = ctx.createLinearGradient(x1, y1, x2, y2);
+      lavaFill.addColorStop(0, '#ff3d00');
+      lavaFill.addColorStop(0.5, '#ff6600');
+      lavaFill.addColorStop(1, '#dd2c00');
+      ctx.fillStyle = lavaFill;
+      ctx.fill();
+
+      // Molten bubbling circles
+      ctx.fillStyle = '#ffb300';
+      ctx.globalAlpha = 0.6;
+      for (let i = 0; i < 7; i++) {
+        const bubbleAngle = (i / 7) * Math.PI * 2 + time * 0.8;
+        const bDist = 35 + Math.sin(time + i * 1.5) * 20;
+        const bx = cx + Math.cos(bubbleAngle) * bDist;
+        const by = cy + Math.sin(bubbleAngle) * (bDist * 0.75);
+        const br = 8 + Math.sin(time * 2 + i) * 4;
+        ctx.beginPath();
+        ctx.arc(bx, by, Math.max(3, br), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Golden hazard border
+      ctx.strokeStyle = '#ffd600';
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = '#ff3d00';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Skull ☠ icon in center
+      ctx.fillStyle = '#ffd600';
+      ctx.font = 'bold 32px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#ff3d00';
+      ctx.shadowBlur = 10;
+      ctx.fillText('☠', cx, cy - 8);
+      ctx.shadowBlur = 0;
+
+      // Hazard text
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('LAVA ZONE', cx, cy + 24);
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#ffcc80';
+      ctx.fillText('-15 HP/S', cx, cy + 38);
+
+      ctx.restore();
+    }
+  }
+
+  drawSpawnGrates(ctx, spawns, ambient) {
+    const time = Date.now() * 0.004;
+    let themeGlow = 'rgba(0, 229, 255, 0.45)';
+    let themeColor = '#00e5ff';
+    if (ambient === 'sand') {
+      themeGlow = 'rgba(231, 111, 81, 0.45)';
+      themeColor = '#e76f51';
+    } else if (ambient === 'snow') {
+      themeGlow = 'rgba(129, 212, 250, 0.45)';
+      themeColor = '#81d4fa';
+    } else if (ambient === 'embers') {
+      themeGlow = 'rgba(255, 61, 0, 0.45)';
+      themeColor = '#ff3d00';
+    }
+
+    const r = 26;
+    for (const sp of spawns) {
+      ctx.save();
+      // Outer radial glow halo (pulsing)
+      const pulse = 1.0 + Math.sin(time + sp.x * 0.01) * 0.2;
+      const grad = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, r * 2.2 * pulse);
+      grad.addColorStop(0, themeGlow);
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r * 2.2 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dark steel grate body
+      ctx.fillStyle = '#14171c';
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Metal cross-hatch grill bars
+      ctx.strokeStyle = themeColor;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.8;
+      for (let i = -1; i <= 1; i++) {
+        const offset = i * (r * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(sp.x + offset, sp.y - Math.sqrt(Math.max(0, r * r - offset * offset)) + 2);
+        ctx.lineTo(sp.x + offset, sp.y + Math.sqrt(Math.max(0, r * r - offset * offset)) - 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(sp.x - Math.sqrt(Math.max(0, r * r - offset * offset)) + 2, sp.y + offset);
+        ctx.lineTo(sp.x + Math.sqrt(Math.max(0, r * r - offset * offset)) - 2, sp.y + offset);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Heavy metallic rim
+      ctx.strokeStyle = '#454d59';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Center glowing warning LED
+      ctx.fillStyle = themeColor;
+      ctx.shadowColor = themeColor;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  drawSupplyCysts(ctx, cysts, ambient) {
+    const time = Date.now() * 0.003;
+    const r = 20;
+
+    for (const c of cysts) {
+      ctx.save();
+      // Pulsing bio-luminescent glow
+      const pulse = 1.0 + Math.sin(time * 2 + c.x * 0.05) * 0.15;
+      const grad = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * 2.8 * pulse);
+      grad.addColorStop(0, 'rgba(0, 230, 118, 0.45)');
+      grad.addColorStop(0.5, 'rgba(0, 176, 255, 0.2)');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r * 2.8 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cyst body
+      const bodyGrad = ctx.createRadialGradient(c.x - r * 0.3, c.y - r * 0.3, 0, c.x, c.y, r);
+      bodyGrad.addColorStop(0, '#69f0ae');
+      bodyGrad.addColorStop(0.7, '#00c853');
+      bodyGrad.addColorStop(1, '#004d40');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Organic shell / crystal veins
+      ctx.strokeStyle = '#b9f6ca';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + time * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        if (typeof ctx.quadraticCurveTo === 'function') {
+          ctx.quadraticCurveTo(
+            c.x + Math.cos(a + 0.4) * r * 0.6,
+            c.y + Math.sin(a + 0.4) * r * 0.6,
+            c.x + Math.cos(a) * r * 0.9,
+            c.y + Math.sin(a) * r * 0.9
+          );
+        } else {
+          ctx.lineTo(c.x + Math.cos(a) * r * 0.9, c.y + Math.sin(a) * r * 0.9);
+        }
+        ctx.stroke();
+      }
+
+      // Sparkle loot icon
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#00e676';
+      ctx.shadowBlur = 8;
+      ctx.fillText('✦', c.x, c.y);
+
+      ctx.restore();
     }
   }
 
@@ -1019,20 +1478,146 @@ class Renderer {
     for (let i = 0; i < map.walls.length; i++) {
       const wall = map.walls[i];
 
-      // Drop shadow for 2.5D depth
+      // 1. 45° Corner Chamfer walls
+      if (wall.type === 'chamfer') {
+        ctx.save();
+        // Drop shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(wall.x + 6, wall.y + 6, wall.w, wall.h);
+
+        // Diagonal chamfer polygon
+        const cx1 = wall.x, cx2 = wall.x + wall.w;
+        const cy1 = wall.y, cy2 = wall.y + wall.h;
+        ctx.fillStyle = theme.wallSide;
+        ctx.beginPath();
+        if (wall.corner === 'NW') {
+          ctx.moveTo(cx1, cy1); ctx.lineTo(cx2, cy1); ctx.lineTo(cx1, cy2);
+        } else if (wall.corner === 'NE') {
+          ctx.moveTo(cx1, cy1); ctx.lineTo(cx2, cy1); ctx.lineTo(cx2, cy2);
+        } else if (wall.corner === 'SW') {
+          ctx.moveTo(cx1, cy1); ctx.lineTo(cx1, cy2); ctx.lineTo(cx2, cy2);
+        } else { // SE
+          ctx.moveTo(cx2, cy1); ctx.lineTo(cx2, cy2); ctx.lineTo(cx1, cy2);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = theme.wallBorder;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      // 2. Round monolithic pillars (shape: 'circle')
+      if (wall.shape === 'circle') {
+        const radius = wall.radius || wall.w / 2;
+        const pcx = wall.x + wall.w / 2;
+        const pcy = wall.y + wall.h / 2;
+
+        ctx.save();
+        // Drop shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.beginPath();
+        ctx.arc(pcx + 6, pcy + 8, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 3D Cylinder body (side face illusion)
+        ctx.fillStyle = theme.pillarSide;
+        ctx.beginPath();
+        ctx.arc(pcx + 3, pcy + 5, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pillar top disc
+        const topGrad = ctx.createRadialGradient(pcx - radius * 0.3, pcy - radius * 0.3, 0, pcx, pcy, radius);
+        topGrad.addColorStop(0, theme.pillarTop);
+        topGrad.addColorStop(1, theme.pillarSide);
+        ctx.fillStyle = topGrad;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rim border
+        ctx.strokeStyle = theme.pillarBorder;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Concentric inner bevel
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, radius * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      // 3. Hexagonal ice peaks (shape: 'hexagon')
+      if (wall.shape === 'hexagon') {
+        const hr = wall.w / 2;
+        const hcx = wall.x + hr;
+        const hcy = wall.y + hr;
+
+        ctx.save();
+        // Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+          const a = (j / 6) * Math.PI * 2 - Math.PI / 6;
+          const px = hcx + 6 + Math.cos(a) * hr;
+          const py = hcy + 8 + Math.sin(a) * hr;
+          j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Crystal facet gradient
+        const iceGrad = ctx.createRadialGradient(hcx - hr * 0.3, hcy - hr * 0.3, 0, hcx, hcy, hr);
+        iceGrad.addColorStop(0, '#e1f5fe');
+        iceGrad.addColorStop(0.4, '#81d4fa');
+        iceGrad.addColorStop(1, '#0288d1');
+        ctx.fillStyle = iceGrad;
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+          const a = (j / 6) * Math.PI * 2 - Math.PI / 6;
+          const px = hcx + Math.cos(a) * hr;
+          const py = hcy + Math.sin(a) * hr;
+          j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#01579b';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Crystal facet interior lines
+        ctx.strokeStyle = '#b3e5fc';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.6;
+        for (let j = 0; j < 3; j++) {
+          const a = (j / 3) * Math.PI;
+          ctx.beginPath();
+          ctx.moveTo(hcx + Math.cos(a) * hr * 0.9, hcy + Math.sin(a) * hr * 0.9);
+          ctx.lineTo(hcx + Math.cos(a + Math.PI) * hr * 0.9, hcy + Math.sin(a + Math.PI) * hr * 0.9);
+          ctx.stroke();
+        }
+        ctx.restore();
+        continue;
+      }
+
+      // 4. Standard rectangular walls & pillars (2.5D block)
       ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.fillRect(wall.x + 8, wall.y + 8, wall.w, wall.h);
 
-      // Wall body (side)
       ctx.fillStyle = wall.type === 'pillar' ? theme.pillarSide : theme.wallSide;
       ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
 
-      // Wall top (highlighted block surface)
       const topHeight = Math.min(14, wall.h / 3);
       ctx.fillStyle = wall.type === 'pillar' ? theme.pillarTop : theme.wallTop;
       ctx.fillRect(wall.x, wall.y, wall.w, topHeight);
 
-      // Stone border
       ctx.strokeStyle = wall.type === 'pillar' ? theme.pillarBorder : theme.wallBorder;
       ctx.lineWidth = 2;
       ctx.strokeRect(wall.x, wall.y, wall.w, wall.h);
@@ -1441,6 +2026,25 @@ class Renderer {
     const dw = Math.round(32 * scale);
     const dh = Math.round(32 * scale);
 
+    // Hit-flash detection & timer (~0.08s / 80ms)
+    const now = Date.now();
+    let flashEndTime = this.zombieFlashTimers ? this.zombieFlashTimers.get(zombie.id) : 0;
+    if (zombie.isHit || zombie.flashTimer > 0) {
+      this.triggerZombieHitFlash(zombie.id, 0.08);
+      flashEndTime = this.zombieFlashTimers.get(zombie.id);
+    }
+    if (this.lastZombieHps) {
+      const prevHp = this.lastZombieHps.get(zombie.id);
+      if (prevHp !== undefined && zombie.hp < prevHp) {
+        this.triggerZombieHitFlash(zombie.id, 0.08);
+        flashEndTime = this.zombieFlashTimers.get(zombie.id);
+        const dmg = Math.round(prevHp - zombie.hp);
+        this.addDamageNumber(zombie.x, zombie.y - 12, dmg, zombie.lastHitCrit ? 'CRIT' : 'DEFAULT');
+      }
+      this.lastZombieHps.set(zombie.id, zombie.hp);
+    }
+    const isFlashing = Boolean(flashEndTime && flashEndTime > now);
+
     // 1. Dynamic shadow scaled to footprint
     ctx.save();
     const shadowColor = (zombie.type === 'DEVIL') ? 'rgba(70, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.4)';
@@ -1468,6 +2072,15 @@ class Renderer {
           src.sx, src.sy, src.sWidth, src.sHeight,
           Math.round(zombie.x - dw / 2), Math.round(zombie.y - dh / 2), dw, dh
         );
+        if (isFlashing) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-atop';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+          ctx.fillRect(
+            Math.round(zombie.x - dw / 2), Math.round(zombie.y - dh / 2), dw, dh
+          );
+          ctx.restore();
+        }
         ctx.restore();
         drawnWithSprite = true;
       }
@@ -1479,7 +2092,16 @@ class Renderer {
       ctx.translate(zombie.x, zombie.y);
       ctx.scale(fbScale, fbScale);
       ctx.translate(-zombie.x, -zombie.y);
-      this.drawBoxyZombieFallback(ctx, zombie);
+      this.drawBoxyZombieFallback(ctx, zombie, isFlashing);
+      if (isFlashing) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.beginPath();
+        const fbr = (zombie.type === 'TANK' ? 26 : (zombie.type === 'DEVIL' ? 24 : 18));
+        ctx.arc(zombie.x, zombie.y, fbr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();
     }
 
@@ -1565,8 +2187,11 @@ class Renderer {
     }
   }
 
-  drawBoxyZombieFallback(ctx, zombie) {
+  drawBoxyZombieFallback(ctx, zombie, isFlashing = false) {
     ctx.save();
+    if (isFlashing) {
+      ctx.globalCompositeOperation = 'lighter';
+    }
     ctx.translate(zombie.x, zombie.y);
 
     const time = Date.now() * 0.005;
@@ -2290,6 +2915,54 @@ class Renderer {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  updateDamageNumbers(dt) {
+    if (!this.damageNumbers || this.damageNumbers.length === 0) return;
+    for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+      const dn = this.damageNumbers[i];
+      dn.life -= dt;
+      if (dn.life <= 0) {
+        this.damageNumbers.splice(i, 1);
+        continue;
+      }
+      dn.x += dn.vx * dt;
+      dn.y += dn.vy * dt;
+      if (dn.gravity) {
+        dn.vy += dn.gravity * dt;
+      }
+    }
+  }
+
+  drawDamageNumbers(ctx) {
+    if (!this.damageNumbers || this.damageNumbers.length === 0) return;
+    for (let i = 0; i < this.damageNumbers.length; i++) {
+      const dn = this.damageNumbers[i];
+      const progress = Math.max(0, Math.min(1, 1 - (dn.life / dn.maxLife)));
+      const alpha = Math.max(0, dn.life / dn.maxLife);
+
+      // Scale pop on spawn: starts at 1.4, settles to 1.0 within first 20% of life (0.16s)
+      let scale = 1.0;
+      if (progress < 0.2) {
+        scale = 1.0 + (1 - progress / 0.2) * 0.4;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(dn.x, dn.y);
+      if (scale !== 1.0) {
+        ctx.scale(scale, scale);
+      }
+      ctx.font = dn.font;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(dn.text, 0, 0);
+      ctx.fillStyle = dn.color;
+      ctx.fillText(dn.text, 0, 0);
       ctx.restore();
     }
   }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Ghost Cloak (+Dodge %) -->
+  <!-- Ethereal Glow / Smoke behind -->
+  <path d="M12 48 Q8 26 22 14 Q32 8 42 14 Q56 26 52 48 Q44 56 32 50 Q20 58 12 48 Z" fill="#7e57c2" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Cloak inner drape -->
+  <path d="M18 46 Q24 24 32 18 Q40 24 46 46 Q38 52 32 44 Q26 52 18 46 Z" fill="#9575cd" stroke="#1a1a1a" stroke-width="3"/>
+  <!-- Golden Brooch clasp -->
+  <circle cx="32" cy="18" r="5" fill="#ffd600" stroke="#1a1a1a" stroke-width="2.5"/>
+  <circle cx="32" cy="18" r="2.5" fill="#00e5ff"/>
+  <!-- Swirl ethereal tail folds -->
+  <path d="M16 48 Q22 58 26 48 Q32 58 38 48 Q42 58 48 48" fill="none" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+  <!-- Sparkles -->
+  <path d="M48 16 L50 20 L54 22 L50 24 L48 28 L46 24 L42 22 L46 20 Z" fill="#00e5ff" stroke="#1a1a1a" stroke-width="1.5"/>
+  <path d="M12 28 L14 30 L16 32 L14 34 L12 36 L10 34 L8 32 L10 30 Z" fill="#ffd600" stroke="#1a1a1a" stroke-width="1.5"/>
+</svg>
+

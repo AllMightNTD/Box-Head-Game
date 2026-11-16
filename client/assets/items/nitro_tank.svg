@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Nitro Propellant Tank (+Barrel Radius & Explosion Damage) [TACTICAL] -->
+  <!-- Red Explosive Fuel Drum / Tank -->
+  <rect x="14" y="16" width="36" height="42" rx="8" fill="#d50000" stroke="#111111" stroke-width="4"/>
+  <!-- Top Drum Valve -->
+  <rect x="26" y="8" width="12" height="8" rx="2" fill="#ffd600" stroke="#111111" stroke-width="3"/>
+  <ellipse cx="32" cy="8" rx="8" ry="3" fill="#ffab00" stroke="#111111" stroke-width="2"/>
+  <!-- Steel Reinforcing Ribs -->
+  <line x1="14" y1="26" x2="50" y2="26" stroke="#b71c1c" stroke-width="4"/>
+  <line x1="14" y1="46" x2="50" y2="46" stroke="#b71c1c" stroke-width="4"/>
+  <!-- Warning Flame Symbol on Tank -->
+  <polygon points="32,24 24,38 31,38 28,50 40,36 33,36" fill="#ffd600" stroke="#111111" stroke-width="2"/>
+  <!-- Pressure gauge on side -->
+  <circle cx="46" cy="22" r="5" fill="#ffffff" stroke="#111111" stroke-width="2"/>
+  <line x1="46" y1="22" x2="48" y2="20" stroke="#d50000" stroke-width="1.5"/>
+</svg>
+

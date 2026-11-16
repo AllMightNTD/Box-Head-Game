@@ -20,8 +20,29 @@ const WARRIOR_SKILL_DEFINITIONS = [
   { id: 'AVATAR_OF_WAR', key: 8, name: 'Avatar of War', unlockCombo: 50, icon: '🔥', badge: 'x50' }
 ];
 
+const DEFAULT_SHOP_ITEMS = {
+  BANDOLIER: { id: 'BANDOLIER', name: 'Băng Đạn Chiến Thuật', icon: 'assets/items/bandolier.svg', rarity: 'Rare', price: 40, stackMax: 3, classes: ['HUMAN'], statBonuses: { maxAmmoBonus: 30 }, description: 'Băng đạn chiến thuật — +30% max ammo tất cả súng' },
+  HOLLOW_BULLETS: { id: 'HOLLOW_BULLETS', name: 'Đầu Đạn Rỗng', icon: 'assets/items/hollow_bullets.svg', rarity: 'Epic', price: 70, stackMax: 2, classes: ['HUMAN'], statBonuses: { critChance: 15, damageBonus: 8 }, description: 'Đầu đạn rỗng — +15% crit, +8% damage' },
+  LASER_SIGHT: { id: 'LASER_SIGHT', name: 'Kính Ngắm Laser', icon: 'assets/items/laser_sight.svg', rarity: 'Rare', price: 35, stackMax: 3, classes: ['HUMAN'], statBonuses: { attackSpeedBonus: 20, rangeBonus: 15 }, description: 'Kính ngắm laser — +20% tốc độ bắn, +15% tầm bắn' },
+  DRONE_CHIP: { id: 'DRONE_CHIP', name: 'Chip Điều Khiển Drone', icon: 'assets/items/drone_chip.svg', rarity: 'Legendary', price: 120, stackMax: 1, classes: ['HUMAN'], statBonuses: { pickupRange: 80, damageBonus: 12 }, description: 'Chip điều khiển drone — +80px pickup range, +12% damage', passive: 'drone_assist' },
+  SPIKED_GAUNTLET: { id: 'SPIKED_GAUNTLET', name: 'Găng Tay Gai', icon: 'assets/items/spiked_gauntlet.svg', rarity: 'Common', price: 20, stackMax: 5, classes: ['WARRIOR'], statBonuses: { meleeDamageBonus: 15 }, description: 'Găng tay gai — +15% melee damage' },
+  TITAN_PLATE: { id: 'TITAN_PLATE', name: 'Giáp Titan', icon: 'assets/items/titan_plate.svg', rarity: 'Rare', price: 45, stackMax: 3, classes: ['WARRIOR'], statBonuses: { armor: 8, maxHpBonus: 20 }, description: 'Giáp Titan — +8 armor, +20 HP tối đa' },
+  WAR_HORN: { id: 'WAR_HORN', name: 'Tù Và Chiến Tranh', icon: 'assets/items/war_horn.svg', rarity: 'Epic', price: 75, stackMax: 2, classes: ['WARRIOR'], statBonuses: { warCryDuration: 3, attackSpeedBonus: 10 }, description: 'Tù và chiến tranh — +3s War Cry, +10% tốc độ', passive: 'war_cry' },
+  BLOODLUST_AXE: { id: 'BLOODLUST_AXE', name: 'Búa Khát Máu', icon: 'assets/items/bloodlust_axe.svg', rarity: 'Legendary', price: 110, stackMax: 1, classes: ['WARRIOR'], statBonuses: { lifeSteal: 20, meleeDamageBonus: 25 }, description: 'Búa khát máu — +20% life steal, +25% melee damage', passive: 'bloodlust' },
+  MANA_CRYSTAL: { id: 'MANA_CRYSTAL', name: 'Tinh Thể Mana', icon: 'assets/items/mana_crystal.svg', rarity: 'Common', price: 18, stackMax: 5, classes: ['MAGE'], statBonuses: { maxManaBonus: 20, manaRegenBonus: 2 }, description: 'Tinh thể mana — +20 max mana, +2/s mana regen' },
+  FROST_RING: { id: 'FROST_RING', name: 'Nhẫn Băng Giá', icon: 'assets/items/frost_ring.svg', rarity: 'Rare', price: 40, stackMax: 3, classes: ['MAGE'], statBonuses: { freezeDuration: 1.5, aoeBonus: 10 }, description: 'Nhẫn băng giá — +1.5s freeze, +10% AoE', passive: 'freeze_on_hit' },
+  FIRE_ORB: { id: 'FIRE_ORB', name: 'Cầu Lửa', icon: 'assets/items/fire_orb.svg', rarity: 'Epic', price: 68, stackMax: 2, classes: ['MAGE'], statBonuses: { damageBonus: 18, critChance: 10 }, description: 'Cầu lửa — +18% damage, +10% crit', passive: 'fire_trail' },
+  ARCANE_SCROLL: { id: 'ARCANE_SCROLL', name: 'Cuộn Phép Cổ Đại', icon: 'assets/items/arcane_scroll.svg', rarity: 'Legendary', price: 115, stackMax: 1, classes: ['MAGE'], statBonuses: { cooldownReduction: 25, damageBonus: 20 }, description: 'Cuộn phép cổ đại — -25% cooldown, +20% damage', passive: 'arcane_mastery' },
+  COMBAT_MEDKIT: { id: 'COMBAT_MEDKIT', name: 'Hộp Y Tế', icon: 'assets/items/combat_medkit.svg', rarity: 'Common', price: 15, stackMax: 5, classes: ['ALL'], statBonuses: { hpRegen: 3 }, description: 'Hộp y tế — +3 HP regen mỗi 5 giây' },
+  BIO_SERUM: { id: 'BIO_SERUM', name: 'Huyết Thanh Sinh Học', icon: 'assets/items/bio_serum.svg', rarity: 'Rare', price: 38, stackMax: 3, classes: ['ALL'], statBonuses: { lifeSteal: 10, hpRegen: 2 }, description: 'Huyết thanh sinh học — +10% lifesteal, +2 HP regen' },
+  REINFORCED_WOOD: { id: 'REINFORCED_WOOD', name: 'Gỗ Gia Cố', icon: 'assets/items/reinforced_wood.svg', rarity: 'Common', price: 12, stackMax: 5, classes: ['ALL'], statBonuses: { maxHpBonus: 15, armor: 2 }, description: 'Gỗ gia cố — +15 max HP, +2 armor' },
+  ENERGY_VACUUM: { id: 'ENERGY_VACUUM', name: 'Hút Năng Lượng', icon: 'assets/items/energy_vacuum.svg', rarity: 'Rare', price: 42, stackMax: 3, classes: ['ALL'], statBonuses: { pickupRange: 50, materialBonus: 15 }, description: 'Hút năng lượng — +50px pickup range, +15% materials' },
+  DEFIBRILLATOR: { id: 'DEFIBRILLATOR', name: 'Máy Sốc Tim', icon: 'assets/items/defibrillator.svg', rarity: 'Epic', price: 65, stackMax: 2, classes: ['ALL'], statBonuses: { reviveSpeedBonus: 50, maxHpBonus: 10 }, description: 'Máy sốc tim — cứu đồng đội 50% nhanh hơn, +10 HP', passive: 'emergency_revive' },
+  NITRO_TANK: { id: 'NITRO_TANK', name: 'Bình Nitro', icon: 'assets/items/nitro_tank.svg', rarity: 'Rare', price: 36, stackMax: 3, classes: ['ALL'], statBonuses: { speedBonus: 15, dodge: 5 }, description: 'Bình nitro — +15% tốc độ di chuyển, +5% dodge' }
+};
+
 class UIController {
-  constructor() {
+  constructor(socket = null) {
     this.screenLobby = document.getElementById('screen-lobby');
     this.screenRoom = document.getElementById('screen-room');
     this.hud = document.getElementById('hud');
@@ -29,6 +50,31 @@ class UIController {
     this.modalPause = document.getElementById('modal-pause');
     this.modalMapPreview = document.getElementById('modal-map-preview');
     this.copyToast = document.getElementById('copy-toast');
+
+    // Inter-wave Shop Overlay elements
+    this.modalShop = document.getElementById('modal-shop');
+    this.shopCardsContainer = document.getElementById('shop-cards-container');
+    this.shopMaterialsCount = document.getElementById('shop-materials-count');
+    this.hudMaterialsCount = document.getElementById('hud-materials-count');
+    this.btnShopReroll = document.getElementById('btn-shop-reroll');
+    this.shopRerollCost = document.getElementById('shop-reroll-cost');
+    this.btnShopReady = document.getElementById('btn-shop-ready');
+    this.shopReadyCount = document.getElementById('shop-ready-count');
+    this.shopInventoryGrid = document.getElementById('shop-inventory-grid');
+    this.shopInventoryCount = document.getElementById('shop-inventory-count');
+    this.shopWaveTag = document.getElementById('shop-wave-tag');
+
+    this.isShopOpen = false;
+    this.currentShopData = null;
+    this.currentMaterials = 0;
+    this.playerIsReady = false;
+
+    // Sockets & callbacks
+    this.socket = socket || (typeof window !== 'undefined' && window.socket) || null;
+    this.onBuyShopItem = null;
+    this.onRerollShop = null;
+    this.onRecycleItem = null;
+    this.onPlayerReady = null;
 
     this.lanIpDisplay = document.getElementById('lan-ip-display');
     this.nicknameInput = document.getElementById('nickname-input');
@@ -132,6 +178,8 @@ class UIController {
     this.initCopyButtons();
     this.initMapSelector();
     this.initMapPreviewModal();
+    this.initShopEvents();
+    if (this.socket) this.setSocket(this.socket);
   }
 
   fetchLanIp() {
@@ -648,10 +696,310 @@ class UIController {
     this.modalGameOver.classList.add('hidden');
     if (this.modalPause) this.modalPause.classList.add('hidden');
     if (this.modalMapPreview) this.modalMapPreview.classList.add('hidden');
+    if (this.modalShop) this.modalShop.classList.add('hidden');
 
     if (screenName === 'lobby') this.screenLobby.classList.remove('hidden');
     if (screenName === 'room') this.screenRoom.classList.remove('hidden');
     if (screenName === 'game') this.hud.classList.remove('hidden');
+  }
+
+  setSocket(socket) {
+    this.socket = socket;
+    if (!socket || typeof socket.on !== 'function') return;
+
+    socket.on('SHOP_OPEN', (data) => this.openShop(data));
+    socket.on('SHOP_UPDATE', (data) => this.updateShop(data));
+    socket.on('SHOP_CLOSE', () => this.closeShop());
+    socket.on('ITEM_BOUGHT', (payload) => {
+      if (payload && payload.materials !== undefined) {
+        this.updateMaterials(payload.materials);
+      }
+      if (this.currentShopData && this.currentShopData.items && payload && payload.itemId) {
+        this.currentShopData.items = this.currentShopData.items.filter(i => (i.id || i.itemId) !== payload.itemId);
+        this.renderShopItems(this.currentShopData.items, this.currentMaterials, this.currentShopData.inventory);
+      }
+    });
+    socket.on('SHOP_REROLLED', (payload) => {
+      if (payload && payload.materials !== undefined) {
+        this.updateMaterials(payload.materials);
+      }
+      if (payload && payload.items) {
+        const cost = (payload.rerolls !== undefined ? payload.rerolls : 1) + 1;
+        this.updateShop({ items: payload.items, rerollCost: cost, materials: payload.materials });
+      }
+    });
+    socket.on('ITEM_RECYCLED', (payload) => {
+      if (payload && payload.materials !== undefined) {
+        this.updateMaterials(payload.materials);
+      }
+    });
+    socket.on('PLAYER_READY', (payload) => {
+      if (payload && payload.readyCount !== undefined) {
+        this.updateReadyStatus(payload.readyCount, payload.totalPlayers);
+      }
+    });
+  }
+
+  initShopEvents() {
+    if (this.btnShopReroll) {
+      this.btnShopReroll.addEventListener('click', () => {
+        if (this.socket && typeof this.socket.emit === 'function') {
+          this.socket.emit('REROLL_SHOP');
+        }
+        if (typeof this.onRerollShop === 'function') {
+          this.onRerollShop();
+        }
+      });
+    }
+
+    if (this.btnShopReady) {
+      this.btnShopReady.addEventListener('click', () => {
+        this.playerIsReady = !this.playerIsReady;
+        if (this.socket && typeof this.socket.emit === 'function') {
+          this.socket.emit('PLAYER_READY');
+        }
+        if (typeof this.onPlayerReady === 'function') {
+          this.onPlayerReady();
+        }
+        if (this.playerIsReady) {
+          this.btnShopReady.classList.add('player-is-ready');
+        } else {
+          this.btnShopReady.classList.remove('player-is-ready');
+        }
+      });
+    }
+  }
+
+  openShop(data = {}) {
+    this.isShopOpen = true;
+    this.currentShopData = data || {};
+    this.playerIsReady = false;
+    if (this.btnShopReady) {
+      this.btnShopReady.classList.remove('player-is-ready');
+    }
+
+    if (data.materials !== undefined) {
+      this.currentMaterials = data.materials;
+    }
+    this.updateMaterials(this.currentMaterials);
+
+    const wave = data.wave !== undefined ? data.wave : 1;
+    if (this.shopWaveTag) {
+      this.shopWaveTag.textContent = `KẾT THÚC WAVE ${wave}`;
+    }
+
+    const rerollCost = data.rerollCost !== undefined ? data.rerollCost : 1;
+    if (this.shopRerollCost) {
+      this.shopRerollCost.textContent = String(rerollCost);
+    }
+    if (this.btnShopReroll) {
+      this.btnShopReroll.disabled = (this.currentMaterials < rerollCost);
+    }
+
+    const readyCount = data.readyCount !== undefined ? data.readyCount : 0;
+    const totalPlayers = data.totalPlayers !== undefined ? data.totalPlayers : 1;
+    this.updateReadyStatus(readyCount, totalPlayers);
+
+    this.renderShopItems(data.items || [], this.currentMaterials, data.inventory || []);
+    this.renderInventory(data.inventory || []);
+
+    if (this.modalShop) {
+      this.modalShop.classList.remove('hidden');
+    }
+  }
+
+  updateShop(data = {}) {
+    if (!this.currentShopData) this.currentShopData = {};
+    Object.assign(this.currentShopData, data);
+
+    if (data.materials !== undefined) {
+      this.currentMaterials = data.materials;
+      this.updateMaterials(this.currentMaterials);
+    }
+
+    if (data.rerollCost !== undefined && this.shopRerollCost) {
+      this.shopRerollCost.textContent = String(data.rerollCost);
+      if (this.btnShopReroll) {
+        this.btnShopReroll.disabled = (this.currentMaterials < data.rerollCost);
+      }
+    }
+
+    if (data.readyCount !== undefined) {
+      this.updateReadyStatus(data.readyCount, data.totalPlayers || 1);
+    }
+
+    const items = data.items !== undefined ? data.items : (this.currentShopData.items || []);
+    const inv = data.inventory !== undefined ? data.inventory : (this.currentShopData.inventory || []);
+    this.renderShopItems(items, this.currentMaterials, inv);
+    if (data.inventory !== undefined) {
+      this.renderInventory(inv);
+    }
+  }
+
+  closeShop() {
+    this.isShopOpen = false;
+    this.currentShopData = null;
+    this.playerIsReady = false;
+    if (this.modalShop) {
+      this.modalShop.classList.add('hidden');
+    }
+  }
+
+  updateMaterials(amount) {
+    if (typeof amount === 'number' && Number.isFinite(amount)) {
+      this.currentMaterials = amount;
+    }
+    const val = String(this.currentMaterials || 0);
+    if (this.hudMaterialsCount) {
+      this.hudMaterialsCount.textContent = val;
+    }
+    if (this.shopMaterialsCount) {
+      this.shopMaterialsCount.textContent = val;
+    }
+    if (this.btnShopReroll && this.shopRerollCost) {
+      const cost = parseInt(this.shopRerollCost.textContent, 10) || 1;
+      this.btnShopReroll.disabled = (this.currentMaterials < cost);
+    }
+  }
+
+  updateReadyStatus(readyCount = 0, totalPlayers = 1) {
+    if (this.shopReadyCount) {
+      this.shopReadyCount.textContent = `${readyCount}/${totalPlayers}`;
+    }
+  }
+
+  renderShopItems(items = [], currentMaterials = 0, playerInventory = []) {
+    if (!this.shopCardsContainer) return;
+    this.shopCardsContainer.innerHTML = '';
+
+    const inventoryMap = {};
+    if (Array.isArray(playerInventory)) {
+      for (const item of playerInventory) {
+        const iId = item.itemId || item.id;
+        inventoryMap[iId] = item.stack || 1;
+      }
+    }
+
+    items.forEach((item) => {
+      const id = item.id || item.itemId;
+      const def = (DEFAULT_SHOP_ITEMS && DEFAULT_SHOP_ITEMS[id]) || item;
+      const name = item.name || def.name || id;
+      const rarity = item.rarity || def.rarity || 'Common';
+      const price = item.currentPrice !== undefined ? item.currentPrice : (item.price !== undefined ? item.price : (def.price || 20));
+      const stackMax = item.stackMax || def.stackMax || 3;
+      const currentStack = inventoryMap[id] || 0;
+      const isStackFull = currentStack >= stackMax;
+      const canAfford = currentMaterials >= price;
+      const iconPath = item.icon || def.icon || `assets/items/${id.toLowerCase()}.svg`;
+      const desc = item.description || def.description || '';
+      const statBonuses = item.statBonuses || def.statBonuses || {};
+
+      const card = document.createElement('div');
+      card.className = `shop-card rarity-${rarity}`;
+
+      let statsHtml = '';
+      if (statBonuses && Object.keys(statBonuses).length > 0) {
+        statsHtml = '<div class="shop-card-stats">' + Object.entries(statBonuses).map(([k, v]) => {
+          const sign = typeof v === 'number' && v >= 0 ? '+' : '';
+          return `<div>${sign}${v} ${k}</div>`;
+        }).join('') + '</div>';
+      }
+
+      card.innerHTML = `
+        <div class="shop-card-header">
+          <div class="shop-card-icon-wrap">
+            <img src="${escapeHtml(iconPath)}" alt="${escapeHtml(name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+            <span class="fallback-emoji" style="display:none;">📦</span>
+          </div>
+          <div class="shop-card-name">${escapeHtml(name)}</div>
+          <div class="shop-card-rarity">${escapeHtml(rarity)}</div>
+        </div>
+        <div class="shop-card-body">
+          ${statsHtml}
+          <div class="shop-card-desc">${escapeHtml(desc)}</div>
+        </div>
+        <div class="shop-card-footer">
+          <div class="shop-card-price-tag">
+            <span>💎</span>
+            <span>${price}</span>
+          </div>
+          <button class="btn btn-buy-item" data-item-id="${escapeHtml(id)}" ${(!canAfford || isStackFull) ? 'disabled' : ''}>
+            ${isStackFull ? 'ĐÃ ĐẦY TỦ' : (canAfford ? `MUA (${price} 💎)` : `THIẾU 💎 (${price})`)}
+          </button>
+        </div>
+      `;
+
+      const buyBtn = card.querySelector('.btn-buy-item');
+      if (buyBtn && !buyBtn.disabled) {
+        buyBtn.addEventListener('click', () => {
+          if (this.socket && typeof this.socket.emit === 'function') {
+            this.socket.emit('BUY_SHOP_ITEM', { itemId: id });
+          }
+          if (typeof this.onBuyShopItem === 'function') {
+            this.onBuyShopItem(id);
+          }
+        });
+      }
+
+      this.shopCardsContainer.appendChild(card);
+    });
+  }
+
+  renderInventory(inventory = []) {
+    if (!this.shopInventoryGrid) return;
+    this.shopInventoryGrid.innerHTML = '';
+
+    const invList = Array.isArray(inventory) ? inventory : [];
+    if (this.shopInventoryCount) {
+      this.shopInventoryCount.textContent = invList.length;
+    }
+
+    const maxSlots = 18;
+    for (let i = 0; i < maxSlots; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'inventory-slot';
+
+      if (i < invList.length) {
+        const invItem = invList[i];
+        const id = invItem.itemId || invItem.id;
+        const stack = invItem.stack || 1;
+        const def = (DEFAULT_SHOP_ITEMS && DEFAULT_SHOP_ITEMS[id]) || {};
+        const name = def.name || id;
+        const rarity = def.rarity || 'Common';
+        const iconPath = def.icon || `assets/items/${id.toLowerCase()}.svg`;
+
+        slot.classList.add('occupied', `rarity-${rarity}`);
+        slot.title = `${name} (x${stack}) — Nhấp chuột phải hoặc bấm ♻️ để tái chế`;
+
+        slot.innerHTML = `
+          <img src="${escapeHtml(iconPath)}" alt="${escapeHtml(name)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+          <span class="fallback-emoji" style="display:none;">📦</span>
+          <span class="inventory-stack-badge">x${stack}</span>
+          <button class="inventory-recycle-btn" title="Tái chế hoàn 50% 💎">♻️</button>
+        `;
+
+        const recycleAction = (e) => {
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          if (this.socket && typeof this.socket.emit === 'function') {
+            this.socket.emit('RECYCLE_ITEM', { itemId: id });
+          }
+          if (typeof this.onRecycleItem === 'function') {
+            this.onRecycleItem(id);
+          }
+        };
+
+        const recBtn = slot.querySelector('.inventory-recycle-btn');
+        if (recBtn) recBtn.addEventListener('click', recycleAction);
+        slot.addEventListener('contextmenu', recycleAction);
+      } else {
+        slot.classList.add('empty');
+      }
+
+      this.shopInventoryGrid.appendChild(slot);
+    }
   }
 
   renderRoomsList(rooms, onJoin) {
@@ -862,6 +1210,22 @@ class UIController {
       this.hudWaveTitle.textContent = `WAVE ${gameState.wave}`;
       this.hudWaveTitle.style.color = 'var(--primary)';
       this.hudWaveSub.textContent = `ZOMBIES CÒN LẠI: ${gameState.zombiesLeft}`;
+    }
+
+    // 2.5 Materials Count on HUD (Brotato Green Gems)
+    if (localPlayer && localPlayer.materials !== undefined) {
+      this.updateMaterials(localPlayer.materials);
+    } else {
+      this.updateMaterials(this.currentMaterials || 0);
+    }
+
+    // Auto-open shop if items are loaded, or close when returning to PLAYING
+    if (gameState.state === 'SHOP') {
+      if (!this.isShopOpen && this.currentShopData && this.currentShopData.items && this.currentShopData.items.length > 0) {
+        this.openShop(this.currentShopData);
+      }
+    } else if (this.isShopOpen && gameState.state === 'PLAYING') {
+      this.closeShop();
     }
 
     // 3. Combo Meter
@@ -1138,10 +1502,11 @@ function escapeHtml(str) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { UIController, MAGE_SKILL_DEFINITIONS, WARRIOR_SKILL_DEFINITIONS };
+  module.exports = { UIController, MAGE_SKILL_DEFINITIONS, WARRIOR_SKILL_DEFINITIONS, DEFAULT_SHOP_ITEMS };
 }
 if (typeof window !== 'undefined') {
   window.UIController = UIController;
   window.MAGE_SKILL_DEFINITIONS = MAGE_SKILL_DEFINITIONS;
   window.WARRIOR_SKILL_DEFINITIONS = WARRIOR_SKILL_DEFINITIONS;
+  window.DEFAULT_SHOP_ITEMS = DEFAULT_SHOP_ITEMS;
 }

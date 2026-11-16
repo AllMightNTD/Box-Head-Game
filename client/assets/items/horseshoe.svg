@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Lucky Horseshoe (+Luck) -->
+  <!-- Golden Horseshoe Body -->
+  <path d="M16 12 V30 C16 42 22 52 32 52 C42 52 48 42 48 30 V12" fill="none" stroke="#1a1a1a" stroke-width="14" stroke-linecap="round"/>
+  <path d="M16 12 V30 C16 42 22 52 32 52 C42 52 48 42 48 30 V12" fill="none" stroke="#ffd600" stroke-width="8" stroke-linecap="round"/>
+  <!-- Gold highlight -->
+  <path d="M16 12 V30 C16 40 22 48 30 48" fill="none" stroke="#fff9c4" stroke-width="3" stroke-linecap="round"/>
+  <!-- Nail holes -->
+  <circle cx="16" cy="22" r="2" fill="#1a1a1a"/>
+  <circle cx="16" cy="32" r="2" fill="#1a1a1a"/>
+  <circle cx="20" cy="40" r="2" fill="#1a1a1a"/>
+  <circle cx="48" cy="22" r="2" fill="#1a1a1a"/>
+  <circle cx="48" cy="32" r="2" fill="#1a1a1a"/>
+  <circle cx="44" cy="40" r="2" fill="#1a1a1a"/>
+  <!-- 4-Leaf Clover in Center -->
+  <g transform="translate(32, 28) scale(0.65)">
+    <circle cx="-6" cy="-6" r="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="6" cy="-6" r="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="-6" cy="6" r="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="6" cy="6" r="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="0" cy="0" r="3" fill="#ffd600"/>
+  </g>
+  <!-- Sparkles -->
+  <polygon points="54,10 57,6 55,12 60,10 55,14 58,18 53,15 50,18 52,13 47,11 52,10" fill="#ffd600" stroke="#1a1a1a" stroke-width="1"/>
+</svg>
+

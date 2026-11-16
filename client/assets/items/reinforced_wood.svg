@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Barricade Reinforce Kit (+Barricade HP, Thorns Damage to Zombies) [TACTICAL] -->
+  <!-- Wooden Wall Plank Base -->
+  <rect x="8" y="14" width="48" height="42" rx="4" fill="#6d4c41" stroke="#111111" stroke-width="4"/>
+  <!-- Wood grain plank separations -->
+  <line x1="8" y1="28" x2="56" y2="28" stroke="#111111" stroke-width="3"/>
+  <line x1="8" y1="42" x2="56" y2="42" stroke="#111111" stroke-width="3"/>
+  <!-- Steel Diagonal Brace Cross -->
+  <line x1="10" y1="16" x2="54" y2="54" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+  <line x1="10" y1="16" x2="54" y2="54" stroke="#90a4ae" stroke-width="4" stroke-linecap="round"/>
+  <line x1="54" y1="16" x2="10" y2="54" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+  <line x1="54" y1="16" x2="10" y2="54" stroke="#90a4ae" stroke-width="4" stroke-linecap="round"/>
+  <!-- Barbed Wire Spikes on Top -->
+  <polygon points="16,14 20,4 24,14" fill="#cfd8dc" stroke="#111111" stroke-width="2"/>
+  <polygon points="30,14 34,2 38,14" fill="#cfd8dc" stroke="#111111" stroke-width="2"/>
+  <polygon points="44,14 48,4 52,14" fill="#cfd8dc" stroke="#111111" stroke-width="2"/>
+  <!-- Steel Rivets -->
+  <circle cx="32" cy="35" r="3" fill="#ffd600" stroke="#111111" stroke-width="1.5"/>
+</svg>
+

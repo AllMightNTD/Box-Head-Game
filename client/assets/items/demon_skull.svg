@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Cursed Demonic Skull (Legendary Relic) -->
+  <!-- Fiery Crimson Aura -->
+  <circle cx="32" cy="34" r="26" fill="#b71c1c" fill-opacity="0.3"/>
+  <!-- Curved Demon Horns -->
+  <!-- Left Horn -->
+  <path d="M22 22 C14 14 8 8 2 14 C2 24 14 26 20 28 Z" fill="#d32f2f" stroke="#1a1a1a" stroke-width="3.5"/>
+  <!-- Right Horn -->
+  <path d="M42 22 C50 14 56 8 62 14 C62 24 50 26 44 28 Z" fill="#d32f2f" stroke="#1a1a1a" stroke-width="3.5"/>
+  <!-- Skull Cranium -->
+  <path d="M18 28 C18 16 24 12 32 12 C40 12 46 16 46 28 C46 34 44 40 42 42 H22 C20 40 18 34 18 28 Z" fill="#f5f5f5" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Jawbone -->
+  <path d="M24 42 H40 V50 C40 54 36 56 32 56 C28 56 24 54 24 50 Z" fill="#e0e0e0" stroke="#1a1a1a" stroke-width="3.5"/>
+  <!-- Teeth -->
+  <line x1="28" y1="44" x2="28" y2="52" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="32" y1="44" x2="32" y2="52" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="36" y1="44" x2="36" y2="52" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- Glowing Toxic Green Eye Sockets -->
+  <ellipse cx="26" cy="30" rx="4.5" ry="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2.5"/>
+  <ellipse cx="38" cy="30" rx="4.5" ry="6" fill="#00e676" stroke="#1a1a1a" stroke-width="2.5"/>
+  <circle cx="26" cy="30" r="2" fill="#ffffff"/>
+  <circle cx="38" cy="30" r="2" fill="#ffffff"/>
+  <!-- Nasal cavity -->
+  <polygon points="32,36 30,41 34,41" fill="#1a1a1a"/>
+  <!-- Skull Forehead Crack -->
+  <path d="M30 14 L33 20 L31 24" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+</svg>
+

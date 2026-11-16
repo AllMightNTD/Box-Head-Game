@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Adrenaline Capsule Pill (+Atk Spd & Speed, -Max HP) -->
+  <g transform="rotate(-40 32 32)">
+    <!-- Pill Capsule Body -->
+    <rect x="20" y="10" width="24" height="44" rx="12" fill="#ffffff" stroke="#1a1a1a" stroke-width="4"/>
+    <!-- Top Half (Fiery Red) -->
+    <path d="M20 22 C20 15.4 25.4 10 32 10 C38.6 10 44 15.4 44 22 V32 H20 Z" fill="#d50000" stroke="#1a1a1a" stroke-width="3"/>
+    <!-- Bottom Half (Bright Yellow) -->
+    <path d="M20 32 H44 V42 C44 48.6 38.6 54 32 54 C25.4 54 20 48.6 20 42 Z" fill="#ffd600" stroke="#1a1a1a" stroke-width="3"/>
+    <!-- Glossy Highlight -->
+    <path d="M24 16 C24 14 26 13 29 13" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+    <!-- Center Dividing Line -->
+    <line x1="20" y1="32" x2="44" y2="32" stroke="#1a1a1a" stroke-width="3.5"/>
+    <!-- Lightning bolt on capsule -->
+    <polygon points="32,20 28,30 33,30 31,42 38,29 33,29" fill="#ffffff" stroke="#1a1a1a" stroke-width="2"/>
+  </g>
+</svg>
+

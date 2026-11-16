@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Permafrost Ring (+Freeze Duration, +Slow Strength) [MAGE] -->
+  <!-- Silver Ring Band -->
+  <circle cx="32" cy="38" r="18" fill="none" stroke="#111111" stroke-width="12"/>
+  <circle cx="32" cy="38" r="18" fill="none" stroke="#cfd8dc" stroke-width="7"/>
+  <circle cx="32" cy="38" r="18" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <!-- Glacial Diamond Crown Setting -->
+  <polygon points="32,8 44,18 20,18" fill="#e0f7fa" stroke="#111111" stroke-width="3"/>
+  <polygon points="32,8 38,18 26,18" fill="#00e5ff"/>
+  <!-- Snowflake Motif in Center of Ring -->
+  <g transform="translate(32, 38) scale(0.65)">
+    <line x1="0" y1="-14" x2="0" y2="14" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="-12" y1="-7" x2="12" y2="7" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="-12" y1="7" x2="12" y2="-7" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="3" fill="#ffffff"/>
+  </g>
+</svg>
+

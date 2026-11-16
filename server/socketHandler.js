@@ -250,6 +250,47 @@ function socketHandler(io) {
       }
     });
 
+    // Shop socket events (Phase 3B)
+    const handleBuyItem = (payload) => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room && room.gameRoom) {
+        room.gameRoom.handleBuyItem(socket.id, payload);
+      }
+    };
+    socket.on('BUY_SHOP_ITEM', handleBuyItem);
+    socket.on('shop:buy', handleBuyItem);
+
+    const handleReroll = () => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room && room.gameRoom) {
+        room.gameRoom.handleReroll(socket.id);
+      }
+    };
+    socket.on('REROLL_SHOP', handleReroll);
+    socket.on('shop:reroll', handleReroll);
+
+    const handleRecycle = (payload) => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room && room.gameRoom) {
+        room.gameRoom.handleRecycle(socket.id, payload);
+      }
+    };
+    socket.on('RECYCLE_ITEM', handleRecycle);
+    socket.on('shop:recycle', handleRecycle);
+
+    const handlePlayerReady = () => {
+      if (!currentRoomId) return;
+      const room = rooms.get(currentRoomId);
+      if (room && room.gameRoom) {
+        room.gameRoom.handlePlayerReady(socket.id);
+      }
+    };
+    socket.on('PLAYER_READY', handlePlayerReady);
+    socket.on('shop:ready', handlePlayerReady);
+
     function handleLeave() {
       if (!currentRoomId) return;
       const room = rooms.get(currentRoomId);

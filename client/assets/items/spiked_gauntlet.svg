@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Spiked Iron Gauntlet (+Melee Damage, +Knockback) [WARRIOR] -->
+  <!-- Heavy Iron Fist Body -->
+  <path d="M14 26 C14 16 22 12 34 12 C46 12 52 18 52 30 C52 42 44 48 34 48 C28 48 24 46 20 42 L14 26 Z" fill="#546e7a" stroke="#111111" stroke-width="4"/>
+  <!-- Metallic Highlight -->
+  <path d="M22 16 C30 16 42 20 44 26" fill="none" stroke="#cfd8dc" stroke-width="3" stroke-linecap="round"/>
+  <!-- 3 Brutal Steel Spikes on Knuckles -->
+  <polygon points="20,12 24,2 28,12" fill="#b0bec5" stroke="#111111" stroke-width="2.5"/>
+  <polygon points="32,12 36,0 40,12" fill="#b0bec5" stroke="#111111" stroke-width="2.5"/>
+  <polygon points="44,14 48,4 52,16" fill="#b0bec5" stroke="#111111" stroke-width="2.5"/>
+  <!-- Thumb Guard -->
+  <path d="M16 26 C10 26 8 32 8 36 C8 42 14 44 20 40 Z" fill="#37474f" stroke="#111111" stroke-width="3"/>
+  <!-- Wrist Gauntlet Cuff -->
+  <rect x="20" y="46" width="24" height="12" rx="3" fill="#263238" stroke="#111111" stroke-width="3.5"/>
+  <circle cx="26" cy="52" r="2" fill="#ffd600"/>
+  <circle cx="38" cy="52" r="2" fill="#ffd600"/>
+</svg>
+

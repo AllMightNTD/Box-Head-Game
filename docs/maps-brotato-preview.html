@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🗺️ Brotato Arena Maps — Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0f;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #eee;
+    min-height: 100vh;
+  }
+  header {
+    text-align: center;
+    padding: 28px 20px 12px;
+    border-bottom: 2px solid #1a1a2e;
+  }
+  header h1 { font-size: 2rem; letter-spacing: 3px; color: #00e5ff; text-shadow: 0 0 20px #00e5ff88; }
+  header p  { color: #aaa; margin-top: 6px; font-size: 0.95rem; }
+
+  .tabs {
+    display: flex; justify-content: center; gap: 10px;
+    padding: 18px 20px 0;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    padding: 8px 22px; border-radius: 999px; border: 2px solid #333;
+    background: #111; color: #aaa; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    transition: all .2s;
+  }
+  .tab-btn:hover { border-color: #555; color: #fff; }
+  .tab-btn.active { border-color: var(--accent); color: var(--accent); background: #161620;
+    box-shadow: 0 0 14px var(--accent); }
+
+  .map-wrapper {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px 40px;
+    gap: 20px;
+  }
+  .map-panel {
+    display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%;
+  }
+  .map-panel.active { display: flex; }
+
+  .map-info {
+    max-width: 760px; text-align: center;
+  }
+  .map-name { font-size: 1.5rem; font-weight: 800; letter-spacing: 2px; }
+  .map-sub  { font-size: 0.85rem; color: #888; margin-top: 3px; }
+  .map-desc { font-size: 0.9rem; color: #bbb; margin-top: 10px; line-height: 1.6; }
+
+  .badge {
+    display: inline-block; padding: 3px 14px; border-radius: 999px;
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 1.5px; margin-top: 8px;
+    border: 1.5px solid currentColor;
+  }
+
+  canvas.map-canvas {
+    border-radius: 12px;
+    box-shadow: 0 0 40px rgba(0,0,0,.7);
+    max-width: 100%;
+    image-rendering: pixelated;
+  }
+
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+    max-width: 760px; font-size: 0.8rem; color: #aaa;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .legend-dot  { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+  footer { text-align:center; padding:24px; color:#444; font-size:.8rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗺️ BROTATO ARENA MAPS</h1>
+  <p>Thiết kế lại 4 bản đồ theo phong cách arena mở — chamfer 45°, spawn grates, kiting loops</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-map="rooms"   style="--accent:#00e5ff">🏢 Phòng Thí Nghiệm</button>
+  <button class="tab-btn"        data-map="desert"  style="--accent:#f4a261">🏜️ Sa Mạc Bão Cát</button>
+  <button class="tab-btn"        data-map="snow"    style="--accent:#29b6f6">❄️ Băng Đảo Bắc Cực</button>
+  <button class="tab-btn"        data-map="volcano" style="--accent:#ff3d00">🌋 Hỏa Ngục Núi Lửa</button>
+</div>
+
+<div class="map-wrapper">
+
+  <!-- MAP 1: THE_ROOMS -->
+  <div class="map-panel active" id="panel-rooms">
+    <div class="map-info">
+      <div class="map-name" style="color:#00e5ff">🏢 PHÒNG THÍ NGHIỆM</div>
+      <div class="map-sub">THE ROOMS — Classic Boxhead × Brotato</div>
+      <span class="badge" style="color:#00e5ff">🏢 KINH ĐIỂN</span>
+      <div class="map-desc">
+        Arena công nghiệp 8 góc (octagon), 4 trụ bê tông tròn tạo luồng kiting vòng tròn. 
+        8 cống thoát nước phát sáng đỏ là điểm spawn zombie. 4 Supply Cyst xanh ở góc chamfer.
+        Terrain: Bê tông ẩm thấp, vết dầu loang, đèn neon xanh cyan.
+      </div>
+    </div>
+    <canvas class="map-canvas" id="canvas-rooms" width="760" height="570"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#00e5ff44;border:2px solid #00e5ff"></div> Vùng an toàn spawn người chơi</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff000066;border:2px solid #ff4444"></div> Zombie Spawn Grate</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00ff6666;border:2px solid #00ff88"></div> Supply Cyst (vật tư)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#5a6372"></div> Trụ cản / Obstacle</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2b2f36;border:1px solid #454d59"></div> Sàn bê tông</div>
+    </div>
+  </div>
+
+  <!-- MAP 2: DESERT -->
+  <div class="map-panel" id="panel-desert">
+    <div class="map-info">
+      <div class="map-name" style="color:#f4a261">🏜️ SA MẠC BÃO CÁT</div>
+      <div class="map-sub">THE DUNES — Brotato Desert Arena</div>
+      <span class="badge" style="color:#f4a261">🏜️ SA MẠC</span>
+      <div class="map-desc">
+        Đấu trường cát vàng hình 8 góc. Trung tâm là 4 đá tảng đền thờ cổ vuông góc tạo khoảng kiting rộng.
+        Tây & Đông có phế tích hành lang L-shape. 8 cống cát đỏ là spawn grates. 4 Oasis Cyst màu xanh lá.
+        Terrain: Cát mịn, shadow dài, gió thổi vệt cát.
+      </div>
+    </div>
+    <canvas class="map-canvas" id="canvas-desert" width="760" height="570"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#f4a26144;border:2px solid #f4a261"></div> Vùng spawn người chơi</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff330066;border:2px solid #ff6633"></div> Zombie Spawn Grate (cát đỏ)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22aa4466;border:2px solid #44cc66"></div> Oasis Cyst</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a06d48"></div> Đá sa thạch</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d4a373;border:1px solid #c6925c"></div> Nền cát vàng</div>
+    </div>
+  </div>
+
+  <!-- MAP 3: SNOW -->
+  <div class="map-panel" id="panel-snow">
+    <div class="map-info">
+      <div class="map-name" style="color:#29b6f6">❄️ BĂNG ĐẢO BẮC CỰC</div>
+      <div class="map-sub">FROSTBITE — Brotato Ice Arena</div>
+      <span class="badge" style="color:#29b6f6">❄️ BĂNG TUYẾT</span>
+      <div class="map-desc">
+        Đấu trường tuyết trắng hình octagon. 4 đỉnh băng khổng lồ màu xanh ở 4 góc tạo funnel kiting hẹp.
+        2 vách băng ngang (Glacier Ridge) phía bắc & nam. 2 đá lẻ ở giữa tạo choke. 
+        Terrain: Tuyết trắng, tinh thể băng lấp lánh, hơi nước.
+      </div>
+    </div>
+    <canvas class="map-canvas" id="canvas-snow" width="760" height="570"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#29b6f644;border:2px solid #29b6f6"></div> Vùng spawn người chơi</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2244ff66;border:2px solid #4466ff"></div> Zombie Spawn Grate (băng xanh)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#aaffee66;border:2px solid #aaffee"></div> Ice Cyst (rương băng)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0288d1"></div> Đỉnh băng (Ice Peak)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e3eff5;border:1px solid #cbe0ea"></div> Nền tuyết</div>
+    </div>
+  </div>
+
+  <!-- MAP 4: VOLCANO -->
+  <div class="map-panel" id="panel-volcano">
+    <div class="map-info">
+      <div class="map-name" style="color:#ff3d00">🌋 HỎA NGỤC NÚI LỬA</div>
+      <div class="map-sub">INFERNO PIT — Brotato Volcano Arena</div>
+      <span class="badge" style="color:#ff3d00">🌋 NÚI LỬA</span>
+      <div class="map-desc">
+        Đấu trường đá bazan đen hình octagon. Trung tâm là Caldera Dung Nham — vùng nguy hiểm đỏ rực, 
+        không thể đứng vào (damage zone). 4 pháo đài bazan ở 4 góc giữa. Spawn points phát sáng cam đỏ.
+        Terrain: Đá đen, dung nham chảy, tro bụi, hiệu ứng ember.
+      </div>
+    </div>
+    <canvas class="map-canvas" id="canvas-volcano" width="760" height="570"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#ff3d0044;border:2px solid #ff3d00"></div> Vùng spawn người chơi</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff660066;border:2px solid #ff9900"></div> Zombie Spawn Grate (dung nham)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff330088;border:2px solid #ff6600"></div> ☠ Caldera — Lava Damage Zone</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#55ff4444;border:2px solid #88ff66"></div> Loot Cyst (xanh lá)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#c62828"></div> Đá Bazan (Basalt)</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Box-Head × Brotato Hybrid — Map Design Preview v1.0 | Duyệt thiết kế trước khi triển khai code</footer>
+
+<script>
+// ======================= DRAWING UTILITIES =======================
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function octagonPath(ctx, cx, cy, w, h, chamfer) {
+  const x1 = cx - w/2, x2 = cx + w/2;
+  const y1 = cy - h/2, y2 = cy + h/2;
+  const c = chamfer;
+  ctx.beginPath();
+  ctx.moveTo(x1 + c, y1);
+  ctx.lineTo(x2 - c, y1);
+  ctx.lineTo(x2, y1 + c);
+  ctx.lineTo(x2, y2 - c);
+  ctx.lineTo(x2 - c, y2);
+  ctx.lineTo(x1 + c, y2);
+  ctx.lineTo(x1, y2 - c);
+  ctx.lineTo(x1, y1 + c);
+  ctx.closePath();
+}
+
+function drawGrid(ctx, w, h, color, size) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.5;
+  ctx.globalAlpha = 0.35;
+  for (let x = 0; x <= w; x += size) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = 0; y <= h; y += size) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSpawnGrate(ctx, x, y, r, color, glowColor) {
+  // Glow halo
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.5);
+  grad.addColorStop(0, glowColor + 'aa');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(x, y, r * 2.5, 0, Math.PI*2); ctx.fill();
+
+  // Dark grate body
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+
+  // Grid lines on grate
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.globalAlpha = 0.9;
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath(); ctx.moveTo(x + i*(r/2), y - r + 2); ctx.lineTo(x + i*(r/2), y + r - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - r + 2, y + i*(r/2)); ctx.lineTo(x + r - 2, y + i*(r/2)); ctx.stroke();
+  }
+  // Rim
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke();
+
+  // LED dot center
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+}
+
+function drawSupplyCyst(ctx, x, y, r, color1, color2) {
+  // Pulsing glow
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+  grad.addColorStop(0, color1 + '88');
+  grad.addColorStop(0.5, color1 + '22');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI*2); ctx.fill();
+
+  // Cyst body — organic blob
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, 0.85);
+  const bodyGrad = ctx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
+  bodyGrad.addColorStop(0, color2);
+  bodyGrad.addColorStop(1, color1);
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+
+  // Vein lines
+  ctx.strokeStyle = color2 + 'cc';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const a = (i/4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(Math.cos(a+0.4)*r*0.5, Math.sin(a+0.4)*r*0.5,
+                         Math.cos(a)*r*0.9, Math.sin(a)*r*0.9);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Sparkle icon
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${r}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('✦', x, y);
+}
+
+function drawPillarRect(ctx, x, y, w, h, topColor, sideColor, borderColor, chamfer = 6) {
+  chamfer = Math.min(chamfer, w/2, h/2);
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.roundRect(x + 5, y + 5, w, h, 4);
+  ctx.fill();
+  // Side face (bottom-right illusion)
+  ctx.fillStyle = sideColor;
+  ctx.fillRect(x + 4, y + 4, w, h);
+  // Top face
+  ctx.fillStyle = topColor;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, chamfer);
+  ctx.fill();
+  // Border
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, chamfer);
+  ctx.stroke();
+}
+
+function drawPillarCircle(ctx, x, y, r, topColor, sideColor, borderColor) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.arc(x + 4, y + 4, r, 0, Math.PI*2); ctx.fill();
+  // Side face
+  ctx.fillStyle = sideColor;
+  ctx.beginPath(); ctx.arc(x + 3, y + 3, r, 0, Math.PI*2); ctx.fill();
+  // Top
+  ctx.fillStyle = topColor;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  // Border
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke();
+}
+
+function drawPlayerSpawn(ctx, x, y, r, color) {
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.5);
+  grad.addColorStop(0, color + '55');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(x, y, r * 2.5, 0, Math.PI*2); ctx.fill();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = color;
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('⊕', x, y);
+}
+
+function drawArrow(ctx, x, y, angle, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(-8, 0); ctx.lineTo(8, 0);
+  ctx.moveTo(4, -4); ctx.lineTo(8, 0); ctx.lineTo(4, 4);
+  ctx.stroke();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// ======================= SCALE HELPER =======================
+// All map coords are 1600x1200 → scale to 760x570
+const SW = 760, SH = 570;
+const MW = 1600, MH = 1200;
+function sx(x) { return (x / MW) * SW; }
+function sy(y) { return (y / MH) * SH; }
+function sr(r) { return (r / MW) * SW; }
+
+// ======================= MAP 1: THE_ROOMS =======================
+function drawRooms() {
+  const canvas = document.getElementById('canvas-rooms');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // --- Background (boundary walls = dark border) ---
+  ctx.fillStyle = '#1a1d22';
+  ctx.fillRect(0, 0, W, H);
+
+  // Octagon arena boundary (chamfered)
+  const chamferPx = 70;
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  const floorGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.6);
+  floorGrad.addColorStop(0, '#2c2f36');
+  floorGrad.addColorStop(0.6, '#22252a');
+  floorGrad.addColorStop(1, '#191c21');
+  ctx.fillStyle = floorGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#3a4050';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Grid
+  ctx.save();
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  ctx.clip();
+  drawGrid(ctx, W, H, '#2b2f36', 40);
+  ctx.restore();
+
+  // Corner chamfer ZONE markers (45° hazard stripes)
+  const corners = [
+    {cx: chamferPx/2 + 10, cy: chamferPx/2 + 10},
+    {cx: W - chamferPx/2 - 10, cy: chamferPx/2 + 10},
+    {cx: chamferPx/2 + 10, cy: H - chamferPx/2 - 10},
+    {cx: W - chamferPx/2 - 10, cy: H - chamferPx/2 - 10},
+  ];
+  corners.forEach(c => {
+    ctx.fillStyle = '#00e5ff11';
+    ctx.strokeStyle = '#00e5ff44';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.arc(c.cx, c.cy, 24, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    // Supply Cyst
+    drawSupplyCyst(ctx, c.cx, c.cy, 14, '#00ff88', '#00cc55');
+  });
+
+  // Neon floor seams (kiting ring hint)
+  ctx.strokeStyle = '#00e5ff18';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 10]);
+  octagonPath(ctx, W/2, H/2, W*0.68, H*0.68, 50);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 4 Round Pillars (Brotato-style circular obstacles)
+  [
+    {cx: sx(490), cy: sy(390)},
+    {cx: sx(1110), cy: sy(390)},
+    {cx: sx(490), cy: sy(810)},
+    {cx: sx(1110), cy: sy(810)},
+  ].forEach(p => {
+    drawPillarCircle(ctx, p.cx, p.cy, sr(68), '#5a6372', '#3d444f', '#181b20');
+    // Industrial bolts
+    ctx.fillStyle = '#181b20';
+    for (let i=0;i<4;i++){
+      const a=(i/4)*Math.PI*2;
+      ctx.beginPath(); ctx.arc(p.cx+Math.cos(a)*sr(50), p.cy+Math.sin(a)*sr(50), 3, 0, Math.PI*2); ctx.fill();
+    }
+  });
+
+  // 2 Narrow horizontal pillars N/S (chokepoints)
+  [
+    {x: sx(730), y: sy(220), w: sx(140), h: sy(50)},
+    {x: sx(730), y: sy(930), w: sx(140), h: sy(50)},
+  ].forEach(p => {
+    drawPillarRect(ctx, p.x, p.y, p.w, p.h, '#454d59', '#2e343d', '#181b20', 4);
+  });
+
+  // 8 Zombie Spawn Grates (edge positions)
+  const spawnGratePositions = [
+    {x: sx(100), y: sy(80)},  {x: sx(800), y: sy(50)},  {x: sx(1500), y: sy(80)},
+    {x: sx(1530), y: sy(600)},
+    {x: sx(1500), y: sy(1120)}, {x: sx(800), y: sy(1150)}, {x: sx(100), y: sy(1120)},
+    {x: sx(70), y: sy(600)},
+  ];
+  spawnGratePositions.forEach(p => {
+    drawSpawnGrate(ctx, p.x, p.y, sr(28), '#ff4444', '#ff0000');
+  });
+
+  // Player spawn cross (center)
+  const playerSpawns = [
+    {x: sx(740), y: sy(550)}, {x: sx(860), y: sy(550)},
+    {x: sx(740), y: sy(650)}, {x: sx(860), y: sy(650)},
+  ];
+  // Central glow
+  const pGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, sr(120));
+  pGrad.addColorStop(0, '#00e5ff22');
+  pGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = pGrad;
+  ctx.beginPath(); ctx.arc(W/2, H/2, sr(120), 0, Math.PI*2); ctx.fill();
+  playerSpawns.forEach(p => drawPlayerSpawn(ctx, p.x, p.y, sr(22), '#00e5ff'));
+
+  // Kiting direction arrows
+  const arrowRing = sr(240);
+  for(let i=0;i<8;i++){
+    const a = (i/8)*Math.PI*2;
+    drawArrow(ctx, W/2+Math.cos(a)*arrowRing, H/2+Math.sin(a)*arrowRing, a+Math.PI/2, '#00e5ff');
+  }
+
+  // Map label
+  ctx.fillStyle = '#00e5ff';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.globalAlpha = 0.7;
+  ctx.fillText('THE ROOMS — BROTATO ARENA v2', 14, 14);
+  ctx.globalAlpha = 1;
+}
+
+// ======================= MAP 2: DESERT =======================
+function drawDesert() {
+  const canvas = document.getElementById('canvas-desert');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // Background
+  ctx.fillStyle = '#8c6230';
+  ctx.fillRect(0, 0, W, H);
+
+  const chamferPx = 70;
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  const floorGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.65);
+  floorGrad.addColorStop(0, '#deb87a');
+  floorGrad.addColorStop(0.5, '#d4a373');
+  floorGrad.addColorStop(1, '#c8924f');
+  ctx.fillStyle = floorGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#a07040';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Sand texture subtle dots
+  ctx.save();
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  ctx.clip();
+  drawGrid(ctx, W, H, '#c6925c', 36);
+  // Sand ripples
+  ctx.strokeStyle = '#be8450';
+  ctx.lineWidth = 0.8;
+  ctx.globalAlpha = 0.25;
+  for(let y=20; y<H; y+=18){
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for(let x=0; x<=W; x+=30){
+      ctx.quadraticCurveTo(x+15, y + (Math.sin(x/60+y/40)*5), x+30, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // 4 Corner Supply Cysts (Oasis)
+  const cornersD = [
+    {cx: chamferPx/2 + 10, cy: chamferPx/2 + 10},
+    {cx: W - chamferPx/2 - 10, cy: chamferPx/2 + 10},
+    {cx: chamferPx/2 + 10, cy: H - chamferPx/2 - 10},
+    {cx: W - chamferPx/2 - 10, cy: H - chamferPx/2 - 10},
+  ];
+  cornersD.forEach(c => drawSupplyCyst(ctx, c.cx, c.cy, 15, '#44cc66', '#22aa44'));
+
+  // West Outpost L-shape
+  drawPillarRect(ctx, sx(260), sy(280), sx(50), sy(220), '#e0a96d', '#a06d48', '#5c3820', 3);
+  drawPillarRect(ctx, sx(260), sy(280), sx(180), sy(50), '#e0a96d', '#a06d48', '#5c3820', 3);
+
+  // East Outpost L-shape (mirrored)
+  drawPillarRect(ctx, sx(1160), sy(650), sx(180), sy(50), '#e0a96d', '#a06d48', '#5c3820', 3);
+  drawPillarRect(ctx, sx(1290), sy(650), sx(50), sy(220), '#e0a96d', '#a06d48', '#5c3820', 3);
+
+  // Central Temple 4 monolith stones (now round for Brotato feel)
+  [
+    {cx: sx(705), cy: sy(495)}, {cx: sx(895), cy: sy(495)},
+    {cx: sx(705), cy: sy(705)}, {cx: sx(895), cy: sy(705)},
+  ].forEach(p => {
+    drawPillarCircle(ctx, p.cx, p.cy, sr(42), '#f4a261', '#8c5836', '#5c3820');
+  });
+
+  // Natural Rock Formations
+  drawPillarRect(ctx, sx(340), sy(780), sx(130), sy(130), '#f0b080', '#a06d48', '#5c3820', 20);
+  drawPillarRect(ctx, sx(1130), sy(280), sx(130), sy(130), '#f0b080', '#a06d48', '#5c3820', 20);
+
+  // N/S Gate rocks
+  drawPillarRect(ctx, sx(740), sy(140), sx(120), sy(70), '#e0a96d', '#a06d48', '#5c3820', 5);
+  drawPillarRect(ctx, sx(740), sy(990), sx(120), sy(70), '#e0a96d', '#a06d48', '#5c3820', 5);
+
+  // 8 Spawn Grates (sand-red)
+  [
+    {x: sx(120), y: sy(100)}, {x: sx(800), y: sy(55)}, {x: sx(1480), y: sy(100)},
+    {x: sx(1530), y: sy(600)},
+    {x: sx(1480), y: sy(1100)}, {x: sx(800), y: sy(1145)}, {x: sx(120), y: sy(1100)},
+    {x: sx(70), y: sy(600)},
+  ].forEach(p => drawSpawnGrate(ctx, p.x, p.y, sr(28), '#ff6633', '#ff4400'));
+
+  // Player spawns (center)
+  const pg2 = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, sr(100));
+  pg2.addColorStop(0, '#f4a26133'); pg2.addColorStop(1, 'transparent');
+  ctx.fillStyle = pg2; ctx.beginPath(); ctx.arc(W/2, H/2, sr(100), 0, Math.PI*2); ctx.fill();
+  [{x:sx(770),y:sy(570)},{x:sx(830),y:sy(570)},{x:sx(770),y:sy(630)},{x:sx(830),y:sy(630)}]
+    .forEach(p => drawPlayerSpawn(ctx, p.x, p.y, sr(22), '#f4a261'));
+
+  // Kiting arrows
+  const arrowRingD = sr(220);
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2;
+    drawArrow(ctx, W/2+Math.cos(a)*arrowRingD, H/2+Math.sin(a)*arrowRingD, a+Math.PI/2, '#f4a261');
+  }
+
+  ctx.fillStyle = '#f4a261'; ctx.font = 'bold 13px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.globalAlpha=0.7; ctx.fillText('THE DUNES — BROTATO ARENA v2', 14, 14); ctx.globalAlpha=1;
+}
+
+// ======================= MAP 3: SNOW =======================
+function drawSnow() {
+  const canvas = document.getElementById('canvas-snow');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = '#8aacba';
+  ctx.fillRect(0, 0, W, H);
+
+  const chamferPx = 70;
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  const floorGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.65);
+  floorGrad.addColorStop(0, '#f0f8ff');
+  floorGrad.addColorStop(0.5, '#e3eff5');
+  floorGrad.addColorStop(1, '#c8dce8');
+  ctx.fillStyle = floorGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#90b8cc';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.save();
+  octagonPath(ctx, W/2, H/2, W-20, H-20, chamferPx);
+  ctx.clip();
+  drawGrid(ctx, W, H, '#cbe0ea', 38);
+  // Snow sparkles
+  ctx.fillStyle = '#ffffff';
+  for(let i=0;i<80;i++){
+    const sx2=Math.random()*W, sy2=Math.random()*H;
+    ctx.globalAlpha = Math.random()*0.4+0.1;
+    ctx.beginPath(); ctx.arc(sx2, sy2, Math.random()*1.5+0.5, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  // 4 Corner Cysts (Ice relic)
+  const cornersS = [
+    {cx: chamferPx/2 + 10, cy: chamferPx/2 + 10},
+    {cx: W - chamferPx/2 - 10, cy: chamferPx/2 + 10},
+    {cx: chamferPx/2 + 10, cy: H - chamferPx/2 - 10},
+    {cx: W - chamferPx/2 - 10, cy: H - chamferPx/2 - 10},
+  ];
+  cornersS.forEach(c => drawSupplyCyst(ctx, c.cx, c.cy, 15, '#aaffee', '#44ccbb'));
+
+  // 4 Giant Ice Peaks (corner)
+  [
+    {cx: sx(425), cy: sy(365)}, {cx: sx(1175), cy: sy(365)},
+    {cx: sx(425), cy: sy(835)}, {cx: sx(1175), cy: sy(835)},
+  ].forEach(p => {
+    // Jagged ice peak shape
+    ctx.save();
+    ctx.translate(p.cx, p.cy);
+    const iceGrad = ctx.createRadialGradient(-sr(20),-sr(20),0, 0,0,sr(72));
+    iceGrad.addColorStop(0, '#d0f0ff');
+    iceGrad.addColorStop(0.4, '#81d4fa');
+    iceGrad.addColorStop(1, '#0288d1');
+    ctx.fillStyle = iceGrad;
+    ctx.beginPath();
+    // Hexagonal ice crystal
+    for(let i=0;i<6;i++){
+      const a=(i/6)*Math.PI*2 - Math.PI/6;
+      const r2 = sr(65) * (0.8 + Math.cos(i*2.1)*0.2);
+      i===0 ? ctx.moveTo(Math.cos(a)*r2, Math.sin(a)*r2) : ctx.lineTo(Math.cos(a)*r2, Math.sin(a)*r2);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#01579b';
+    ctx.lineWidth = 2; ctx.stroke();
+    // Inner crystal lines
+    ctx.strokeStyle = '#b0e8ff';
+    ctx.lineWidth = 1; ctx.globalAlpha=0.5;
+    for(let i=0;i<3;i++){
+      const a=(i/3)*Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*sr(65)*0.9, Math.sin(a)*sr(65)*0.9);
+      ctx.lineTo(Math.cos(a+Math.PI)*sr(65)*0.9, Math.sin(a+Math.PI)*sr(65)*0.9);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.restore();
+  });
+
+  // Glacier Ridges N/S
+  [
+    {x: sx(720), y: sy(360), w: sx(160), h: sy(60)},
+    {x: sx(720), y: sy(780), w: sx(160), h: sy(60)},
+  ].forEach(p => {
+    drawPillarRect(ctx, p.x, p.y, p.w, p.h, '#b0d8f0', '#6090b0', '#01579b', 8);
+    // Ice crack lines
+    ctx.strokeStyle = '#d0f0ff'; ctx.lineWidth=1; ctx.globalAlpha=0.6;
+    ctx.beginPath(); ctx.moveTo(p.x+p.w*0.3, p.y+4); ctx.lineTo(p.x+p.w*0.4, p.y+p.h-4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x+p.w*0.6, p.y+4); ctx.lineTo(p.x+p.w*0.7, p.y+p.h-4); ctx.stroke();
+    ctx.globalAlpha=1;
+  });
+
+  // Mid ice rocks E/W chokepoints
+  [
+    {cx: sx(535), cy: sy(605)},
+    {cx: sx(1065), cy: sy(605)},
+  ].forEach(p => {
+    drawPillarCircle(ctx, p.cx, p.cy, sr(40), '#90cae0', '#5088a0', '#01579b');
+  });
+
+  // Wall panels E/W
+  [
+    {x: sx(160), y: sy(530), w: sx(80), h: sy(140)},
+    {x: sx(1360), y: sy(530), w: sx(80), h: sy(140)},
+  ].forEach(p => {
+    drawPillarRect(ctx, p.x, p.y, p.w, p.h, '#b0bec5', '#455a64', '#263238', 5);
+  });
+
+  // 8 Spawn Grates (blue ice)
+  [
+    {x: sx(100), y: sy(80)}, {x: sx(800), y: sy(55)}, {x: sx(1500), y: sy(80)},
+    {x: sx(1530), y: sy(600)},
+    {x: sx(1500), y: sy(1120)}, {x: sx(800), y: sy(1145)}, {x: sx(100), y: sy(1120)},
+    {x: sx(70), y: sy(600)},
+  ].forEach(p => drawSpawnGrate(ctx, p.x, p.y, sr(28), '#4488ff', '#2244cc'));
+
+  // Player spawns
+  const pg3 = ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,sr(100));
+  pg3.addColorStop(0,'#29b6f633'); pg3.addColorStop(1,'transparent');
+  ctx.fillStyle=pg3; ctx.beginPath(); ctx.arc(W/2,H/2,sr(100),0,Math.PI*2); ctx.fill();
+  [{x:sx(760),y:sy(560)},{x:sx(840),y:sy(560)},{x:sx(760),y:sy(640)},{x:sx(840),y:sy(640)}]
+    .forEach(p => drawPlayerSpawn(ctx, p.x, p.y, sr(22), '#29b6f6'));
+
+  const arrowRingS = sr(220);
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2;
+    drawArrow(ctx, W/2+Math.cos(a)*arrowRingS, H/2+Math.sin(a)*arrowRingS, a+Math.PI/2, '#29b6f6');
+  }
+
+  ctx.fillStyle='#29b6f6'; ctx.font='bold 13px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.globalAlpha=0.7; ctx.fillText('FROSTBITE — BROTATO ARENA v2', 14, 14); ctx.globalAlpha=1;
+}
+
+// ======================= MAP 4: VOLCANO =======================
+function drawVolcano() {
+  const canvas = document.getElementById('canvas-volcano');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = '#080304';
+  ctx.fillRect(0, 0, W, H);
+
+  const chamferPx = 70;
+  octagonPath(ctx, W/2, H/2, W - 20, H - 20, chamferPx);
+  const floorGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W*0.65);
+  floorGrad.addColorStop(0, '#2c1c20');
+  floorGrad.addColorStop(0.4, '#1e1215');
+  floorGrad.addColorStop(1, '#100508');
+  ctx.fillStyle = floorGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#5c1818';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.save();
+  octagonPath(ctx, W/2, H/2, W-20, H-20, chamferPx);
+  ctx.clip();
+  drawGrid(ctx, W, H, '#2c1c20', 40);
+  // Lava crack lines
+  ctx.strokeStyle = '#ff3d00';
+  ctx.lineWidth = 1; ctx.globalAlpha=0.15;
+  for(let i=0;i<12;i++){
+    const x1=Math.random()*W, y1=Math.random()*H;
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x1+(Math.random()-0.5)*120, y1+(Math.random()-0.5)*120);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  // Corner cysts (loot)
+  const cornersV = [
+    {cx: chamferPx/2 + 10, cy: chamferPx/2 + 10},
+    {cx: W - chamferPx/2 - 10, cy: chamferPx/2 + 10},
+    {cx: chamferPx/2 + 10, cy: H - chamferPx/2 - 10},
+    {cx: W - chamferPx/2 - 10, cy: H - chamferPx/2 - 10},
+  ];
+  cornersV.forEach(c => drawSupplyCyst(ctx, c.cx, c.cy, 15, '#66ff44', '#33cc22'));
+
+  // ★ CENTRAL CALDERA (Lava Damage Zone) ★
+  const cCx = W/2, cCy = H/2;
+  // Outer lava glow
+  const lavaGrad = ctx.createRadialGradient(cCx, cCy, 0, cCx, cCy, sr(140));
+  lavaGrad.addColorStop(0, '#ff6600');
+  lavaGrad.addColorStop(0.3, '#ff3d00');
+  lavaGrad.addColorStop(0.65, '#cc2200');
+  lavaGrad.addColorStop(0.9, '#440000');
+  lavaGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = lavaGrad;
+  ctx.beginPath(); ctx.arc(cCx, cCy, sr(135), 0, Math.PI*2); ctx.fill();
+
+  // Caldera body
+  ctx.fillStyle = '#ff4400';
+  ctx.beginPath();
+  octagonPath(ctx, cCx, cCy, sx(180), sy(220), 24);
+  ctx.fill();
+  ctx.strokeStyle = '#ffd600';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Lava surface pattern
+  ctx.fillStyle = '#ff8800';
+  ctx.globalAlpha = 0.5;
+  for(let i=0;i<6;i++){
+    const a=(i/6)*Math.PI*2;
+    ctx.beginPath();
+    ctx.arc(cCx+Math.cos(a)*sr(50), cCy+Math.sin(a)*sr(42), sr(22), 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // Caldera ☠ label
+  ctx.fillStyle = '#ffd600';
+  ctx.font = `bold ${sr(32)}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.shadowColor='#ff3d00'; ctx.shadowBlur=10;
+  ctx.fillText('☠', cCx, cCy);
+  ctx.shadowBlur=0;
+
+  // ☠ danger label below
+  ctx.fillStyle = '#ffd600';
+  ctx.font = `bold ${sr(14)}px monospace`;
+  ctx.fillText('LAVA ZONE', cCx, cCy + sr(60));
+
+  // 4 Basalt Fortress Bastions (round)
+  [
+    {cx: sx(445), cy: sy(335)}, {cx: sx(1155), cy: sy(335)},
+    {cx: sx(445), cy: sy(865)}, {cx: sx(1155), cy: sy(865)},
+  ].forEach(p => {
+    // Basalt multi-layer
+    ctx.fillStyle = '#1a0808';
+    ctx.beginPath(); ctx.arc(p.cx+4, p.cy+4, sr(68), 0, Math.PI*2); ctx.fill();
+    const basaltGrad = ctx.createRadialGradient(p.cx-sr(20), p.cy-sr(20), 0, p.cx, p.cy, sr(68));
+    basaltGrad.addColorStop(0, '#5c2020');
+    basaltGrad.addColorStop(0.5, '#c62828');
+    basaltGrad.addColorStop(1, '#7a1010');
+    ctx.fillStyle = basaltGrad;
+    ctx.beginPath(); ctx.arc(p.cx, p.cy, sr(68), 0, Math.PI*2); ctx.fill();
+    // Lava veins
+    ctx.strokeStyle = '#ff3d00';
+    ctx.lineWidth=1.5; ctx.globalAlpha=0.4;
+    for(let i=0;i<4;i++){
+      const a=(i/4)*Math.PI*2;
+      ctx.beginPath(); ctx.moveTo(p.cx, p.cy);
+      ctx.lineTo(p.cx+Math.cos(a)*sr(60), p.cy+Math.sin(a)*sr(60)); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.strokeStyle='#ffd600'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(p.cx, p.cy, sr(68), 0, Math.PI*2); ctx.stroke();
+  });
+
+  // Magma Spire Chokepoints E/W
+  [
+    {cx: sx(545), cy: sy(600)},
+    {cx: sx(1055), cy: sy(600)},
+  ].forEach(p => {
+    drawPillarRect(ctx, p.cx - sx(45), p.cy - sy(30), sx(90), sy(60), '#ff3d00', '#c62828', '#ffd600', 5);
+  });
+
+  // N/S spires
+  [
+    {x: sx(740), y: sy(160), w: sx(120), h: sy(80)},
+    {x: sx(740), y: sy(960), w: sx(120), h: sy(80)},
+  ].forEach(p => {
+    drawPillarRect(ctx, p.x, p.y, p.w, p.h, '#ff3d00', '#c62828', '#ffd600', 5);
+  });
+
+  // 8 Spawn Grates (lava orange)
+  [
+    {x: sx(100), y: sy(80)}, {x: sx(800), y: sy(55)}, {x: sx(1500), y: sy(80)},
+    {x: sx(1530), y: sy(600)},
+    {x: sx(1500), y: sy(1120)}, {x: sx(800), y: sy(1145)}, {x: sx(100), y: sy(1120)},
+    {x: sx(70), y: sy(600)},
+  ].forEach(p => drawSpawnGrate(ctx, p.x, p.y, sr(28), '#ff9900', '#ff6600'));
+
+  // Player spawns (around caldera)
+  [
+    {x: sx(620), y: sy(600)}, {x: sx(980), y: sy(600)},
+    {x: sx(800), y: sy(410)}, {x: sx(800), y: sy(790)},
+  ].forEach(p => drawPlayerSpawn(ctx, p.x, p.y, sr(22), '#ff3d00'));
+
+  const arrowRingV = sr(260);
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2;
+    drawArrow(ctx, W/2+Math.cos(a)*arrowRingV, H/2+Math.sin(a)*arrowRingV, a+Math.PI/2, '#ff3d00');
+  }
+
+  // Ember particles
+  for(let i=0;i<30;i++){
+    const ex=Math.random()*W, ey=Math.random()*H;
+    const er=Math.random()*2+0.5;
+    ctx.fillStyle = Math.random()>0.5 ? '#ff8800' : '#ffd600';
+    ctx.globalAlpha = Math.random()*0.6+0.1;
+    ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  ctx.fillStyle='#ff3d00'; ctx.font='bold 13px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.globalAlpha=0.8; ctx.fillText('INFERNO PIT — BROTATO ARENA v2', 14, 14); ctx.globalAlpha=1;
+}
+
+// ======================= INIT =======================
+window.addEventListener('DOMContentLoaded', () => {
+  drawRooms();
+  drawDesert();
+  drawSnow();
+  drawVolcano();
+
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mapKey = btn.dataset.map;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.map-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(`panel-${mapKey}`).classList.add('active');
+    });
+  });
+});
+</script>
+</body>
+</html>
+

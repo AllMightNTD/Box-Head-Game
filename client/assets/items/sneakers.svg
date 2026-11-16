@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Winged Sneakers (+Move Speed) -->
+  <!-- Sneaker shoe body -->
+  <path d="M12 36 L24 24 L36 28 L44 34 L56 38 C58 40 58 46 54 48 L14 48 C10 48 8 44 10 40 Z" fill="#ff7043" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Rubber Sole -->
+  <rect x="8" y="46" width="50" height="8" rx="3" fill="#ffffff" stroke="#1a1a1a" stroke-width="3"/>
+  <!-- Laces -->
+  <line x1="28" y1="28" x2="34" y2="34" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="32" y1="26" x2="38" y2="32" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+  <!-- Wing at heel -->
+  <g transform="translate(4, 10)">
+    <!-- Feather 1 (Top) -->
+    <path d="M14 16 C8 10 2 12 0 6 C8 4 16 8 20 12 Z" fill="#e0f7fa" stroke="#1a1a1a" stroke-width="2.5"/>
+    <!-- Feather 2 (Middle) -->
+    <path d="M14 18 C6 14 0 18 0 12 C8 10 16 12 20 16 Z" fill="#ffffff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <!-- Feather 3 (Bottom) -->
+    <path d="M14 20 C8 18 2 22 2 18 C8 16 14 18 18 20 Z" fill="#b2ebf2" stroke="#1a1a1a" stroke-width="2"/>
+  </g>
+  <!-- Speed lines in front of toe -->
+  <line x1="58" y1="36" x2="63" y2="36" stroke="#ffd600" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="56" y1="42" x2="62" y2="42" stroke="#ffd600" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
+

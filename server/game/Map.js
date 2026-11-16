@@ -23,6 +23,8 @@ class GameMap {
     this.walls = config.walls.map(w => ({ ...w }));
     this.playerSpawns = config.playerSpawns.map(s => ({ ...s }));
     this.zombieSpawns = config.zombieSpawns.map(s => ({ ...s }));
+    this.supplyCysts = (config.supplyCysts || []).map(s => ({ ...s }));
+    this.lavaCalderas = (config.lavaCalderas || []).map(c => ({ ...c }));
   }
 
   isWall(x, y, radius = 0) {

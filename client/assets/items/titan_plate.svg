@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Reinforced Titan Plate (+Armor, +Max HP, Anti-Bite Back Resistance) [WARRIOR] -->
+  <!-- Heavy Hexagonal Armor Plate -->
+  <polygon points="32,4 56,16 56,48 32,60 8,48 8,16" fill="#455a64" stroke="#111111" stroke-width="4"/>
+  <!-- Inner Bevel Shield -->
+  <polygon points="32,10 50,20 50,44 32,54 14,44 14,20" fill="#607d8b" stroke="#111111" stroke-width="3"/>
+  <!-- Top Metallic Glare -->
+  <polygon points="32,10 50,20 32,24 14,20" fill="#b0bec5"/>
+  <!-- Heavy Industrial Rivets -->
+  <circle cx="32" cy="8" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <circle cx="53" cy="18" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <circle cx="53" cy="46" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <circle cx="32" cy="56" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <circle cx="11" cy="46" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <circle cx="11" cy="18" r="2.5" fill="#cfd8dc" stroke="#111111" stroke-width="1.5"/>
+  <!-- Heavy Steel Cross / Shield Boss -->
+  <rect x="28" y="24" width="8" height="16" rx="2" fill="#d32f2f" stroke="#111111" stroke-width="2"/>
+  <rect x="24" y="28" width="16" height="8" rx="2" fill="#d32f2f" stroke="#111111" stroke-width="2"/>
+</svg>
+

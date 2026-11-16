@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Hollow-Point Ammo (+Ranged Damage, +Knockback) [HUMAN] -->
+  <g transform="translate(18, 12)">
+    <!-- Main Bullet Brass Casing -->
+    <rect x="6" y="16" width="16" height="28" fill="#ffd600" stroke="#111111" stroke-width="3"/>
+    <!-- Casing rim -->
+    <rect x="4" y="42" width="20" height="4" rx="1" fill="#ffab00" stroke="#111111" stroke-width="2.5"/>
+    <!-- Hollow Point Head -->
+    <path d="M6 16 C6 6 14 0 14 0 C14 0 22 6 22 16 Z" fill="#cfd8dc" stroke="#111111" stroke-width="3"/>
+    <!-- Hollow cavity indentation -->
+    <ellipse cx="14" cy="5" rx="4" ry="2.5" fill="#263238" stroke="#111111" stroke-width="1.5"/>
+    <!-- Kinetic Impact Shards around -->
+    <polygon points="26,10 32,8 28,14" fill="#ffd600" stroke="#111111" stroke-width="1.5"/>
+    <polygon points="1,12 -5,14 -2,8" fill="#ffd600" stroke="#111111" stroke-width="1.5"/>
+    <polygon points="14,-4 16,-10 11,-8" fill="#ffd600" stroke="#111111" stroke-width="1.5"/>
+  </g>
+</svg>
+

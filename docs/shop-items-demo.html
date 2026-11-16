@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brotato Shop Items & Cards Demo - Boxhead Hybrid</title>
+  <style>
+    :root {
+      --bg-dark: #121418;
+      --bg-panel: #1a1e26;
+      --bg-card: #242a36;
+      --bg-card-hover: #2d3544;
+      --border-dark: #101216;
+      --text-main: #f0f3f6;
+      --text-muted: #8b9bb4;
+      
+      /* Brotato Rarity Colors */
+      --tier-common: #b0bec5;
+      --tier-common-bg: rgba(176, 190, 197, 0.12);
+      --tier-rare: #29b6f6;
+      --tier-rare-bg: rgba(41, 182, 246, 0.14);
+      --tier-epic: #ab47bc;
+      --tier-epic-bg: rgba(171, 71, 188, 0.16);
+      --tier-legendary: #ff1744;
+      --tier-legendary-bg: rgba(255, 23, 68, 0.18);
+      
+      --material-green: #00e676;
+      --stat-positive: #69f0ae;
+      --stat-negative: #ff5252;
+      --accent-gold: #ffd600;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Trebuchet MS", sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 10%, #1f2530 0%, transparent 60%),
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 32px 32px, 32px 32px;
+      color: var(--text-main);
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+
+    /* Header Bar */
+    .shop-header {
+      background: var(--bg-panel);
+      border: 3px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 18px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset 0 2px 0 rgba(255,255,255,0.08);
+      margin-bottom: 24px;
+    }
+
+    .shop-title-group h1 {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-transform: uppercase;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .wave-badge {
+      background: #e65100;
+      color: #fff;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 2px solid #ff9800;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .wallet-container {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .wallet-pill {
+      background: #0f2d1e;
+      border: 2px solid var(--material-green);
+      padding: 8px 18px;
+      border-radius: 30px;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--material-green);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 0 16px rgba(0, 230, 118, 0.25);
+    }
+
+    .gem-icon {
+      width: 22px;
+      height: 22px;
+      background: var(--material-green);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+      display: inline-block;
+      box-shadow: 0 0 8px var(--material-green);
+    }
+
+    .btn-reroll {
+      background: #37474f;
+      color: #fff;
+      border: 2px solid #546e7a;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 0 #263238;
+    }
+
+    .btn-reroll:hover {
+      background: #455a64;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #263238;
+    }
+
+    .btn-reroll:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #263238;
+    }
+
+    .btn-next-wave {
+      background: #2e7d32;
+      color: #fff;
+      border: 2px solid #4caf50;
+      padding: 10px 24px;
+      border-radius: 10px;
+      font-weight: 900;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 0 #1b5e20;
+    }
+
+    .btn-next-wave:hover {
+      background: #388e3c;
+      transform: translateY(-2px);
+    }
+
+    /* Main Grid Layout */
+    .shop-main-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 24px;
+      margin-bottom: 36px;
+    }
+
+    /* Sidebar: Stats Panel */
+    .stats-panel {
+      background: var(--bg-panel);
+      border: 3px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    .panel-header {
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 2px solid rgba(255,255,255,0.08);
+      padding-bottom: 8px;
+    }
+
+    .hero-summary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      background: rgba(0,0,0,0.25);
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    .hero-icon-box {
+      width: 44px;
+      height: 44px;
+      background: #2e7d32;
+      border: 2px solid #1b5e20;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .hero-name {
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .hero-class {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 4px;
+      font-size: 13.5px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .stat-row:hover {
+      background: rgba(255,255,255,0.04);
+    }
+
+    .stat-name {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-val {
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .stat-val.positive {
+      color: var(--stat-positive);
+    }
+
+    .stat-val.negative {
+      color: var(--stat-negative);
+    }
+
+    /* 4 Live Shop Cards */
+    .cards-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .shop-card {
+      background: var(--bg-card);
+      border: 3px solid var(--border-dark);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      min-height: 340px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
+
+    .shop-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.5);
+    }
+
+    /* Card Rarity Borders & Accents */
+    .shop-card.tier-common {
+      border-color: var(--tier-common);
+      box-shadow: 0 4px 12px rgba(176, 190, 197, 0.15);
+    }
+    .shop-card.tier-rare {
+      border-color: var(--tier-rare);
+      box-shadow: 0 4px 14px rgba(41, 182, 246, 0.25);
+    }
+    .shop-card.tier-epic {
+      border-color: var(--tier-epic);
+      box-shadow: 0 4px 16px rgba(171, 71, 188, 0.3);
+    }
+    .shop-card.tier-legendary {
+      border-color: var(--tier-legendary);
+      box-shadow: 0 6px 20px rgba(255, 23, 68, 0.4);
+      background: linear-gradient(180deg, #2a2028 0%, var(--bg-card) 60%);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .item-tier-tag {
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .tier-common .item-tier-tag {
+      background: var(--tier-common-bg);
+      color: var(--tier-common);
+    }
+    .tier-rare .item-tier-tag {
+      background: var(--tier-rare-bg);
+      color: var(--tier-rare);
+    }
+    .tier-epic .item-tier-tag {
+      background: var(--tier-epic-bg);
+      color: var(--tier-epic);
+    }
+    .tier-legendary .item-tier-tag {
+      background: var(--tier-legendary-bg);
+      color: var(--tier-legendary);
+    }
+
+    .lock-btn {
+      background: none;
+      border: none;
+      color: #546e7a;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+
+    .lock-btn:hover, .lock-btn.locked {
+      color: var(--accent-gold);
+    }
+
+    /* Icon Preview Frame */
+    .item-art-frame {
+      width: 96px;
+      height: 96px;
+      margin: 8px auto 14px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(255,255,255,0.06);
+      transition: transform 0.2s ease;
+    }
+
+    .shop-card:hover .item-art-frame {
+      transform: scale(1.08) rotate(2deg);
+    }
+
+    .item-art-frame img, .item-art-frame svg {
+      width: 64px;
+      height: 64px;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+    }
+
+    .item-name {
+      font-size: 16px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .item-stats-list {
+      background: rgba(0,0,0,0.22);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 14px;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+
+    .stat-gain {
+      color: var(--stat-positive);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .stat-loss {
+      color: var(--stat-negative);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-buy {
+      width: 100%;
+      background: #1b5e20;
+      border: 2px solid #4caf50;
+      color: #fff;
+      font-weight: 900;
+      font-size: 15px;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 0 #0d3813;
+    }
+
+    .btn-buy:hover {
+      background: #2e7d32;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #0d3813;
+    }
+
+    .btn-buy:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #0d3813;
+    }
+
+    .btn-buy.purchased {
+      background: #37474f !important;
+      border-color: #546e7a !important;
+      box-shadow: none !important;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    /* Content Area Layout */
+    .shop-content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Equipped Weapons Bar */
+    .equipped-weapons-bar {
+      background: var(--bg-panel);
+      border: 3px solid var(--border-dark);
+      border-radius: 14px;
+      padding: 12px 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+
+    .section-micro-title {
+      font-size: 11.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent-gold);
+      margin-bottom: 8px;
+    }
+
+    .weapon-slots-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+    }
+
+    .weapon-slot {
+      background: var(--bg-card);
+      border: 2px solid var(--border-dark);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+    }
+
+    .weapon-slot.active {
+      border-color: var(--tier-rare);
+      background: rgba(41, 182, 246, 0.08);
+    }
+
+    .weapon-slot.empty {
+      border-style: dashed;
+      border-color: #37474f;
+      color: var(--text-muted);
+      justify-content: center;
+    }
+
+    .weapon-num {
+      background: #111;
+      color: var(--accent-gold);
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    /* Character Inventory / Owned Items Section */
+    .owned-inventory-section {
+      background: var(--bg-panel);
+      border: 3px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 18px 22px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .inventory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .inventory-header h3 {
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inventory-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .owned-items-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      min-height: 72px;
+      align-items: center;
+      background: rgba(0,0,0,0.22);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1.5px dashed rgba(255,255,255,0.08);
+    }
+
+    .owned-item-slot {
+      width: 64px;
+      height: 64px;
+      background: var(--bg-card);
+      border: 2.5px solid var(--border-dark);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+
+    .owned-item-slot:hover {
+      transform: translateY(-3px) scale(1.08);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+    }
+
+    .owned-item-slot.tier-common { border-color: var(--tier-common); }
+    .owned-item-slot.tier-rare { border-color: var(--tier-rare); box-shadow: 0 0 8px rgba(41,182,246,0.3); }
+    .owned-item-slot.tier-epic { border-color: var(--tier-epic); box-shadow: 0 0 10px rgba(171,71,188,0.35); }
+    .owned-item-slot.tier-legendary { border-color: var(--tier-legendary); box-shadow: 0 0 14px rgba(255,23,68,0.45); }
+
+    .owned-item-slot img {
+      width: 44px;
+      height: 44px;
+      pointer-events: none;
+    }
+
+    .stack-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #ff9800;
+      color: #000;
+      font-weight: 900;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      border: 1.5px solid #000;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .empty-inventory-note {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-style: italic;
+      padding: 12px;
+      text-align: center;
+      width: 100%;
+    }
+
+    /* Modal Popup for Item Inspection / Recycle */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.75);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 200;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+      background: var(--bg-panel);
+      border: 3px solid var(--tier-rare);
+      border-radius: 16px;
+      padding: 24px;
+      width: 380px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.7);
+      text-align: center;
+      position: relative;
+      animation: popIn 0.2s ease;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-item-frame {
+      width: 80px;
+      height: 80px;
+      background: rgba(0,0,0,0.35);
+      border-radius: 14px;
+      margin: 0 auto 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(255,255,255,0.08);
+    }
+
+    .modal-item-frame img {
+      width: 56px;
+      height: 56px;
+    }
+
+    .modal-item-title {
+      font-size: 18px;
+      font-weight: 900;
+      margin-bottom: 6px;
+    }
+
+    .modal-tier-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .modal-stats-box {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-recycle {
+      flex: 1;
+      background: #d84315;
+      color: #fff;
+      border: 2px solid #ff7043;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn-recycle:hover {
+      background: #f4511e;
+      transform: translateY(-2px);
+    }
+
+    .btn-close-modal {
+      background: #37474f;
+      color: #fff;
+      border: 2px solid #546e7a;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .btn-close-modal:hover {
+      background: #455a64;
+    }
+
+    /* Full Catalog Section */
+    .catalog-section {
+      background: var(--bg-panel);
+      border: 3px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    .catalog-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .catalog-header h2 {
+      font-size: 20px;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      background: #263238;
+      border: 1px solid #37474f;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tab-btn.active, .tab-btn:hover {
+      background: var(--tier-rare);
+      color: #000;
+      border-color: var(--tier-rare);
+    }
+
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .catalog-item-card {
+      background: var(--bg-card);
+      border: 2px solid var(--border-dark);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      transition: all 0.15s ease;
+    }
+
+    .catalog-item-card:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+      border-color: #455a64;
+    }
+
+    .catalog-icon-box {
+      width: 58px;
+      height: 58px;
+      background: rgba(0,0,0,0.35);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1.5px solid rgba(255,255,255,0.06);
+    }
+
+    .catalog-icon-box img, .catalog-icon-box svg {
+      width: 44px;
+      height: 44px;
+    }
+
+    .catalog-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .catalog-item-title {
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .catalog-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1b5e20;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: 800;
+      border: 2px solid #4caf50;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 100;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @media (max-width: 980px) {
+      .shop-main-layout {
+        grid-template-columns: 1fr;
+      }
+      .cards-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="shop-header">
+      <div class="shop-title-group">
+        <h1>
+          🏪 BROTATO INTER-WAVE SHOP 
+          <span class="wave-badge">WAVE 3 CLEARED</span>
+        </h1>
+      </div>
+      <div class="wallet-container">
+        <div class="wallet-pill" id="walletDisplay">
+          <span class="gem-icon"></span>
+          <span id="materialCount">165</span>
+        </div>
+        <button class="btn-reroll" id="rerollBtn" onclick="rerollShop()">
+          🎲 Reroll (<span id="rerollCost">5</span> 🟢)
+        </button>
+        <button class="btn-next-wave" onclick="showToast('Sẵn sàng cho Wave 4!')">
+          ⚔️ VÀO WAVE 4
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Shop Layout -->
+    <main class="shop-main-layout">
+      <!-- Sidebar Stats -->
+      <aside class="stats-panel">
+        <div class="panel-header">
+          👤 CHỈ SỐ NHÂN VẬT (BAMBO)
+        </div>
+        <div class="hero-summary">
+          <div class="hero-icon-box">🧍</div>
+          <div>
+            <div class="hero-name">Bambo (Player 1)</div>
+            <div class="hero-class">Lớp: Human (Đặc Nhiệm)</div>
+          </div>
+        </div>
+
+        <div class="stat-list">
+          <div class="stat-row">
+            <span class="stat-name">❤️ Máu tối đa (Max HP)</span>
+            <span class="stat-val" id="statMaxHp">100</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🩹 Hồi máu / 5s (Regen)</span>
+            <span class="stat-val positive" id="statRegen">+1</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🩸 Hút máu (Life Steal)</span>
+            <span class="stat-val" id="statLifeSteal">0%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🛡️ Giáp (Armor)</span>
+            <span class="stat-val positive" id="statArmor">+3</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">💨 Né đòn (Dodge)</span>
+            <span class="stat-val" id="statDodge">0%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">⚔️ Sát thương (Damage)</span>
+            <span class="stat-val positive" id="statDamage">+5%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">⚡ Tốc đánh (Attack Spd)</span>
+            <span class="stat-val positive" id="statAtkSpd">+10%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🎯 Chí mạng (Crit Chance)</span>
+            <span class="stat-val" id="statCrit">5%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">👟 Tốc độ (Speed)</span>
+            <span class="stat-val" id="statSpeed">160 px/s</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🧲 Bán kính hút (Range)</span>
+            <span class="stat-val" id="statPickup">140 px</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🌾 Thu hoạch (Harvesting)</span>
+            <span class="stat-val positive" id="statHarvest">+8</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">🍀 May mắn (Luck)</span>
+            <span class="stat-val positive" id="statLuck">+5%</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content Area: Weapons + Shop Cards + Inventory -->
+      <div class="shop-content-area">
+        <!-- Equipped Weapons Row -->
+        <div class="equipped-weapons-bar">
+          <div class="section-micro-title">🔫 VŨ KHÍ ĐANG TRANG BỊ (WEAPONS: 3/6)</div>
+          <div class="weapon-slots-row">
+            <div class="weapon-slot active"><span class="weapon-num">1</span> 🔫 Pistol (Lv.1)</div>
+            <div class="weapon-slot active"><span class="weapon-num">2</span> ⚡ Uzi (Lv.2)</div>
+            <div class="weapon-slot active"><span class="weapon-num">3</span> 💥 Shotgun (Lv.1)</div>
+            <div class="weapon-slot empty"><span class="weapon-num">4</span> + Trống</div>
+            <div class="weapon-slot empty"><span class="weapon-num">5</span> + Trống</div>
+            <div class="weapon-slot empty"><span class="weapon-num">6</span> + Trống</div>
+          </div>
+        </div>
+
+        <!-- 4 Live Featured Cards -->
+        <section class="cards-grid-4" id="cardsGrid">
+          <!-- Card 1: Common - HUMAN GUNNER -->
+          <article class="shop-card tier-common" id="card-1">
+            <div class="card-top">
+              <span class="item-tier-tag">Common • Đặc Nhiệm</span>
+              <button class="lock-btn" onclick="toggleLock(this)" title="Khóa thẻ để giữ lại wave sau">🔓</button>
+            </div>
+            <div class="item-art-frame">
+              <img src="../client/assets/items/bandolier.svg" alt="Bandolier">
+            </div>
+            <h3 class="item-name">Băng Đạn Tác Chiến</h3>
+            <div class="item-stats-list">
+              <div class="stat-gain">+25% Sức Chứa Đạn</div>
+              <div class="stat-gain">+15% Tốc Độ Nạp Đạn</div>
+            </div>
+            <div class="card-footer">
+              <button class="btn-buy" onclick="buyItem('card-1', 'bandolier', 20, {atkSpd: 15})">
+                <span>MUA</span> • 20 🟢
+              </button>
+            </div>
+          </article>
+
+          <!-- Card 2: Rare - WARRIOR BRAWLER -->
+          <article class="shop-card tier-rare" id="card-2">
+            <div class="card-top">
+              <span class="item-tier-tag">Rare • Chiến Binh</span>
+              <button class="lock-btn" onclick="toggleLock(this)" title="Khóa thẻ để giữ lại wave sau">🔓</button>
+            </div>
+            <div class="item-art-frame">
+              <img src="../client/assets/items/spiked_gauntlet.svg" alt="Spiked Gauntlet">
+            </div>
+            <h3 class="item-name">Găng Thiết Gai</h3>
+            <div class="item-stats-list">
+              <div class="stat-gain">+20% Sát Thương Cận Chiến</div>
+              <div class="stat-gain">+35% Lực Đẩy Lùi Quái</div>
+            </div>
+            <div class="card-footer">
+              <button class="btn-buy" onclick="buyItem('card-2', 'spiked_gauntlet', 45, {damage: 20})">
+                <span>MUA</span> • 45 🟢
+              </button>
+            </div>
+          </article>
+
+          <!-- Card 3: Epic - MAGE FROST -->
+          <article class="shop-card tier-epic" id="card-3">
+            <div class="card-top">
+              <span class="item-tier-tag">Epic • Pháp Sư</span>
+              <button class="lock-btn" onclick="toggleLock(this)" title="Khóa thẻ để giữ lại wave sau">🔓</button>
+            </div>
+            <div class="item-art-frame">
+              <img src="../client/assets/items/frost_ring.svg" alt="Frost Ring">
+            </div>
+            <h3 class="item-name">Nhẫn Băng Vĩnh Cửu</h3>
+            <div class="item-stats-list">
+              <div class="stat-gain">+1.0s Thời Gian Đóng Băng</div>
+              <div class="stat-gain">+20% Làm Chậm Zombie</div>
+            </div>
+            <div class="card-footer">
+              <button class="btn-buy" onclick="buyItem('card-3', 'frost_ring', 75, {dodge: 5})">
+                <span>MUA</span> • 75 🟢
+              </button>
+            </div>
+          </article>
+
+          <!-- Card 4: Legendary - TACTICAL CO-OP -->
+          <article class="shop-card tier-legendary" id="card-4">
+            <div class="card-top">
+              <span class="item-tier-tag">Legendary • Chiến Thuật</span>
+              <button class="lock-btn" onclick="toggleLock(this)" title="Khóa thẻ để giữ lại wave sau">🔓</button>
+            </div>
+            <div class="item-art-frame">
+              <img src="../client/assets/items/nitro_tank.svg" alt="Nitro Tank">
+            </div>
+            <h3 class="item-name">Hỗn Hợp Nổ Nitro</h3>
+            <div class="item-stats-list">
+              <div class="stat-gain">+35% Bán Kính Nổ Barrel</div>
+              <div class="stat-gain">+40% Sát Thương Nổ Lan</div>
+            </div>
+            <div class="card-footer">
+              <button class="btn-buy" onclick="buyItem('card-4', 'nitro_tank', 135, {damage: 35})">
+                <span>MUA</span> • 135 🟢
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <!-- Character Inventory / Owned Items Section -->
+        <section class="owned-inventory-section">
+          <div class="inventory-header">
+            <h3>🎒 VẬT PHẨM ĐÃ TRANG BỊ / SỞ HỮU (<span id="ownedCount">2</span>/18 Ô)</h3>
+            <span class="inventory-hint">💡 Giới hạn: Common x5, Rare x3, Epic x2, Legendary x1 • Nhấp để xem / Bán lại (hoàn 50% 🟢)</span>
+          </div>
+          <div class="owned-items-grid" id="ownedItemsGrid">
+            <!-- Dynamic owned item slots populated by JS -->
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Modal Item Inspector / Recycle -->
+    <div class="modal-overlay" id="itemModalOverlay" onclick="if(event.target===this) closeItemModal()">
+      <div class="modal-content">
+        <div class="modal-item-frame">
+          <img id="modalItemImg" src="../client/assets/items/coffee.svg" alt="Item">
+        </div>
+        <div class="modal-item-title" id="modalItemTitle">Cà Phê Nóng (x1)</div>
+        <div class="modal-tier-badge" id="modalTierBadge">Common • Cấp I</div>
+        <div class="modal-stats-box" id="modalItemDesc">
+          <!-- Injected via JS -->
+        </div>
+        <div class="modal-actions">
+          <button class="btn-recycle" onclick="recycleItem()">
+            ♻️ Bán lại (+<span id="modalRefundVal">10</span> 🟢)
+          </button>
+          <button class="btn-close-modal" onclick="closeItemModal()">
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+    </main>
+
+    <!-- Full 18 Items Catalog Themed for Zombie Survival & 3 Classes -->
+    <section class="catalog-section">
+      <div class="catalog-header">
+        <h2>📦 KHO 18 VẬT PHẨM SĂN ZOMBIE & TƯƠNG THÍCH 3 CLASS</h2>
+        <div class="filter-tabs">
+          <button class="tab-btn active" onclick="filterCatalog('all', this)">Tất Cả (18)</button>
+          <button class="tab-btn" onclick="filterCatalog('human', this)">🎖️ Đặc Nhiệm (Human)</button>
+          <button class="tab-btn" onclick="filterCatalog('warrior', this)">🛡️ Chiến Binh (Warrior)</button>
+          <button class="tab-btn" onclick="filterCatalog('mage', this)">⚡ Pháp Sư (Mage)</button>
+          <button class="tab-btn" onclick="filterCatalog('tactical', this)">☣️ Sinh Tồn & Co-op</button>
+        </div>
+      </div>
+
+      <div class="catalog-grid" id="catalogGrid">
+        <!-- Items will be rendered via JS for clean modularity -->
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toastMessage"></div>
+
+  <script>
+    // Thematic Items Data Tailored for Boxhead Zombie Hunting & 3 Classes
+    const CATALOG_ITEMS = [
+      // 1. HUMAN (Guns & Tactical Drone)
+      { id: 'bandolier', name: 'Băng Đạn Tác Chiến', file: 'bandolier.svg', type: 'human', tier: 'Common', desc: '+25% Sức Chứa Đạn, +15% Tốc Độ Nạp Đạn' },
+      { id: 'hollow_bullets', name: 'Đạn Đầu Rỗng Xuyên Phá', file: 'hollow_bullets.svg', type: 'human', tier: 'Rare', desc: '+15% Sát Thương Súng, +25 Đẩy Lùi Quái' },
+      { id: 'laser_sight', name: 'Laser Quân Đội', file: 'laser_sight.svg', type: 'human', tier: 'Rare', desc: 'Giảm 30% Độ Lệch Đạn, +8% Tỉ Lệ Chí Mạng Tầm Xa' },
+      { id: 'drone_chip', name: 'Chip AI Drone Tác Chiến', file: 'drone_chip.svg', type: 'human', tier: 'Epic', desc: '+4.0s Thời Gian Drone, Drone Bắn Nhanh +25%' },
+
+      // 2. WARRIOR (Melee, Armor & Rage)
+      { id: 'spiked_gauntlet', name: 'Găng Thiết Gai', file: 'spiked_gauntlet.svg', type: 'warrior', tier: 'Common', desc: '+20% Sát Thương Cận Chiến, +35% Lực Đẩy Lùi' },
+      { id: 'titan_plate', name: 'Giáp Thép Titan', file: 'titan_plate.svg', type: 'warrior', tier: 'Rare', desc: '+4 Giáp, +25 Max HP, Giảm 15% Sát Thương Bị Cắn Sau Lưng' },
+      { id: 'war_horn', name: 'Tù Và Cuồng Nộ', file: 'war_horn.svg', type: 'warrior', tier: 'Rare', desc: '+2.5s Hống Nộ (War Cry), +15% Tốc Chạy Khi Nộ' },
+      { id: 'bloodlust_axe', name: 'Rìu Răng Cưa Khát Máu', file: 'bloodlust_axe.svg', type: 'warrior', tier: 'Epic', desc: '+25% Sát Thương Cận Chiến, +5% Hút Máu (Life Steal)' },
+
+      // 3. MAGE (Mana, Frost & Arcane)
+      { id: 'mana_crystal', name: 'Pha Lê Cổ Ngữ Mana', file: 'mana_crystal.svg', type: 'mage', tier: 'Common', desc: '+30 Max Mana, +1.5 Mana Hồi Phục / Giây' },
+      { id: 'frost_ring', name: 'Nhẫn Băng Vĩnh Cửu', file: 'frost_ring.svg', type: 'mage', tier: 'Rare', desc: '+1.0s Thời Gian Đóng Băng, Tăng Làm Chậm +20%' },
+      { id: 'fire_orb', name: 'Trượng Lõi Thiên Thạch', file: 'fire_orb.svg', type: 'mage', tier: 'Epic', desc: '+20% Sát Thương Phép AoE, +30px Bán Kính Nổ' },
+      { id: 'arcane_scroll', name: 'Cổ Thư Tốc Biến', file: 'arcane_scroll.svg', type: 'mage', tier: 'Epic', desc: '-20% Hồi Chiêu Blink, +15% Né Đòn Sau Khi Tốc Biến' },
+
+      // 4. TACTICAL & CO-OP (Shared Zombie Hunting)
+      { id: 'combat_medkit', name: 'Hộp Sơ Cứu Dã Chiến', file: 'combat_medkit.svg', type: 'tactical', tier: 'Common', desc: '+20 Máu Tối Đa, Hồi Ngay 25 HP Khi Qua Wave Mới' },
+      { id: 'bio_serum', name: 'Huyết Thanh Kháng Virus', file: 'bio_serum.svg', type: 'tactical', tier: 'Common', desc: '+3 Hồi Máu / 5s, Giảm 15% Sát Thương Nhiễm Độc' },
+      { id: 'reinforced_wood', name: 'Bộ Gia Cố Tường Gỗ', file: 'reinforced_wood.svg', type: 'tactical', tier: 'Rare', desc: '+150 HP Cho Tường Gỗ, Phản 15 Sát Thương Lên Zombie' },
+      { id: 'energy_vacuum', name: 'Máy Hút Mảnh Năng Lượng', file: 'energy_vacuum.svg', type: 'tactical', tier: 'Rare', desc: '+80px Bán Kính Hút Ngọc (Pickup), +5 Thu Hoạch/Wave' },
+      { id: 'defibrillator', name: 'Máy Sốc Tim Cứu Đồng Đội', file: 'defibrillator.svg', type: 'tactical', tier: 'Epic', desc: 'Cứu Đồng Đội Cực Nhanh (1.0s), Hồi Sinh Với 60% HP' },
+      { id: 'nitro_tank', name: 'Hỗn Hợp Nổ Nitro', file: 'nitro_tank.svg', type: 'tactical', tier: 'Legendary', desc: '+35% Bán Kính Nổ & Sát Thương Lan Của Thùng Nổ (Barrel)' }
+    ];
+
+    let currentMaterials = 165;
+    let rerollCost = 5;
+
+    // Player State for Demo (Default Class: HUMAN)
+    const playerStats = {
+      maxHp: 100,
+      regen: 1,
+      lifeSteal: 0,
+      armor: 3,
+      dodge: 0,
+      damage: 5,
+      atkSpd: 15,
+      crit: 5,
+      speed: 160,
+      pickup: 140,
+      harvest: 8,
+      luck: 5
+    };
+
+    function renderCatalog(filter = 'all') {
+      const grid = document.getElementById('catalogGrid');
+      grid.innerHTML = '';
+      
+      const filtered = filter === 'all' 
+        ? CATALOG_ITEMS 
+        : CATALOG_ITEMS.filter(it => it.type === filter);
+
+      filtered.forEach(it => {
+        const card = document.createElement('div');
+        card.className = 'catalog-item-card';
+        card.innerHTML = `
+          <div class="catalog-icon-box">
+            <img src="../client/assets/items/${it.file}" alt="${it.name}">
+          </div>
+          <div class="catalog-info">
+            <div class="catalog-item-title">
+              <span>${it.name}</span>
+              <span style="font-size: 11px; opacity: 0.7">${it.tier}</span>
+            </div>
+            <div class="catalog-desc">${it.desc}</div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function filterCatalog(category, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCatalog(category);
+    }
+
+    // Owned Items State for Character (Bambo - Human Class)
+    let ownedItems = [
+      { id: 'bandolier', count: 1, baseCost: 20, statDelta: { atkSpd: 15 } },
+      { id: 'combat_medkit', count: 1, baseCost: 25, statDelta: { maxHp: 20 } }
+    ];
+
+    let currentInspectId = null;
+
+    function renderOwnedItems() {
+      const grid = document.getElementById('ownedItemsGrid');
+      const countEl = document.getElementById('ownedCount');
+      grid.innerHTML = '';
+
+      let totalStackCount = 0;
+      ownedItems.forEach(item => {
+        totalStackCount += item.count;
+        const meta = CATALOG_ITEMS.find(it => it.id === item.id);
+        if (!meta) return;
+
+        const slot = document.createElement('div');
+        slot.className = `owned-item-slot tier-${meta.tier.toLowerCase()}`;
+        slot.title = `${meta.name} (x${item.count}) - Bấm để soi / Bán lại`;
+        slot.onclick = () => openItemModal(item.id);
+
+        let stackHtml = item.count > 1 ? `<span class="stack-badge">x${item.count}</span>` : '';
+        slot.innerHTML = `
+          <img src="../client/assets/items/${meta.file}" alt="${meta.name}">
+          ${stackHtml}
+        `;
+        grid.appendChild(slot);
+      });
+
+      countEl.innerText = totalStackCount;
+      if (totalStackCount === 0) {
+        grid.innerHTML = '<div class="empty-inventory-note">Chưa trang bị vật phẩm nào. Hãy mua từ Cửa Hàng ở trên!</div>';
+      }
+    }
+
+    const STACK_LIMITS = {
+      Common: 5,
+      Rare: 3,
+      Epic: 2,
+      Legendary: 1
+    };
+
+    function buyItem(cardId, itemId, cost, statDelta) {
+      const meta = CATALOG_ITEMS.find(it => it.id === itemId);
+      const existing = ownedItems.find(it => it.id === itemId);
+      const limit = (meta && STACK_LIMITS[meta.tier]) || 5;
+
+      if (existing && existing.count >= limit) {
+        showToast(`❌ Đã đạt giới hạn tối đa cho ${meta.name} (Tối đa x${limit})!`);
+        return;
+      }
+
+      if (currentMaterials < cost) {
+        showToast('❌ Không đủ Materials để mua!');
+        return;
+      }
+      currentMaterials -= cost;
+      document.getElementById('materialCount').innerText = currentMaterials;
+
+      // Apply stats
+      if (statDelta.maxHp) playerStats.maxHp += statDelta.maxHp;
+      if (statDelta.damage) playerStats.damage += statDelta.damage;
+      if (statDelta.atkSpd) playerStats.atkSpd += statDelta.atkSpd;
+      if (statDelta.speed) playerStats.speed += Math.round(statDelta.speed * 1.6);
+      if (statDelta.dodge) playerStats.dodge += statDelta.dodge;
+      if (statDelta.lifeSteal) playerStats.lifeSteal += statDelta.lifeSteal;
+      if (statDelta.armor) playerStats.armor += statDelta.armor;
+      if (statDelta.regen) playerStats.regen += statDelta.regen;
+
+      updateStatsUI();
+
+      // Add to Owned Items Inventory
+      if (existing) {
+        existing.count++;
+      } else {
+        ownedItems.push({ id: itemId, count: 1, baseCost: cost, statDelta: statDelta });
+      }
+      renderOwnedItems();
+
+      const card = document.getElementById(cardId);
+      const btn = card.querySelector('.btn-buy');
+      btn.innerHTML = '✅ ĐÃ MUA';
+      btn.classList.add('purchased');
+      btn.onclick = null;
+      card.style.opacity = '0.55';
+
+      showToast(`🎉 Đã mua và trang bị thành công (-${cost} Materials)!`);
+    }
+
+    function openItemModal(itemId) {
+      currentInspectId = itemId;
+      const owned = ownedItems.find(it => it.id === itemId);
+      const meta = CATALOG_ITEMS.find(it => it.id === itemId);
+      if (!owned || !meta) return;
+
+      const modal = document.getElementById('itemModalOverlay');
+      document.getElementById('modalItemImg').src = `../client/assets/items/${meta.file}`;
+      document.getElementById('modalItemTitle').innerText = `${meta.name} (x${owned.count})`;
+      
+      const badge = document.getElementById('modalTierBadge');
+      badge.innerText = `${meta.tier} • ${meta.type.toUpperCase()}`;
+      badge.className = `modal-tier-badge tier-${meta.tier.toLowerCase()}`;
+
+      const refund = Math.round((owned.baseCost || 30) * 0.5);
+      document.getElementById('modalRefundVal').innerText = refund;
+
+      document.getElementById('modalItemDesc').innerHTML = `
+        <div style="margin-bottom: 8px;"><strong>Hiệu ứng cơ bản:</strong> ${meta.desc}</div>
+        <div style="color: var(--accent-gold); font-weight: 700;">
+          📦 Tổng cộng dồn hiện tại: x${owned.count} stack (Đang kích hoạt trên nhân vật)
+        </div>
+      `;
+
+      modal.style.display = 'flex';
+    }
+
+    function closeItemModal() {
+      document.getElementById('itemModalOverlay').style.display = 'none';
+      currentInspectId = null;
+    }
+
+    function recycleItem() {
+      if (!currentInspectId) return;
+      const idx = ownedItems.findIndex(it => it.id === currentInspectId);
+      if (idx === -1) return;
+
+      const owned = ownedItems[idx];
+      const meta = CATALOG_ITEMS.find(it => it.id === currentInspectId);
+      const refund = Math.round((owned.baseCost || 30) * 0.5);
+
+      // Refund money
+      currentMaterials += refund;
+      document.getElementById('materialCount').innerText = currentMaterials;
+
+      // Revert stats
+      if (owned.statDelta) {
+        if (owned.statDelta.maxHp) playerStats.maxHp -= owned.statDelta.maxHp;
+        if (owned.statDelta.damage) playerStats.damage -= owned.statDelta.damage;
+        if (owned.statDelta.atkSpd) playerStats.atkSpd -= owned.statDelta.atkSpd;
+        if (owned.statDelta.speed) playerStats.speed -= Math.round(owned.statDelta.speed * 1.6);
+        if (owned.statDelta.dodge) playerStats.dodge -= owned.statDelta.dodge;
+        if (owned.statDelta.lifeSteal) playerStats.lifeSteal -= owned.statDelta.lifeSteal;
+        if (owned.statDelta.armor) playerStats.armor -= owned.statDelta.armor;
+        if (owned.statDelta.regen) playerStats.regen -= owned.statDelta.regen;
+        updateStatsUI();
+      }
+
+      owned.count--;
+      if (owned.count <= 0) {
+        ownedItems.splice(idx, 1);
+        closeItemModal();
+      } else {
+        openItemModal(currentInspectId);
+      }
+
+      renderOwnedItems();
+      showToast(`♻️ Đã tái chế 1 ${meta.name} (+${refund} Materials)!`);
+    }
+
+    function updateStatsUI() {
+      document.getElementById('statMaxHp').innerText = playerStats.maxHp;
+      document.getElementById('statDamage').innerText = (playerStats.damage >= 0 ? '+' : '') + playerStats.damage + '%';
+      document.getElementById('statAtkSpd').innerText = (playerStats.atkSpd >= 0 ? '+' : '') + playerStats.atkSpd + '%';
+      document.getElementById('statSpeed').innerText = playerStats.speed + ' px/s';
+      document.getElementById('statDodge').innerText = playerStats.dodge + '%';
+      document.getElementById('statLifeSteal').innerText = playerStats.lifeSteal + '%';
+      document.getElementById('statArmor').innerText = (playerStats.armor >= 0 ? '+' : '') + playerStats.armor;
+    }
+
+    function toggleLock(btn) {
+      btn.classList.toggle('locked');
+      btn.innerText = btn.classList.contains('locked') ? '🔒' : '🔓';
+      showToast(btn.classList.contains('locked') ? '🔒 Đã khóa thẻ cho Wave sau' : '🔓 Đã mở khóa thẻ');
+    }
+
+    function rerollShop() {
+      if (currentMaterials < rerollCost) {
+        showToast('❌ Không đủ Materials để Reroll!');
+        return;
+      }
+      currentMaterials -= rerollCost;
+      document.getElementById('materialCount').innerText = currentMaterials;
+      rerollCost += 2;
+      document.getElementById('rerollCost').innerText = rerollCost;
+      showToast(`🎲 Đã Reroll 4 thẻ mới (-${rerollCost - 2} Materials)!`);
+      
+      // Reset card states
+      document.querySelectorAll('.shop-card').forEach((card, idx) => {
+        const btn = card.querySelector('.btn-buy');
+        if (btn.classList.contains('purchased')) {
+          btn.classList.remove('purchased');
+          btn.innerHTML = `<span>MUA</span> • ${20 + idx * 25} 🟢`;
+          card.style.opacity = '1';
+        }
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMessage');
+      toast.innerText = msg;
+      toast.style.display = 'block';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 2500);
+    }
+
+    // Initialize Demo
+    renderCatalog();
+    renderOwnedItems();
+    updateStatsUI();
+  </script>
+</body>
+</html>
+

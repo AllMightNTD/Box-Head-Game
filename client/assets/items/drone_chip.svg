@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Tactical Drone AI Chip (+Drone Duration, +Drone Fire Rate) [HUMAN] -->
+  <!-- Microchip PCB Base -->
+  <rect x="14" y="14" width="36" height="36" rx="6" fill="#1b5e20" stroke="#111111" stroke-width="4"/>
+  <!-- Gold Pins -->
+  <!-- Top/Bottom Pins -->
+  <line x1="22" y1="8" x2="22" y2="14" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="32" y1="8" x2="32" y2="14" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="42" y1="8" x2="42" y2="14" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="22" y1="50" x2="22" y2="56" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="32" y1="50" x2="32" y2="56" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="42" y1="50" x2="42" y2="56" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <!-- Left/Right Pins -->
+  <line x1="8" y1="22" x2="14" y2="22" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="8" y1="32" x2="14" y2="32" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="8" y1="42" x2="14" y2="42" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="50" y1="22" x2="56" y2="22" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="50" y1="32" x2="56" y2="32" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <line x1="50" y1="42" x2="56" y2="42" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  <!-- Core Processor Unit -->
+  <rect x="22" y="22" width="20" height="20" rx="3" fill="#212121" stroke="#111111" stroke-width="2.5"/>
+  <!-- Drone Icon on Core -->
+  <circle cx="32" cy="32" r="3" fill="#00e5ff"/>
+  <line x1="26" y1="26" x2="38" y2="38" stroke="#00e5ff" stroke-width="1.5"/>
+  <line x1="38" y1="26" x2="26" y2="38" stroke="#00e5ff" stroke-width="1.5"/>
+</svg>
+

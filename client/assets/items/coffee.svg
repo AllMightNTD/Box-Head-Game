@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Steaming Coffee (+Attack Speed %) -->
+  <!-- Steam swirls -->
+  <path d="M22 14 C20 10 24 6 22 2" fill="none" stroke="#b0bec5" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 14 C30 8 36 6 34 2" fill="none" stroke="#b0bec5" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M42 14 C40 10 44 6 42 2" fill="none" stroke="#b0bec5" stroke-width="3" stroke-linecap="round"/>
+  <!-- Mug Body -->
+  <path d="M14 20 H48 V44 C48 52 42 56 31 56 C20 56 14 52 14 44 Z" fill="#f5f5f5" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Lightning bolt emblem on mug -->
+  <polygon points="32,24 24,36 31,36 29,48 39,34 32,34" fill="#ffd600" stroke="#1a1a1a" stroke-width="2.5"/>
+  <!-- Handle -->
+  <path d="M48 26 C56 26 58 34 58 38 C58 44 54 48 48 48" fill="none" stroke="#1a1a1a" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M48 26 C56 26 58 34 58 38 C58 44 54 48 48 48" fill="none" stroke="#eeeeee" stroke-width="2" stroke-linecap="round"/>
+  <!-- Liquid rim -->
+  <ellipse cx="31" cy="20" rx="17" ry="5" fill="#5d4037" stroke="#1a1a1a" stroke-width="3"/>
+</svg>
+

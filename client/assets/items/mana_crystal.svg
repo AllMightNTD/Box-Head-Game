@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Arcane Mana Crystal (+Max Mana, +Mana Regen) [MAGE] -->
+  <!-- Floating Mystic Shards -->
+  <polygon points="12,32 16,26 18,34" fill="#00e5ff" stroke="#111111" stroke-width="1.5"/>
+  <polygon points="48,22 54,26 50,30" fill="#00e5ff" stroke="#111111" stroke-width="1.5"/>
+  <!-- Central Huge Mana Gem Crystal -->
+  <polygon points="32,6 48,22 40,54 24,54 16,22" fill="#00b0ff" stroke="#111111" stroke-width="4"/>
+  <!-- Top Facet -->
+  <polygon points="32,6 48,22 38,20 26,20 16,22" fill="#80d8ff"/>
+  <!-- Center Bright Facet -->
+  <polygon points="26,20 38,20 36,44 28,44" fill="#00e5ff" stroke="#111111" stroke-width="2"/>
+  <!-- Left Shade Facet -->
+  <polygon points="16,22 26,20 28,44 24,54" fill="#0288d1"/>
+  <!-- Right Light Facet -->
+  <polygon points="48,22 38,20 36,44 40,54" fill="#40c4ff"/>
+  <!-- Sparkles -->
+  <polygon points="32,0 34,4 38,6 34,8 32,12 30,8 26,6 30,4" fill="#ffffff"/>
+</svg>
+

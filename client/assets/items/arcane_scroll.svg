@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Arcane Blink Scroll (-Blink Cooldown, +Blink Range & Dodge) [MAGE] -->
+  <g transform="rotate(-15 32 32)">
+    <!-- Rolled Parchment Ends -->
+    <ellipse cx="14" cy="20" rx="4" ry="14" fill="#d7ccc8" stroke="#111111" stroke-width="3"/>
+    <ellipse cx="50" cy="44" rx="4" ry="14" fill="#d7ccc8" stroke="#111111" stroke-width="3"/>
+    <!-- Unrolled Parchment Sheet -->
+    <path d="M14 6 L50 30 V58 L14 34 Z" fill="#efebe9" stroke="#111111" stroke-width="3.5"/>
+    <!-- Glowing Arcane Teleport Glyphs on Scroll -->
+    <path d="M22 22 L32 28 L42 24" fill="none" stroke="#7c4dff" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="32" cy="28" r="3" fill="#651fff"/>
+    <path d="M24 34 L30 38 L36 32 L42 36" fill="none" stroke="#7c4dff" stroke-width="2" stroke-linecap="round"/>
+    <!-- Golden Wax Seal with Ribbon -->
+    <circle cx="28" cy="44" r="5" fill="#d50000" stroke="#111111" stroke-width="2"/>
+    <path d="M28 49 L26 56 L30 54 L34 56 L32 49" fill="#d50000" stroke="#111111" stroke-width="1.5"/>
+  </g>
+</svg>
+

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Combat Medkit (+Max HP, Emergency Heal) -->
+  <!-- Case body: Military olive green -->
+  <rect x="8" y="16" width="48" height="40" rx="8" fill="#33691e" stroke="#111111" stroke-width="4"/>
+  <rect x="10" y="18" width="44" height="6" rx="3" fill="#558b2f" opacity="0.7"/>
+  <!-- Heavy duty metal handle -->
+  <path d="M22 16 V8 C22 5.8 23.8 4 26 4 H38 C40.2 4 42 5.8 42 8 V16" fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 16 V8 C22 5.8 23.8 4 26 4 H38 C40.2 4 42 5.8 42 8 V16" fill="none" stroke="#cfd8dc" stroke-width="2" stroke-linecap="round"/>
+  <!-- Medical Red Cross Emblem Circle -->
+  <circle cx="32" cy="36" r="14" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+  <path d="M32 26 V46 M22 36 H42" stroke="#d50000" stroke-width="5.5" stroke-linecap="round"/>
+  <!-- Metal clasps -->
+  <rect x="14" y="24" width="6" height="8" rx="1.5" fill="#ffd600" stroke="#111111" stroke-width="2"/>
+  <rect x="44" y="24" width="6" height="8" rx="1.5" fill="#ffd600" stroke="#111111" stroke-width="2"/>
+</svg>
+

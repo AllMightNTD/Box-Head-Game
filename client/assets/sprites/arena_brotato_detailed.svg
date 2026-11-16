@@ -1,0 +1,274 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" width="1600" height="1200">
+  <defs>
+    <!-- Dirt Base Texture -->
+    <radialGradient id="dirtRadial" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#2a2e38"/>
+      <stop offset="60%" stop-color="#21252d"/>
+      <stop offset="100%" stop-color="#14171d"/>
+    </radialGradient>
+
+    <!-- Hazard Stripes -->
+    <pattern id="hazardStripePattern" width="24" height="24" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="12" height="24" fill="#ffd600"/>
+      <rect x="12" width="12" height="24" fill="#181a1f"/>
+    </pattern>
+
+    <!-- Soil Grit Pattern -->
+    <pattern id="soilGrit" width="80" height="80" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="18" r="2" fill="#373e4d" opacity="0.6"/>
+      <circle cx="48" cy="28" r="1.5" fill="#181b22" opacity="0.8"/>
+      <circle cx="68" cy="14" r="2.5" fill="#3a4252" opacity="0.5"/>
+      <circle cx="28" cy="54" r="2" fill="#15171d" opacity="0.9"/>
+      <circle cx="62" cy="66" r="3" fill="#323946" opacity="0.4"/>
+      <path d="M20 35 Q24 38 28 36" stroke="#16181e" stroke-width="1.5" fill="none" opacity="0.7"/>
+      <path d="M50 48 Q55 52 58 49" stroke="#16181e" stroke-width="1.5" fill="none" opacity="0.7"/>
+    </pattern>
+
+    <!-- Shadow filter for thick 3D pop -->
+    <filter id="brotatoShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+
+    <!-- Glowing Bio-Cyst filter -->
+    <filter id="bioGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ================= 1. ARENA FLOOR ================= -->
+  <!-- Dark Ground Base -->
+  <rect width="1600" height="1200" fill="url(#dirtRadial)"/>
+  <rect width="1600" height="1200" fill="url(#soilGrit)"/>
+
+  <!-- Ground Blood Splatters from Past Waves -->
+  <g opacity="0.35">
+    <!-- Splatter 1 -->
+    <ellipse cx="620" cy="480" rx="36" ry="24" fill="#880e4f"/>
+    <circle cx="650" cy="460" r="8" fill="#880e4f"/>
+    <circle cx="590" cy="500" r="6" fill="#880e4f"/>
+    <circle cx="670" cy="490" r="4" fill="#880e4f"/>
+    <!-- Splatter 2 -->
+    <ellipse cx="1080" cy="720" rx="44" ry="28" fill="#4a148c"/>
+    <circle cx="1120" cy="740" r="10" fill="#4a148c"/>
+    <circle cx="1040" cy="710" r="7" fill="#4a148c"/>
+    <!-- Splatter 3 (Green Toxic Zombie Slime) -->
+    <ellipse cx="480" cy="780" rx="30" ry="20" fill="#1b5e20"/>
+    <circle cx="510" cy="790" r="6" fill="#1b5e20"/>
+    <circle cx="460" cy="770" r="5" fill="#1b5e20"/>
+  </g>
+
+  <!-- Faded Ground Kiting Circle Markers (Brotato style circular guidance) -->
+  <ellipse cx="800" cy="600" rx="540" ry="380" fill="none" stroke="#374151" stroke-width="4" stroke-dasharray="16,16" opacity="0.4"/>
+  <ellipse cx="800" cy="600" rx="320" ry="220" fill="none" stroke="#2b3340" stroke-width="3" stroke-dasharray="12,12" opacity="0.5"/>
+
+  <!-- Center Team Spawn Platform -->
+  <circle cx="800" cy="600" r="140" fill="#1a1e26" stroke="#2d3748" stroke-width="4"/>
+  <circle cx="800" cy="600" r="132" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-dasharray="8,8" opacity="0.6"/>
+  <!-- Compass/Cross in Center -->
+  <line x1="800" y1="480" x2="800" y2="720" stroke="#00e5ff" stroke-width="2" opacity="0.3"/>
+  <line x1="680" y1="600" x2="920" y2="600" stroke="#00e5ff" stroke-width="2" opacity="0.3"/>
+  <circle cx="800" cy="600" r="28" fill="#11151c" stroke="#00e5ff" stroke-width="3"/>
+  <polygon points="800,582 806,596 820,600 806,604 800,618 794,604 780,600 794,596" fill="#00e5ff"/>
+
+  <!-- ================= 2. OUTER PERIMETER BOUNDARIES ================= -->
+  <!-- Inward Shadow under the walls -->
+  <polygon points="0,0 1600,0 1600,1200 0,1200 60,60 1540,60 1540,1140 60,1140 60,60" fill="#000000" opacity="0.55"/>
+
+  <!-- Top Wall Barrier -->
+  <rect x="0" y="0" width="1600" height="48" fill="#2d333f" stroke="#111317" stroke-width="5"/>
+  <rect x="0" y="44" width="1600" height="8" fill="url(#hazardStripePattern)"/>
+
+  <!-- Bottom Wall Barrier -->
+  <rect x="0" y="1152" width="1600" height="48" fill="#2d333f" stroke="#111317" stroke-width="5"/>
+  <rect x="0" y="1148" width="1600" height="8" fill="url(#hazardStripePattern)"/>
+
+  <!-- Left Wall Barrier -->
+  <rect x="0" y="0" width="48" height="1200" fill="#242933" stroke="#111317" stroke-width="5"/>
+  <rect x="44" y="0" width="8" height="1200" fill="url(#hazardStripePattern)"/>
+
+  <!-- Right Wall Barrier -->
+  <rect x="1552" y="0" width="48" height="1200" fill="#242933" stroke="#111317" stroke-width="5"/>
+  <rect x="1548" y="0" width="8" height="1200" fill="url(#hazardStripePattern)"/>
+
+  <!-- ================= 3. 4 CHUNKY CARTOON CORNER BOULDERS (BEVELED CORNERS) ================= -->
+  <!-- Top-Left Corner Boulders & Bunker -->
+  <g filter="url(#brotatoShadow)">
+    <polygon points="0,0 260,0 0,260" fill="#1b2029" stroke="#111317" stroke-width="6"/>
+    <!-- Chunky Cartoon Boulder 1 -->
+    <path d="M10 180 C20 120 70 70 140 50 C190 30 220 10 240 10 L0 10 Z" fill="#4a5568" stroke="#111317" stroke-width="5"/>
+    <path d="M30 140 C40 100 80 60 130 50" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round"/>
+    <!-- Boulder 2 -->
+    <path d="M20 220 C60 190 120 180 160 140 C190 110 210 60 250 20" fill="none" stroke="#111317" stroke-width="8" stroke-linecap="round"/>
+    <line x1="260" y1="0" x2="0" y2="260" stroke="url(#hazardStripePattern)" stroke-width="14"/>
+    <line x1="260" y1="0" x2="0" y2="260" stroke="#111317" stroke-width="3"/>
+  </g>
+
+  <!-- Top-Right Corner Boulders & Bunker -->
+  <g filter="url(#brotatoShadow)">
+    <polygon points="1600,0 1340,0 1600,260" fill="#1b2029" stroke="#111317" stroke-width="6"/>
+    <path d="M1590 180 C1580 120 1530 70 1460 50 C1410 30 1380 10 1360 10 L1600 10 Z" fill="#4a5568" stroke="#111317" stroke-width="5"/>
+    <path d="M1570 140 C1560 100 1520 60 1470 50" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1340" y1="0" x2="1600" y2="260" stroke="url(#hazardStripePattern)" stroke-width="14"/>
+    <line x1="1340" y1="0" x2="1600" y2="260" stroke="#111317" stroke-width="3"/>
+  </g>
+
+  <!-- Bottom-Left Corner Boulders & Bunker -->
+  <g filter="url(#brotatoShadow)">
+    <polygon points="0,1200 260,1200 0,940" fill="#1b2029" stroke="#111317" stroke-width="6"/>
+    <path d="M10 1020 C20 1080 70 1130 140 1150 C190 1170 220 1190 240 1190 L0 1190 Z" fill="#4a5568" stroke="#111317" stroke-width="5"/>
+    <line x1="0" y1="940" x2="260" y2="1200" stroke="url(#hazardStripePattern)" stroke-width="14"/>
+    <line x1="0" y1="940" x2="260" y2="1200" stroke="#111317" stroke-width="3"/>
+  </g>
+
+  <!-- Bottom-Right Corner Boulders & Bunker -->
+  <g filter="url(#brotatoShadow)">
+    <polygon points="1600,1200 1340,1200 1600,940" fill="#1b2029" stroke="#111317" stroke-width="6"/>
+    <path d="M1590 1020 C1580 1080 1530 1130 1460 1150 C1410 1170 1380 1190 1360 1190 L1600 1190 Z" fill="#4a5568" stroke="#111317" stroke-width="5"/>
+    <line x1="1600" y1="940" x2="1340" y2="1200" stroke="url(#hazardStripePattern)" stroke-width="14"/>
+    <line x1="1600" y1="940" x2="1340" y2="1200" stroke="#111317" stroke-width="3"/>
+  </g>
+
+  <!-- ================= 4. 8 ZOMBIE SEWER SPAWN GRATES ================= -->
+  <!-- Grate 1 (Top-Left) -->
+  <g transform="translate(480, 24)" filter="url(#brotatoShadow)">
+    <rect width="90" height="34" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <!-- Iron bars -->
+    <line x1="18" y1="4" x2="18" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="36" y1="4" x2="36" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="54" y1="4" x2="54" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="72" y1="4" x2="72" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <!-- Red Flashing Siren LED -->
+    <circle cx="45" cy="4" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+    <circle cx="45" cy="4" r="2.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Grate 2 (Top-Right) -->
+  <g transform="translate(1030, 24)" filter="url(#brotatoShadow)">
+    <rect width="90" height="34" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <line x1="18" y1="4" x2="18" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="36" y1="4" x2="36" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="54" y1="4" x2="54" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="72" y1="4" x2="72" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="45" cy="4" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+    <circle cx="45" cy="4" r="2.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Grate 3 (Bottom-Left) -->
+  <g transform="translate(480, 1142)" filter="url(#brotatoShadow)">
+    <rect width="90" height="34" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <line x1="18" y1="4" x2="18" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="36" y1="4" x2="36" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="54" y1="4" x2="54" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="72" y1="4" x2="72" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="45" cy="30" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+    <circle cx="45" cy="30" r="2.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Grate 4 (Bottom-Right) -->
+  <g transform="translate(1030, 1142)" filter="url(#brotatoShadow)">
+    <rect width="90" height="34" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <line x1="18" y1="4" x2="18" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="36" y1="4" x2="36" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="54" y1="4" x2="54" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="72" y1="4" x2="72" y2="30" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="45" cy="30" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+    <circle cx="45" cy="30" r="2.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Grate 5 (Left Flank) -->
+  <g transform="translate(24, 555)" filter="url(#brotatoShadow)">
+    <rect width="34" height="90" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <line x1="4" y1="18" x2="30" y2="18" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="36" x2="30" y2="36" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="54" x2="30" y2="54" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="72" x2="30" y2="72" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="4" cy="45" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+  </g>
+
+  <!-- Grate 6 (Right Flank) -->
+  <g transform="translate(1542, 555)" filter="url(#brotatoShadow)">
+    <rect width="34" height="90" rx="6" fill="#111317" stroke="#374151" stroke-width="4"/>
+    <line x1="4" y1="18" x2="30" y2="18" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="36" x2="30" y2="36" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="54" x2="30" y2="54" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <line x1="4" y1="72" x2="30" y2="72" stroke="#718096" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="30" cy="45" r="5" fill="#ff1744" stroke="#111" stroke-width="1.5"/>
+  </g>
+
+  <!-- ================= 5. MUTANT CYSTS (BROTATO TREES EQUIVALENT) ================= -->
+  <!-- Cyst 1 (North-West) -->
+  <g transform="translate(420, 360)" filter="url(#bioGlow)">
+    <!-- Spreading root vines -->
+    <path d="M-15 15 Q-30 25 -45 20" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M15 15 Q30 30 40 25" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M0 20 Q5 35 0 45" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <!-- Organic bulbous sack -->
+    <circle cx="0" cy="0" r="30" fill="#2e7d32" stroke="#111317" stroke-width="4.5"/>
+    <ellipse cx="-8" cy="-8" rx="14" ry="10" fill="#43a047"/>
+    <!-- Glowing Green Toxic Spores -->
+    <circle cx="8" cy="8" r="8" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="-10" cy="10" r="6" fill="#76ff03" stroke="#111" stroke-width="1.5"/>
+    <circle cx="4" cy="-12" r="7" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="8" cy="8" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- Cyst 2 (North-East) -->
+  <g transform="translate(1180, 360)" filter="url(#bioGlow)">
+    <path d="M-15 15 Q-30 25 -45 20" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M15 15 Q30 30 40 25" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="30" fill="#2e7d32" stroke="#111317" stroke-width="4.5"/>
+    <ellipse cx="-8" cy="-8" rx="14" ry="10" fill="#43a047"/>
+    <circle cx="8" cy="8" r="8" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="-10" cy="10" r="6" fill="#76ff03" stroke="#111" stroke-width="1.5"/>
+    <circle cx="4" cy="-12" r="7" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="8" cy="8" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- Cyst 3 (South-West) -->
+  <g transform="translate(420, 840)" filter="url(#bioGlow)">
+    <path d="M-15 15 Q-30 25 -45 20" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M15 15 Q30 30 40 25" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="30" fill="#2e7d32" stroke="#111317" stroke-width="4.5"/>
+    <ellipse cx="-8" cy="-8" rx="14" ry="10" fill="#43a047"/>
+    <circle cx="8" cy="8" r="8" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="-10" cy="10" r="6" fill="#76ff03" stroke="#111" stroke-width="1.5"/>
+    <circle cx="4" cy="-12" r="7" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="8" cy="8" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- Cyst 4 (South-East) -->
+  <g transform="translate(1180, 840)" filter="url(#bioGlow)">
+    <path d="M-15 15 Q-30 25 -45 20" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M15 15 Q30 30 40 25" stroke="#1b5e20" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="30" fill="#2e7d32" stroke="#111317" stroke-width="4.5"/>
+    <ellipse cx="-8" cy="-8" rx="14" ry="10" fill="#43a047"/>
+    <circle cx="8" cy="8" r="8" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="-10" cy="10" r="6" fill="#76ff03" stroke="#111" stroke-width="1.5"/>
+    <circle cx="4" cy="-12" r="7" fill="#00e676" stroke="#111" stroke-width="2"/>
+    <circle cx="8" cy="8" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- ================= 6. SCATTERED MATERIAL GEMS (BROTATO XP/GOLD) ================= -->
+  <g filter="url(#bioGlow)">
+    <!-- Cluster 1 -->
+    <polygon points="680,420 686,412 692,420 686,428" fill="#00e676" stroke="#111" stroke-width="1.5"/>
+    <polygon points="700,430 706,422 712,430 706,438" fill="#00e676" stroke="#111" stroke-width="1.5"/>
+    <polygon points="688,442 694,434 700,442 694,450" fill="#76ff03" stroke="#111" stroke-width="1.5"/>
+    <!-- Cluster 2 -->
+    <polygon points="940,780 946,772 952,780 946,788" fill="#00e676" stroke="#111" stroke-width="1.5"/>
+    <polygon points="960,790 966,782 972,790 966,798" fill="#00e676" stroke="#111" stroke-width="1.5"/>
+  </g>
+
+  <!-- ================= 7. VIGNETTE CINEMATIC LIGHTING ================= -->
+  <radialGradient id="vignetteDarkness" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+    <stop offset="65%" stop-color="#000000" stop-opacity="0.15"/>
+    <stop offset="100%" stop-color="#000000" stop-opacity="0.65"/>
+  </radialGradient>
+  <rect width="1600" height="1200" fill="url(#vignetteDarkness)" pointer-events="none"/>
+</svg>
+

@@ -128,7 +128,44 @@ class Player {
     this.revivingTarget = null;
     this.reviveProgress = 0;
     this.reviveDuration = 2.0;
+
+    // === BROTATO RPG STATS ===
+    this.materials = 0;          // currency for shop
+    this.pickupRange = 80;       // magnet radius in px
+    // Stat bonuses (additive on top of class base)
+    this.damageBonus = 0;        // %
+    this.attackSpeedBonus = 0;   // %
+    this.critChance = 0;         // %
+    this.critMultiplier = 1.5;   // base crit multiplier
+    this.rangeBonus = 0;         // %
+    this.hpRegen = 0;            // HP per 5s
+    this.hpRegenTimer = 0;       // internal timer
+    this.lifeSteal = 0;          // % chance to heal 1HP on hit
+    this.lifeStealICD = 0;       // internal cooldown (0.1s)
+    this.armor_bonus = 0;        // flat armor bonus from items
+    this.dodge = 0;              // % dodge chance (hard cap 60%)
+    this.speedBonus = 0;         // % speed bonus
+    this.maxHpBonus = 0;         // flat HP bonus from items
+    this.pickupRange_bonus = 0;  // bonus pickup range from items
+    this.materialBonus = 0;      // % bonus materials from kills
+    // Inventory: array of { itemId, stack } objects (max 18 slots)
+    this.inventory = [];
   }
+
+  /**
+   * Adds materials with materialBonus applied.
+   * @param {number} amount
+   */
+  addMaterials(amount) {
+    const bonus = 1 + (this.materialBonus / 100);
+    this.materials += Math.round(amount * bonus);
+  }
+
+  /**
+   * Returns effective pickup range including item bonuses.
+   * @returns {number}
+   */
+  effectivePickupRange() { return this.pickupRange + (this.pickupRange_bonus || 0); }
 
   /**
    * Updates player inputs from client payload.
@@ -534,6 +571,17 @@ class Player {
       this.x = nextX;
       this.y = nextY;
     }
+
+    // HP regen
+    if (this.hpRegen > 0 && !this.isDowned && !this.isDead) {
+      this.hpRegenTimer += dt;
+      if (this.hpRegenTimer >= 5) {
+        this.hpRegenTimer = 0;
+        this.hp = Math.min(this.maxHp + this.maxHpBonus, this.hp + this.hpRegen);
+      }
+    }
+    // Life steal ICD decay
+    if (this.lifeStealICD > 0) this.lifeStealICD -= dt;
   }
 
   /**
@@ -1043,7 +1091,9 @@ class Player {
       ultCharge: Math.floor(this.ultCharge),
       ultMaxCharge: this.ultMaxCharge,
       ultimateId: this.ultimateId,
-      hasInfiniteAmmo: this.hasInfiniteAmmo
+      hasInfiniteAmmo: this.hasInfiniteAmmo,
+      materials: Math.floor(this.materials || 0),
+      inventory: this.inventory || []
     };
   }
 }

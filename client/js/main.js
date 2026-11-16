@@ -28,6 +28,9 @@
   }
 
   const socket = isBrowser && typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
+  if (isBrowser && typeof window !== 'undefined') {
+    window.socket = socket;
+  }
   const canvas = isBrowser ? document.getElementById('gameCanvas') : null;
   const renderer = isBrowser && typeof Renderer === 'function' && canvas ? new Renderer(canvas) : null;
   const input = isBrowser && typeof InputHandler === 'function' && canvas ? new InputHandler(canvas) : {
@@ -52,7 +55,10 @@
     addSnapshot: () => {},
     getInterpolatedState: () => null
   };
-  const ui = isBrowser && typeof UIController === 'function' ? new UIController() : null;
+  const ui = isBrowser && typeof UIController === 'function' ? new UIController(socket) : null;
+  if (ui && socket && typeof ui.setSocket === 'function') {
+    ui.setSocket(socket);
+  }
 
   let myPlayerId = null;
   let isInGame = false;
@@ -407,6 +413,9 @@
     // Ignore stale snapshots while a local switch is still awaiting server confirmation.
     const localPlayer = snapshot && snapshot.players && (snapshot.players.find(p => p.id === myPlayerId) || snapshot.players[0]);
     if (localPlayer) {
+      if (ui && localPlayer.materials !== undefined) {
+        ui.updateMaterials(localPlayer.materials);
+      }
       const isMage = localPlayer.character === 'MAGE';
       const isWarrior = localPlayer.character === 'WARRIOR';
       if (input) {
@@ -548,7 +557,16 @@
           snd.playRailgunImpact(ev.x, listenerX);
         }
       }
-      if (rnd) rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
+      if (rnd) {
+        rnd.addDirectionalBlood(ev.x, ev.y, typeof ev.angle === 'number' ? ev.angle : 0, ev.weapon, false);
+        if (typeof rnd.triggerZombieHitFlash === 'function') {
+          rnd.triggerZombieHitFlash(ev.zombieId, 0.08);
+        }
+        if (typeof rnd.addDamageNumber === 'function') {
+          const dmg = ev.damage !== undefined ? ev.damage : (ev.weapon === 'SHOTGUN' ? 24 : 10);
+          rnd.addDamageNumber(ev.x, ev.y, dmg, ev.isCrit ? 'CRIT' : 'DEFAULT');
+        }
+      }
     } else if (ev.type === 'ZOMBIE_DIE') {
       if (snd) snd.playZombieDie(ev.zType, ev.x, listenerX, ev.y, listenerY, ev.zombieId);
       const bloodColor = ev.zType === 'DEVIL' ? '#c62828' : '#7f0000';
@@ -618,6 +636,65 @@
       }
     } else if (ev.type === 'REVIVE') {
       if (rnd) rnd.addFloatingText('ĐÃ HỒI SINH ĐỒNG ĐỘI!', rnd.camera.x, rnd.camera.y - 40, '#00e5ff', 24);
+    } else if (ev.type === 'DAMAGE') {
+      if (rnd && typeof rnd.addDamageNumber === 'function') {
+        rnd.addDamageNumber(ev.x, ev.y, ev.damage || 10, ev.damageType || (ev.isCrit ? 'CRIT' : (ev.isPlayer ? 'PLAYER' : 'DEFAULT')));
+      }
+    } else if (ev.type === 'HEAL') {
+      if (rnd && typeof rnd.addDamageNumber === 'function') {
+        rnd.addDamageNumber(ev.x, ev.y, ev.amount || ev.heal || 10, 'HEAL');
+      }
+    } else if (ev.type === 'SHOP_OPEN' || ev.type === 'SHOP_ITEMS') {
+      if (!ev.playerId || ev.playerId === myId) {
+        if (ui && typeof ui.openShop === 'function') {
+          ui.openShop(ev.data || ev);
+        }
+      }
+    } else if (ev.type === 'ITEM_BOUGHT') {
+      if (!ev.playerId || ev.playerId === myId) {
+        if (ui) {
+          if (ev.materials !== undefined) ui.updateMaterials(ev.materials);
+          if (ui.currentShopData && ui.currentShopData.items) {
+            ui.currentShopData.items = ui.currentShopData.items.filter(i => (i.id || i.itemId) !== ev.itemId);
+            const p = localPlayer || {};
+            ui.renderShopItems(ui.currentShopData.items, ui.currentMaterials, p.inventory || []);
+            ui.renderInventory(p.inventory || []);
+          }
+        }
+      }
+    } else if (ev.type === 'SHOP_REROLLED') {
+      if (!ev.playerId || ev.playerId === myId) {
+        if (ui) {
+          if (ev.materials !== undefined) ui.updateMaterials(ev.materials);
+          const cost = (ev.rerolls !== undefined ? ev.rerolls : 1) + 1;
+          ui.updateShop({ items: ev.items, rerollCost: cost, materials: ev.materials });
+        }
+      }
+    } else if (ev.type === 'ITEM_RECYCLED') {
+      if (!ev.playerId || ev.playerId === myId) {
+        if (ui) {
+          if (ev.materials !== undefined) ui.updateMaterials(ev.materials);
+          const p = localPlayer || {};
+          ui.renderInventory(p.inventory || []);
+        }
+      }
+    } else if (ev.type === 'PLAYER_READY') {
+      if (ui && typeof ui.updateReadyStatus === 'function') {
+        ui.updateReadyStatus(ev.readyCount, ev.totalPlayers);
+      }
+    } else if (ev.type === 'SHOP_CLOSE') {
+      if (ui && typeof ui.closeShop === 'function') {
+        ui.closeShop();
+      }
+    } else if (ev.type === 'MATERIAL_COLLECTED') {
+      if (!ev.playerId || ev.playerId === myId) {
+        if (ui && ev.totalMaterials !== undefined) {
+          ui.updateMaterials(ev.totalMaterials);
+        }
+        if (rnd && typeof rnd.addDamageNumber === 'function') {
+          rnd.addDamageNumber(ev.x, ev.y, `+${ev.value || 1} 💎`, 'HEAL');
+        }
+      }
     } else if (ev.type === 'SESSION_RESET') {
       handleSessionReset(rnd, snd);
     }

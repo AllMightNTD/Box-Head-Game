@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Anti-Virus Bio-Serum (+HP Regen, Toxic Resistance) -->
+  <g transform="rotate(-30 32 32)">
+    <!-- Vial cap -->
+    <rect x="25" y="6" width="14" height="8" rx="2" fill="#37474f" stroke="#111111" stroke-width="3"/>
+    <!-- Glass vial body -->
+    <rect x="20" y="14" width="24" height="42" rx="6" fill="#e0f2f1" stroke="#111111" stroke-width="4"/>
+    <!-- Glowing Toxic Cyan/Green Vaccine Liquid -->
+    <rect x="22" y="24" width="20" height="30" rx="4" fill="#00e676"/>
+    <!-- Liquid glow shimmer -->
+    <rect x="24" y="24" width="4" height="28" fill="#b9f6ca" opacity="0.8"/>
+    <!-- Biohazard Symbol in Center -->
+    <circle cx="32" cy="38" r="6" fill="none" stroke="#111111" stroke-width="2"/>
+    <circle cx="32" cy="38" r="2" fill="#111111"/>
+    <!-- Level measurement ticks -->
+    <line x1="38" y1="28" x2="42" y2="28" stroke="#111111" stroke-width="2"/>
+    <line x1="38" y1="36" x2="42" y2="36" stroke="#111111" stroke-width="2"/>
+    <line x1="38" y1="44" x2="42" y2="44" stroke="#111111" stroke-width="2"/>
+  </g>
+</svg>
+

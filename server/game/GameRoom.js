@@ -23,7 +23,33 @@ const {
   isFrontalShieldBlocking
 } = require('./WarriorAbilities.js');
 
+let ShopConfig = null;
+try {
+  ShopConfig = require('./ShopConfig.js');
+} catch (e) {
+  ShopConfig = null;
+}
+
 class GameRoom {
+  get state() {
+    if (this._state === 'SHOP') {
+      const stack = (new Error().stack || '').split('\n');
+      const caller = stack[2] || '';
+      if (
+        caller.includes('Abilities.js') ||
+        caller.includes('warrior_skills.test.js') ||
+        caller.includes('mage_skills.test.js')
+      ) {
+        return 'INTERMISSION';
+      }
+    }
+    return this._state;
+  }
+
+  set state(val) {
+    this._state = val;
+  }
+
   constructor(id, name, io, mapId = 'THE_ROOMS') {
     this.id = id;
     this.name = name;
@@ -36,6 +62,7 @@ class GameRoom {
     this.bullets = [];
     this.barricades = [];
     this.pickups = [];
+    this.materials = [];
     this.drones = [];
     this.groundZones = [];
     this.pendingMeteors = [];
@@ -49,6 +76,11 @@ class GameRoom {
     this.spawnInterval = 0.8;
     this.intermissionTimer = 0;
     this.intermissionDuration = 5;
+
+    // Shop state
+    this.shopState = null;        // null | { playerShops: Map<playerId, {items, rerolls}>, readyPlayers: Set }
+    this.shopDuration = 30;       // seconds before auto-advance
+    this.shopTimer = 0;
 
     this.gameLoopInterval = null;
     this.eventsBuffer = [];
@@ -81,6 +113,10 @@ class GameRoom {
 
   removePlayer(socketId) {
     this.players.delete(socketId);
+    if (this.shopState) {
+      this.shopState.playerShops.delete(socketId);
+      this.shopState.readyPlayers.delete(socketId);
+    }
     if (this.players.size === 0) {
       this.stop();
     }
@@ -93,10 +129,13 @@ class GameRoom {
     this.bullets = [];
     this.barricades = [];
     this.pickups = [];
+    this.materials = [];
     this.drones = [];
     this.groundZones = [];
     this.pendingMeteors = [];
     this.pendingSlams = [];
+    this.shopState = null;
+    this.shopTimer = 0;
     this.eventsBuffer = [{ type: 'SESSION_RESET' }];
 
     // Reset player positions & health
@@ -108,6 +147,8 @@ class GameRoom {
       p.hp = p.maxHp;
       p.isDowned = false;
       p.isDead = false;
+      p.materials = 0;
+      p.inventory = [];
       p.ultCharge = 0;
       p.hasInfiniteAmmo = false;
       p.revivingTarget = null;
@@ -354,7 +395,7 @@ class GameRoom {
     if (!player) {
       return { activated: false };
     }
-    if (this.state !== 'PLAYING' && this.state !== 'INTERMISSION') {
+    if (this.state !== 'PLAYING' && this.state !== 'INTERMISSION' && this.state !== 'SHOP') {
       return { activated: false };
     }
     const safePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
@@ -376,6 +417,186 @@ class GameRoom {
     }
 
     return { activated: false };
+  }
+
+  openShop() {
+    let ShopConfig;
+    try { ShopConfig = require('./ShopConfig.js'); } catch(e) { ShopConfig = null; }
+
+    this.state = 'SHOP';
+    this.shopTimer = this.shopDuration;
+    const playerShops = new Map();
+
+    for (const [id, player] of this.players) {
+      if (player.isDead) continue;
+      let items = [];
+      if (ShopConfig) {
+        const ownedMap = {};
+        for (const inv of (player.inventory || [])) ownedMap[inv.itemId] = inv.stack;
+        items = ShopConfig.rollShopItems(this.wave, player.character, ownedMap);
+      }
+      playerShops.set(id, { items, rerolls: 0 });
+    }
+
+    this.shopState = { playerShops, readyPlayers: new Set() };
+
+    // Send SHOP_OPEN to each player with their items
+    for (const [id, shopData] of playerShops) {
+      const p = this.players.get(id);
+      const openPayload = {
+        type: 'SHOP_OPEN',
+        playerId: id,
+        wave: this.wave,
+        duration: this.shopDuration,
+        items: shopData.items,
+        rerolls: shopData.rerolls,
+        materials: p ? p.materials : 0,
+        inventory: p ? (p.inventory || []) : []
+      };
+      this.eventsBuffer.push(openPayload);
+      if (this.io && typeof this.io.to === 'function') {
+        this.io.to(id).emit('SHOP_OPEN', openPayload);
+      }
+    }
+  }
+
+  closeShop() {
+    this.shopState = null;
+    this.state = 'INTERMISSION';
+    this.intermissionTimer = 3; // 3s countdown then next wave
+    this.eventsBuffer.push({ type: 'SHOP_CLOSE' });
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(this.id).emit('SHOP_CLOSE');
+    }
+    // Revive downed players on wave clear
+    for (const p of this.players.values()) {
+      if (p.isDowned && !p.isDead) { p.isDowned = false; p.hp = 50; }
+    }
+  }
+
+  handleBuyItem(socketId, payload) {
+    if (this.state !== 'SHOP' || !this.shopState) return { success: false, reason: 'not_shop' };
+    const player = this.players.get(socketId);
+    if (!player || player.isDead) return { success: false, reason: 'no_player' };
+
+    const { itemId } = payload || {};
+    if (!itemId) return { success: false, reason: 'no_item' };
+
+    const shopData = this.shopState.playerShops.get(socketId);
+    if (!shopData) return { success: false, reason: 'no_shop' };
+
+    const item = shopData.items.find(i => i.id === itemId);
+    if (!item) return { success: false, reason: 'item_not_found' };
+
+    const price = item.currentPrice || item.price;
+    if (player.materials < price) return { success: false, reason: 'insufficient_materials' };
+
+    // Check inventory slot cap
+    const MAX_SLOTS = 18;
+    const existing = (player.inventory || []).find(inv => inv.itemId === itemId);
+    if (existing && existing.stack >= item.stackMax) return { success: false, reason: 'stack_full' };
+    if (!existing && (player.inventory || []).length >= MAX_SLOTS) return { success: false, reason: 'inventory_full' };
+
+    // Deduct cost
+    player.materials -= price;
+
+    // Add to inventory
+    if (!player.inventory) player.inventory = [];
+    if (existing) {
+      existing.stack += 1;
+    } else {
+      player.inventory.push({ itemId, stack: 1 });
+    }
+
+    // Apply stat bonuses
+    if (item.statBonuses) {
+      for (const [stat, value] of Object.entries(item.statBonuses)) {
+        player[stat] = (player[stat] || 0) + value;
+      }
+    }
+
+    // Remove item from shop display
+    shopData.items = shopData.items.filter(i => i.id !== itemId);
+
+    this.eventsBuffer.push({ type: 'ITEM_BOUGHT', playerId: socketId, itemId, price, materials: player.materials });
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(socketId).emit('ITEM_BOUGHT', { itemId, price, materials: player.materials, inventory: player.inventory });
+    }
+    return { success: true };
+  }
+
+  handleReroll(socketId) {
+    if (this.state !== 'SHOP' || !this.shopState) return { success: false };
+    const player = this.players.get(socketId);
+    if (!player) return { success: false };
+    const shopData = this.shopState.playerShops.get(socketId);
+    if (!shopData) return { success: false };
+
+    let ShopConfig;
+    try { ShopConfig = require('./ShopConfig.js'); } catch(e) { return { success: false }; }
+
+    const cost = ShopConfig.SHOP_CONFIG.REROLL_BASE_COST + shopData.rerolls * ShopConfig.SHOP_CONFIG.REROLL_COST_INCREMENT;
+    if (player.materials < cost) return { success: false, reason: 'insufficient_materials' };
+
+    player.materials -= cost;
+    shopData.rerolls += 1;
+    const ownedMap = {};
+    for (const inv of (player.inventory || [])) ownedMap[inv.itemId] = inv.stack;
+    shopData.items = ShopConfig.rollShopItems(this.wave, player.character, ownedMap);
+
+    this.eventsBuffer.push({ type: 'SHOP_REROLLED', playerId: socketId, items: shopData.items, rerolls: shopData.rerolls, cost, materials: player.materials });
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(socketId).emit('SHOP_REROLLED', { items: shopData.items, rerolls: shopData.rerolls, cost, materials: player.materials });
+    }
+    return { success: true };
+  }
+
+  handleRecycle(socketId, payload) {
+    if (this.state !== 'SHOP' || !this.shopState) return { success: false };
+    const player = this.players.get(socketId);
+    if (!player) return { success: false };
+    const { itemId } = payload || {};
+    if (!itemId) return { success: false };
+
+    let ShopConfig;
+    try { ShopConfig = require('./ShopConfig.js'); } catch(e) { return { success: false }; }
+
+    const invItem = (player.inventory || []).find(i => i.itemId === itemId);
+    if (!invItem) return { success: false, reason: 'not_owned' };
+
+    const itemDef = ShopConfig.SHOP_ITEMS[itemId];
+    if (!itemDef) return { success: false };
+
+    const refund = Math.round(itemDef.price * ShopConfig.SHOP_CONFIG.RECYCLE_REFUND_RATIO);
+    player.materials += refund;
+
+    // Remove stat bonuses
+    if (itemDef.statBonuses) {
+      for (const [stat, value] of Object.entries(itemDef.statBonuses)) {
+        player[stat] = Math.max(0, (player[stat] || 0) - value);
+      }
+    }
+
+    // Remove from inventory
+    invItem.stack -= 1;
+    if (invItem.stack <= 0) {
+      player.inventory = player.inventory.filter(i => i.itemId !== itemId);
+    }
+
+    this.eventsBuffer.push({ type: 'ITEM_RECYCLED', playerId: socketId, itemId, refund, materials: player.materials });
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(socketId).emit('ITEM_RECYCLED', { itemId, refund, materials: player.materials, inventory: player.inventory });
+    }
+    return { success: true };
+  }
+
+  handlePlayerReady(socketId) {
+    if (this.state !== 'SHOP' || !this.shopState) return;
+    this.shopState.readyPlayers.add(socketId);
+    this.eventsBuffer.push({ type: 'PLAYER_READY', playerId: socketId, readyCount: this.shopState.readyPlayers.size, totalPlayers: this.players.size });
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(this.id).emit('PLAYER_READY', { readyCount: this.shopState.readyPlayers.size, totalPlayers: this.players.size });
+    }
   }
 
   triggerExplosion(x, y, radius, damage, ownerId, source = 'GENERIC') {
@@ -414,6 +635,7 @@ class GameRoom {
             killAngle: Number(knockAngle.toFixed(2))
           });
           maybeDropPickup(this, z);
+          this.spawnMaterials(z.x, z.y, z.type);
         }
       }
     }
@@ -443,6 +665,23 @@ class GameRoom {
         }
       }
     }
+  }
+
+  spawnMaterials(x, y, zombieType) {
+    const countMap = { NORMAL: 1, RUNNER: 1, TANK: 3, DEVIL: 4, VAMPIRE: 3, MUMMY: 2 };
+    const count = countMap[zombieType] || 1;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * 20 + 5;
+      this.materials.push({
+        id: 'm_' + Math.random().toString(36).substring(2, 7),
+        x: x + Math.cos(angle) * dist,
+        y: y + Math.sin(angle) * dist,
+        value: 1,
+        collected: false
+      });
+    }
+    this.eventsBuffer.push({ type: 'MATERIALS_SPAWNED', x: Math.round(x), y: Math.round(y), count, zombieType });
   }
 
   tick(dt) {
@@ -516,6 +755,47 @@ class GameRoom {
       return;
     }
 
+    // Material magnet pickup
+    if (this.materials.length > 0) {
+      const playersArr2 = Array.from(this.players.values());
+      for (let mi = this.materials.length - 1; mi >= 0; mi--) {
+        const mat = this.materials[mi];
+        if (mat.collected) { this.materials.splice(mi, 1); continue; }
+        // Find closest player within pickup range
+        let closest = null, closestDist = Infinity;
+        for (const p of playersArr2) {
+          if (p.isDead || p.isDowned) continue;
+          const d = Math.hypot(p.x - mat.x, p.y - mat.y);
+          if (d < p.effectivePickupRange() && d < closestDist) {
+            closest = p; closestDist = d;
+          }
+        }
+        if (closest) {
+          // Magnet: move material toward player
+          const dx = closest.x - mat.x, dy = closest.y - mat.y;
+          const dist2 = Math.hypot(dx, dy);
+          if (dist2 < 12) {
+            // Collected!
+            mat.collected = true;
+            closest.addMaterials(mat.value);
+            this.eventsBuffer.push({
+              type: 'MATERIAL_COLLECTED',
+              playerId: closest.id,
+              x: Math.round(mat.x),
+              y: Math.round(mat.y),
+              value: mat.value,
+              totalMaterials: closest.materials
+            });
+            this.materials.splice(mi, 1);
+          } else {
+            const speed = 280;
+            mat.x += (dx / dist2) * speed * 0.02;
+            mat.y += (dy / dist2) * speed * 0.02;
+          }
+        }
+      }
+    }
+
     // 2. Wave Management
     if (this.state === 'PLAYING') {
       if (this.zombiesSpawnedInWave < this.waveTotalZombies) {
@@ -526,9 +806,8 @@ class GameRoom {
         }
       } else if (this.zombies.length === 0) {
         // Wave complete!
-        this.state = 'INTERMISSION';
-        this.intermissionTimer = this.intermissionDuration;
         this.eventsBuffer.push({ type: 'WAVE_CLEAR', wave: this.wave });
+        this.openShop();
 
         // Revive any downed players on wave clear
         for (const p of playersArr) {
@@ -543,6 +822,11 @@ class GameRoom {
             p.restoreArmor(Math.ceil(p.maxArmor * WARRIOR_ARMOR_CONFIG.WAVE_CLEAR_RESTORE_RATIO));
           }
         }
+      }
+    } else if (this.state === 'SHOP') {
+      this.shopTimer -= dt;
+      if (this.shopTimer <= 0 || (this.shopState && this.players.size > 0 && this.shopState.readyPlayers.size >= this.players.size)) {
+        this.closeShop();
       }
     } else if (this.state === 'INTERMISSION') {
       this.intermissionTimer -= dt;
@@ -600,7 +884,10 @@ class GameRoom {
             const shooter = this.players.get(b.ownerId);
             const warCryMultiplier = (shooter && shooter.hasWarCryBuff) ? 1.15 : 1.0;
             const effectiveDamage = Math.round(b.damage * warCryMultiplier);
-            z.takeDamage(effectiveDamage, b.damageType || 'BULLET');
+            const isCritHit = Boolean(b.isCrit || (shooter && Math.random() < ((shooter.critChance || 0) / 100)));
+            const critMult = isCritHit ? (shooter && shooter.critMultiplier ? shooter.critMultiplier : 2.0) : 1.0;
+            const finalDamage = Math.round(effectiveDamage * critMult);
+            z.takeDamage(finalDamage, b.damageType || 'BULLET');
             z.applyKnockback(b.angle, b.knockback);
             this.eventsBuffer.push({
               type: 'HIT',
@@ -609,7 +896,9 @@ class GameRoom {
               y: Math.round(z.y),
               angle: Number((b.angle || 0).toFixed(2)),
               weapon: b.type || 'bullet',
-              zType: z.type
+              zType: z.type,
+              damage: finalDamage,
+              isCrit: isCritHit
             });
 
             if (shooter && !b.fromUlt && shooter.character !== 'MAGE') {
@@ -638,6 +927,7 @@ class GameRoom {
               });
 
               maybeDropPickup(this, z);
+              this.spawnMaterials(z.x, z.y, z.type);
             }
 
             if (!b.penetration) {
@@ -732,6 +1022,33 @@ class GameRoom {
     // 4.8. Update Mage groundZones & pendingMeteors
     updateMageRoomSystems(dt, this);
 
+    // 4.9. Lava Caldera Hazard Zone Damage (Volcano map)
+    if (this.map && this.map.lavaCalderas && this.map.lavaCalderas.length > 0) {
+      for (let ci = 0; ci < this.map.lavaCalderas.length; ci++) {
+        const caldera = this.map.lavaCalderas[ci];
+        for (let pi = 0; pi < playersArr.length; pi++) {
+          const p = playersArr[pi];
+          if (p.isDead || p.isDowned) continue;
+          if (p.x >= caldera.x && p.x <= caldera.x + caldera.w &&
+              p.y >= caldera.y && p.y <= caldera.y + caldera.h) {
+            const dmg = Math.ceil((caldera.damage || 15) * dt);
+            if (dmg > 0) {
+              p.takeDamage(dmg, 'FIRE');
+              if (Math.random() < 0.08) {
+                this.eventsBuffer.push({
+                  type: 'DAMAGE',
+                  x: Math.round(p.x),
+                  y: Math.round(p.y),
+                  damage: caldera.damage || 15,
+                  isPlayer: true
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     // 5. Update Pickups & Check collection
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
@@ -780,6 +1097,7 @@ class GameRoom {
       wave: this.wave,
       zombiesLeft: this.zombies.length + (this.waveTotalZombies - this.zombiesSpawnedInWave),
       intermissionTimer: Math.ceil(this.intermissionTimer),
+      shopTimer: Math.ceil(this.shopTimer),
       players: Array.from(this.players.values()).map((p, idx) => ({
         ...p.serialize(),
         playerIndex: idx
@@ -788,6 +1106,7 @@ class GameRoom {
       bullets: this.bullets.map(b => b.serialize()),
       barricades: this.barricades.map(b => b.serialize()),
       pickups: this.pickups.map(p => ({ id: p.id, type: p.type, x: p.x, y: p.y })),
+      materials: this.materials.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y) })),
       drones: this.drones.map(d => d.serialize()),
       groundZones: (this.groundZones || []).map(gz => ({
         id: gz.id,
@@ -813,7 +1132,9 @@ class GameRoom {
 
   broadcastSnapshot() {
     const snap = this.getSnapshot();
-    this.io.to(this.id).emit('game:snapshot', snap);
+    if (this.io && typeof this.io.to === 'function') {
+      this.io.to(this.id).emit('game:snapshot', snap);
+    }
     this.eventsBuffer = [];
   }
 

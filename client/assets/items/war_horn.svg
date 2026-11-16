@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- War Horn of Rage (+War Cry Duration, +Berserk Speed) [WARRIOR] -->
+  <g transform="rotate(-15 32 32)">
+    <!-- Horn curved body -->
+    <path d="M12 42 C16 46 32 50 44 42 C54 34 56 18 56 10 C48 10 32 12 24 22 C18 30 14 36 12 42 Z" fill="#ffb300" stroke="#111111" stroke-width="4"/>
+    <!-- Horn mouth bell -->
+    <ellipse cx="14" cy="42" rx="6" ry="10" fill="#212121" stroke="#111111" stroke-width="3"/>
+    <!-- Iron decorative bands -->
+    <path d="M26 26 C28 32 32 36 36 38" fill="none" stroke="#263238" stroke-width="5"/>
+    <path d="M38 18 C40 24 44 28 48 30" fill="none" stroke="#263238" stroke-width="5"/>
+    <!-- Sound Shockwaves blasting out -->
+    <path d="M6 34 C2 38 2 46 6 50" fill="none" stroke="#d50000" stroke-width="3" stroke-linecap="round"/>
+    <path d="M0 28 C-6 36 -6 54 0 62" fill="none" stroke="#ffd600" stroke-width="3" stroke-linecap="round"/>
+  </g>
+</svg>
+

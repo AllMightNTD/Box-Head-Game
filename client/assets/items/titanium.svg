@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Titanium Plating (+Armor, +Max HP, -Speed) -->
+  <!-- Heavy Hexagonal Armor Plate -->
+  <polygon points="32,6 54,18 54,46 32,58 10,46 10,18" fill="#546e7a" stroke="#1a1a1a" stroke-width="4"/>
+  <!-- Inner Bevel Hexagon -->
+  <polygon points="32,12 48,22 48,42 32,52 16,42 16,22" fill="#78909c" stroke="#1a1a1a" stroke-width="3"/>
+  <!-- Top metallic highlight -->
+  <polygon points="32,12 48,22 32,26 16,22" fill="#b0bec5"/>
+  <!-- Heavy Industrial Screws/Rivets at corners -->
+  <circle cx="32" cy="10" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="51" cy="20" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="51" cy="44" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="32" cy="54" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="13" cy="44" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <circle cx="13" cy="20" r="2.5" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="1.5"/>
+  <!-- Shield emblem in center -->
+  <path d="M26 26 H38 V36 C38 41 32 44 32 44 C32 44 26 41 26 36 Z" fill="#ffd600" stroke="#1a1a1a" stroke-width="2.5"/>
+</svg>
+

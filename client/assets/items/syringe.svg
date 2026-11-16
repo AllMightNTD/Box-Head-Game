@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Vampire Syringe (+Life Steal) -->
+  <g transform="rotate(-45 32 32)">
+    <!-- Needle -->
+    <line x1="32" y1="2" x2="32" y2="14" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+    <!-- Glass Cylinder -->
+    <rect x="24" y="14" width="16" height="34" rx="3" fill="#e0f7fa" stroke="#1a1a1a" stroke-width="4"/>
+    <!-- Crimson Blood Liquid -->
+    <rect x="26" y="24" width="12" height="22" rx="2" fill="#c62828"/>
+    <!-- Liquid highlight -->
+    <rect x="27" y="24" width="3" height="20" fill="#ef5350" opacity="0.8"/>
+    <!-- Measurement lines -->
+    <line x1="34" y1="20" x2="38" y2="20" stroke="#1a1a1a" stroke-width="2"/>
+    <line x1="34" y1="26" x2="38" y2="26" stroke="#1a1a1a" stroke-width="2"/>
+    <line x1="34" y1="32" x2="38" y2="32" stroke="#1a1a1a" stroke-width="2"/>
+    <!-- Plunger rod -->
+    <rect x="30" y="48" width="4" height="10" fill="#cfd8dc" stroke="#1a1a1a" stroke-width="3"/>
+    <!-- Plunger top thumb ring -->
+    <ellipse cx="32" cy="58" rx="8" ry="4" fill="#b0bec5" stroke="#1a1a1a" stroke-width="3"/>
+    <!-- Blood drop on needle tip -->
+    <circle cx="32" cy="0" r="3" fill="#d32f2f"/>
+  </g>
+</svg>
+
